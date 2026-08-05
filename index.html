@@ -605,14 +605,24 @@
       .overview-tx-table th:nth-child(8), .overview-tx-table td:nth-child(8) {
         display: none;
       }
-      .overview-tx-table td, .overview-tx-table th { padding: 11px 10px; }
+      .overview-tx-table td, .overview-tx-table th { padding: 8px 6px; font-size: 12px; }
+      .overview-tx-table .td-date { font-size: 11px; }
+      .overview-tx-table .td-merchant { font-size: 12px; }
+      .overview-tx-table .td-merchant .sub { display: none; } /* extra detail line — keep it to date/merchant/amount only */
+      .overview-tx-table .td-amount { font-size: 12px; }
 
-      /* Thinner category cards — less vertical space per card so the grid scrolls easier. */
-      .cat-card { padding: 7px 9px; }
-      .cat-card-icon { font-size: 13px; margin-bottom: 2px; }
-      .cat-card-name { font-size: 9px; margin-bottom: 1px; }
-      .cat-card-total { font-size: 14px; }
-      .cat-card-count { font-size: 10px; margin-top: 0; }
+      /* Thinner category cards — icon+name and total+count share a row each (2 lines, not 4). */
+      .cat-grid { gap: 5px; }
+      .cat-card {
+        padding: 6px 8px;
+        display: grid; grid-template-columns: auto 1fr; align-items: center;
+        grid-template-areas: "icon name" "total count";
+        column-gap: 5px; row-gap: 0;
+      }
+      .cat-card-icon { grid-area: icon; font-size: 12px; margin-bottom: 0; }
+      .cat-card-name { grid-area: name; font-size: 9px; margin-bottom: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .cat-card-total { grid-area: total; font-size: 13px; }
+      .cat-card-count { grid-area: count; font-size: 9px; margin-top: 0; text-align: right; }
 
       .tab-bar { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
       .tab-btn { flex-shrink: 0; }
