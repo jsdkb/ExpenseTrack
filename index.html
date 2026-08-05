@@ -659,8 +659,7 @@
     <div class="hright">
       <span id="driveSyncBadge" class="sync-badge"></span>
       <button class="refresh-btn" id="refBtn" onclick="load(true)" disabled>⟳ Refresh</button>
-      <button class="refresh-btn" id="importDataBtn" disabled>⬇ Import old data</button>
-      <input type="file" id="importFileInput" accept="application/json" style="display:none;">
+      <button class="refresh-btn" id="exportBtn" disabled>⬇ Export to Excel</button>
       <button class="refresh-btn" id="signOutBtn" style="display:none;">Sign out</button>
     </div>
   </div>
@@ -745,7 +744,7 @@ $('signOutBtn').addEventListener('click', () => {
   $('authGate').style.display = 'flex';
   $('signOutBtn').style.display = 'none';
   $('refBtn').disabled = true;
-  $('importDataBtn').disabled = true;
+  $('exportBtn').disabled = true;
   $('hmeta').textContent = 'Signed out.';
 });
 
@@ -2691,7 +2690,7 @@ async function onSignedIn(){
   $('authGate').style.display='none';
   $('signOutBtn').style.display='inline-block';
   $('refBtn').disabled=false;
-  $('importDataBtn').disabled=false;
+  $('exportBtn').disabled=false;
   try{
     const r=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile',{headers:{Authorization:'Bearer '+accessToken}});
     const d=await r.json();
@@ -2702,43 +2701,40 @@ async function onSignedIn(){
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   MIGRATION IMPORT — JSON export from the old Cowork tool
+   EXPORT TO EXCEL — all transactions as CSV (opens directly in Excel)
    ══════════════════════════════════════════════════════════════════ */
-$('importDataBtn').addEventListener('click', () => $('importFileInput').click());
-$('importFileInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  $('hmeta').textContent = 'Reading ' + file.name + '…';
-  try{
-    const text = await file.text();
-    const imported = JSON.parse(text);
-    const normalized = {
-      ...defaultState(),
-      txns: imported.txns || [],
-      payments: imported.payments || [],
-      manualTxns: imported.manualTxns || [],
-      catOverrides: imported.catOverrides || {},
-      merchantCats: imported.merchantCats || {},
-      txEdits: imported.txEdits || {},
-      splits: imported.splits || {},
-      notes: imported.notes || {},
-      merchantAutoNotes: imported.merchantAutoNotes || {},
-      manualFxRates: imported.manualFxRates || {},
-      hiddenIds: imported.hiddenIds || [],
-      subDecisions: imported.subDecisions || {},
-      dateCategoryRules: imported.dateCategoryRules || [],
-      ccPosExcludedIds: imported.ccPosExcludedIds || []
-    };
-    STATE = mergeStates(STATE, normalized);
-    const newestDate=STATE.txns.reduce((acc,t)=>{const d=t.txDate||t.msgDate;return(d&&d>acc)?d:acc;},STATE.watermark||'1970-01-01');
-    STATE.watermark=newestDate;
-    scheduleDriveSave();
-    load();
-  }catch(err){
-    $('hmeta').textContent = 'Import failed: ' + (err.message || err);
+function csvCell(v){
+  if (v==null) return '';
+  const s = String(v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
+function exportToExcel(){
+  const rows = [...ALL_TRANSACTIONS_RAW].sort((a,b)=> new Date(b.txDate||b.msgDate||0) - new Date(a.txDate||a.msgDate||0));
+  const headers = ['Date','Bank','Merchant','Category','Amount (IDR)','Currency','Original Amount','Status','Note'];
+  const lines = [headers.map(csvCell).join(',')];
+  for (const t of rows){
+    lines.push([
+      fmtDate(t.txDate||t.msgDate),
+      t.bank||'',
+      t.merchantClean||t.merchantRaw||'',
+      t.category||'',
+      t.amount!=null?t.amount:'',
+      t.currency||'',
+      t.amountOrig!=null?t.amountOrig:'',
+      t.status||'',
+      t.note||''
+    ].map(csvCell).join(','));
   }
-  e.target.value = '';
-});
+  // Leading BOM so Excel correctly detects UTF-8 (needed for merchant names etc.)
+  const csv = '﻿' + lines.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `expense-tracker-export-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+}
+$('exportBtn').addEventListener('click', exportToExcel);
 
 window.addEventListener('load', initAuth);
 </script>
