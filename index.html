@@ -567,6 +567,7 @@
       letter-spacing: 0.02em; font-family: inherit;
     }
     .sync-badge { font-size: 12px; color: var(--dim); letter-spacing: 0.02em; white-space: nowrap; }
+    .mobile-tx-list { display: none; } /* shown only under the mobile breakpoint below */
 
     /* ── NEW: mobile layout — the ported CSS above had no breakpoints at all ── */
     @media (max-width: 640px) {
@@ -610,6 +611,29 @@
       .overview-tx-table .td-merchant { font-size: 12px; }
       .overview-tx-table .td-merchant .sub { display: none; } /* extra detail line — keep it to date/merchant/amount only */
       .overview-tx-table .td-amount { font-size: 12px; }
+
+      /* Swap the table entirely for a swipeable row list on mobile — real touch UX
+         (swipe left to reveal Split / Delete) instead of a shrunk-down table. */
+      .overview-tx-table { display: none; }
+      .mobile-tx-list { display: block; }
+      .tx-swipe-row { position: relative; overflow: hidden; border-top: 1px solid rgba(221,212,195,0.06); }
+      .tx-swipe-row:first-child { border-top: none; }
+      .tx-swipe-actions { position: absolute; inset: 0; display: flex; justify-content: flex-end; }
+      .tx-action {
+        width: 72px; border: none; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+        font-family: inherit; font-size: 10px; font-weight: 700; color: #000;
+      }
+      .tx-action.split { background: var(--beige); }
+      .tx-action.delete { background: #e07070; color: #2a0a0a; }
+      .tx-swipe-content {
+        position: relative; display: flex; align-items: center; justify-content: space-between;
+        gap: 10px; padding: 11px 12px; background: #0d0d0b;
+        transition: transform 0.2s ease; touch-action: pan-y;
+      }
+      .tx-swipe-date { font-size: 11px; color: var(--dim); white-space: nowrap; }
+      .tx-swipe-merchant { font-size: 12px; font-weight: 600; color: var(--white); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tx-swipe-amount { font-size: 12px; font-weight: 700; color: var(--beige); white-space: nowrap; }
 
       /* Thinner category cards — icon+name and total+count share a row each (2 lines, not 4). */
       .cat-grid { gap: 5px; }
@@ -2583,7 +2607,19 @@ function renderAll(txns){
           <td class="td-status">${ok?'<span class="status-ok">✓ OK</span>':'<span class="status-fail">✗ Fail</span>'}</td>
           <td class="td-actions"><button class="row-action-btn${sp?' active-split':''}" onclick="openSplitModal('${safeId}')" title="Split between people">👥</button><button class="row-action-btn" onclick="openEditModal('${safeId}')" title="Edit">✏️</button><button class="row-action-btn del" onclick="deleteTransaction('${safeId}',this)" title="Delete">🗑</button></td>
         </tr>`;}).join('')}</tbody>
-      </table>`}
+      </table>
+      <div class="mobile-tx-list">${txns.map(t=>{const safeId=escH(t.id||'');return`
+        <div class="tx-swipe-row">
+          <div class="tx-swipe-actions">
+            <button class="tx-action split" data-action="split" data-id="${safeId}"><span>👥</span><span>Split</span></button>
+            <button class="tx-action delete" data-action="delete" data-id="${safeId}"><span>🗑</span><span>Delete</span></button>
+          </div>
+          <div class="tx-swipe-content">
+            <span class="tx-swipe-date">${fmtDate(t.txDate||t.msgDate)}</span>
+            <span class="tx-swipe-merchant">${escH(t.merchantClean||t.merchantRaw||'—')}</span>
+            <span class="tx-swipe-amount">${t.amount!=null?fmtIDR(t.amount):(t.amountStr||'—')}</span>
+          </div>
+        </div>`;}).join('')}</div>`}
     </div>
   `;
   requestAnimationFrame(()=>renderCharts(idrTxns));
@@ -2735,6 +2771,80 @@ function exportToExcel(){
   URL.revokeObjectURL(a.href);
 }
 $('exportBtn').addEventListener('click', exportToExcel);
+
+/* ══════════════════════════════════════════════════════════════════
+   MOBILE SWIPE ACTIONS — Overview list, swipe left to reveal Split/Delete.
+   Delegated on document (not per-row) since renderAll() replaces
+   #root.innerHTML wholesale on every render — delegated listeners need
+   no re-binding after that.
+   ══════════════════════════════════════════════════════════════════ */
+(function setupSwipeActions(){
+  const REVEAL = 144;
+  let activeRow = null, activeContent = null, startX = 0, startY = 0, baseX = 0, dragging = null, currentX = 0;
+
+  function closeRow(row){
+    if (!row) return;
+    const content = row.querySelector('.tx-swipe-content');
+    if (content) content.style.transform = 'translateX(0px)';
+    row.dataset.open = '0';
+  }
+  function closeAllExcept(except){
+    document.querySelectorAll('.tx-swipe-row[data-open="1"]').forEach(row => { if (row !== except) closeRow(row); });
+  }
+
+  document.addEventListener('touchstart', (e) => {
+    const content = e.target.closest('.tx-swipe-content');
+    if (!content) return;
+    activeRow = content.closest('.tx-swipe-row');
+    activeContent = content;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    baseX = activeRow.dataset.open === '1' ? -REVEAL : 0;
+    dragging = null;
+    content.style.transition = 'none';
+    closeAllExcept(activeRow);
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (e) => {
+    if (!activeContent) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (dragging === null){
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      dragging = Math.abs(dx) > Math.abs(dy);
+      if (!dragging){ activeContent = null; activeRow = null; return; } // vertical — let the page scroll normally
+    }
+    e.preventDefault();
+    currentX = Math.max(-REVEAL, Math.min(0, baseX + dx));
+    activeContent.style.transform = `translateX(${currentX}px)`;
+  }, { passive: false });
+
+  document.addEventListener('touchend', () => {
+    if (!activeContent || dragging !== true){ activeRow = null; activeContent = null; return; }
+    activeContent.style.transition = '';
+    if (currentX < -REVEAL/2){
+      activeContent.style.transform = `translateX(-${REVEAL}px)`;
+      activeRow.dataset.open = '1';
+    } else {
+      activeContent.style.transform = 'translateX(0px)';
+      activeRow.dataset.open = '0';
+    }
+    activeRow = null; activeContent = null; dragging = null;
+  });
+
+  document.addEventListener('click', (e) => {
+    const actionBtn = e.target.closest('.tx-action');
+    if (actionBtn){
+      const id = actionBtn.dataset.id;
+      const row = actionBtn.closest('.tx-swipe-row');
+      if (actionBtn.dataset.action === 'delete') hideTransaction(id);
+      else if (actionBtn.dataset.action === 'split') openSplitModal(id);
+      closeRow(row);
+      return;
+    }
+    if (!e.target.closest('.tx-swipe-row')) closeAllExcept(null);
+  });
+})();
 
 window.addEventListener('load', initAuth);
 </script>
