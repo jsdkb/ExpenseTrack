@@ -47,8 +47,17 @@ Six gaps flagged before continuing: hourly re-login friction, the "unverified ap
 9. **Parity validation — folded into deployment, not a separate gate**
    Decided (2026-08-04) to skip a dedicated side-by-side pass: real data was already cross-checked extensively while building steps 3-8 (592/293/375 transaction counts across full-sync/refresh/import runs, correct split math against real transactions, category overrides applying correctly, full migration import verified). Remaining validation happens naturally during the parallel-run week (step 5) rather than as a pre-deploy gate.
 
-10. **Deploy to GitHub Pages**
+10. **[DONE] Deploy to GitHub Pages**
     Pre-push audit: grep the final code for anything personal (real merchant names, category habits, hardcoded rules) before the first commit — should find nothing, since step 4 already keeps that out of the code. Then init git repo, push to `https://github.com/jsdkb/ExpenseTrack`, enable GitHub Pages, verify OAuth works against the production URL.
+
+## Post-launch enhancements
+
+11. **Mobile-responsive layout**
+    Diagnosed (2026-08-05): the ported CSS has zero `@media` breakpoints — the old tool was desktop-only. Confirmed the auth gate itself is fine at 375px width (simple centered card), but the signed-in app has several fixed multi-column layouts that would break on a phone: 3-column hero stats, 3-column category cards, 3-column month-vs-month cards, 2-column chart grid, and wide (7-8 column) tables. CSS-only fix, no logic changes:
+    - Add a ~640px breakpoint that collapses the 3-column and 2-column grids to a single column.
+    - Wrap each table in a horizontal-scroll container so wide tables scroll within their own card instead of breaking page layout.
+    - Shrink hero number/padding sizes slightly at narrow widths.
+    - Let header buttons (Refresh / Import / Sign out) wrap cleanly under the title instead of overflowing.
 
 ## Reference
 

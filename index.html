@@ -567,6 +567,38 @@
       letter-spacing: 0.02em; font-family: inherit;
     }
     .sync-badge { font-size: 12px; color: var(--dim); letter-spacing: 0.02em; white-space: nowrap; }
+
+    /* ── NEW: mobile layout — the ported CSS above had no breakpoints at all ── */
+    @media (max-width: 640px) {
+      .page { padding: 12px 10px 32px; }
+      .header { padding: 12px 14px; }
+      .header h1 { font-size: 17px; }
+
+      .hero { grid-template-columns: 1fr; }
+      .cat-grid { grid-template-columns: repeat(2, 1fr); }
+      .mom-cats { grid-template-columns: repeat(2, 1fr); }
+      .charts-grid { grid-template-columns: 1fr; }
+
+      .hero-amount { font-size: 28px; }
+      .hero-amount span { font-size: 13px; }
+      .mom-pct { font-size: 24px; }
+
+      .forecast-body { flex-direction: column; gap: 14px; }
+      .forecast-divider { display: none; }
+
+      .mom-totals { flex-wrap: wrap; gap: 10px 14px; }
+      .mom-delta { margin-left: 0; text-align: left; }
+
+      /* Wide tables scroll horizontally inside their own card instead of squeezing columns
+         or breaking the page layout. */
+      .table-card { overflow-x: auto; }
+      .table-card table { min-width: 640px; }
+
+      .tab-bar { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+      .tab-btn { flex-shrink: 0; }
+
+      .modal-box { padding: 22px 20px; }
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"
     integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi"
