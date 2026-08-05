@@ -594,6 +594,26 @@
       .table-card { overflow-x: auto; }
       .table-card table { min-width: 640px; }
 
+      /* Overview transaction table gets an actual mobile UX instead of a scrollable desktop
+         table: Date / Merchant / Amount only, no horizontal scroll needed. Category, Notes,
+         Bank, Status, and row actions (edit/split/delete) stay desktop-only for now. */
+      .table-card .overview-tx-table { min-width: 0; width: 100%; }
+      .overview-tx-table th:nth-child(3), .overview-tx-table td:nth-child(3),
+      .overview-tx-table th:nth-child(4), .overview-tx-table td:nth-child(4),
+      .overview-tx-table th:nth-child(5), .overview-tx-table td:nth-child(5),
+      .overview-tx-table th:nth-child(7), .overview-tx-table td:nth-child(7),
+      .overview-tx-table th:nth-child(8), .overview-tx-table td:nth-child(8) {
+        display: none;
+      }
+      .overview-tx-table td, .overview-tx-table th { padding: 11px 10px; }
+
+      /* Thinner category cards — less vertical space per card so the grid scrolls easier. */
+      .cat-card { padding: 7px 9px; }
+      .cat-card-icon { font-size: 13px; margin-bottom: 2px; }
+      .cat-card-name { font-size: 9px; margin-bottom: 1px; }
+      .cat-card-total { font-size: 14px; }
+      .cat-card-count { font-size: 10px; margin-top: 0; }
+
       .tab-bar { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
       .tab-btn { flex-shrink: 0; }
 
@@ -2542,7 +2562,7 @@ function renderAll(txns){
     <div class="glass table-card">
       <div class="table-head-row"><div class="table-title">${txns.length} Transactions</div><button class="add-tx-btn" onclick="openAddModal()">＋ Add</button></div>
       ${txns.length===0?'<div class="empty">No transactions in this period.</div>':`
-      <table>
+      <table class="overview-tx-table">
         <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Notes</th><th>Bank</th><th style="text-align:right">Amount</th><th style="text-align:center">Status</th><th></th></tr></thead>
         <tbody>${txns.map(t=>{const meta=CATEGORIES[t.category]||{color:'#8a8878',icon:'📋'};const ok=/sukses|approved|successful/i.test(t.status||'');const isOCBC=t.bank==='OCBC';const isBCA=t.bank==='BCA';const isManual=t.bank==='Manual';const bankTag=isOCBC?'ocbc':isBCA?'bca':isManual?'manual':'maybank';const bankLabel=isOCBC?'OCBC':isBCA?'BCA':isManual?(t.manualBank||'Manual'):'Maybank';const isOverridden=!!getCatOverrides()[t.id];const txNote=t.note||'';const safeId=escH(t.id||'');const sp=t.splitInfo;const splitSub=sp?`<br><span class="sub split-badge">👥 split ${sp.people}w · ${sp.paidCount} paid · was ${fmtIDR(sp.originalAmount)}</span>`:'';return`<tr>
           <td class="td-date">${fmtDate(t.txDate||t.msgDate)}</td>
