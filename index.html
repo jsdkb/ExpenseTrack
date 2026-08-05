@@ -1,0 +1,2684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expense Tracker</title>
+  <style>
+    /* ── SORREN BRAND TOKENS ── */
+    :root {
+      --black:   #000000;
+      --taupe:   #535246;
+      --beige:   #DDD4C3;
+      --beige60: rgba(221,212,195,0.60);
+      --beige30: rgba(221,212,195,0.30);
+      --beige12: rgba(221,212,195,0.12);
+      --beige06: rgba(221,212,195,0.06);
+      --white:   #ffffff;
+      --muted:   rgba(221,212,195,0.85);
+      --dim:     rgba(221,212,195,0.58);
+      --yellow:  #FFCB05;
+      --glass-bg:     rgba(0,0,0,0.45);
+      --glass-border: rgba(221,212,195,0.10);
+      color-scheme: dark;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--black);
+      color: var(--white);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .bg {
+      position: fixed; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 70% 65% at 100% 0%, rgba(83,82,70,0.55) 0%, rgba(40,38,32,0.30) 40%, transparent 70%),
+        radial-gradient(ellipse 50% 40% at 0% 100%, rgba(83,82,70,0.25) 0%, transparent 60%),
+        #000000;
+      overflow: hidden; pointer-events: none;
+    }
+    .bg::after {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      background-size: 180px 180px;
+      opacity: 0.35;
+    }
+    .dust { position: absolute; border-radius: 50%; background: var(--beige); pointer-events: none; }
+    .d1 { width:2px; height:2px; top:14%; left:22%; opacity:0.25; animation:fdrift 18s ease-in-out infinite; }
+    .d2 { width:3px; height:3px; top:32%; right:18%; opacity:0.18; animation:fdrift 23s ease-in-out infinite 4s; }
+    .d3 { width:2px; height:2px; top:58%; left:45%; opacity:0.20; animation:fdrift 20s ease-in-out infinite 8s; }
+    .d4 { width:4px; height:4px; top:75%; right:30%; opacity:0.14; animation:fdrift 16s ease-in-out infinite 2s; filter:blur(1px); }
+    .d5 { width:2px; height:2px; top:42%; left:72%; opacity:0.22; animation:fdrift 25s ease-in-out infinite 11s; }
+    .d6 { width:3px; height:3px; top:88%; left:15%; opacity:0.16; animation:fdrift 19s ease-in-out infinite 6s; }
+    @keyframes fdrift {
+      0%,100% { transform: translate(0,0); }
+      30%      { transform: translate(12px, -18px); }
+      60%      { transform: translate(-8px, 10px); }
+    }
+
+    .glass {
+      background: var(--glass-bg);
+      backdrop-filter: blur(28px) saturate(140%);
+      -webkit-backdrop-filter: blur(28px) saturate(140%);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.50), inset 0 1px 0 rgba(221,212,195,0.07);
+    }
+
+    .header {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(0,0,0,0.70);
+      backdrop-filter: blur(28px) saturate(140%);
+      -webkit-backdrop-filter: blur(28px) saturate(140%);
+      border-bottom: 1px solid var(--glass-border);
+      padding: 14px 20px;
+    }
+    .hrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .hleft { display: flex; align-items: center; gap: 12px; }
+    .hright { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .badge {
+      background: var(--beige);
+      color: #000;
+      font-weight: 800; font-size: 12px; letter-spacing: 1.8px;
+      padding: 4px 10px; border-radius: 4px; text-transform: uppercase;
+    }
+    .header h1 {
+      font-size: 20px; font-weight: 600; color: var(--white);
+      letter-spacing: 0.04em;
+    }
+    .hmeta { font-size: 13px; color: var(--dim); margin-top: 3px; letter-spacing: 0.03em; }
+    .refresh-btn {
+      background: var(--beige06);
+      color: var(--muted);
+      border: 1px solid var(--glass-border);
+      border-radius: 6px; padding: 8px 16px;
+      font-size: 13px; font-weight: 500; letter-spacing: 0.05em; cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .refresh-btn:hover { background: var(--beige12); color: var(--white); border-color: var(--beige30); }
+    .refresh-btn:disabled { opacity: 0.25; cursor: default; }
+
+    .page { padding: 16px 16px 40px; position: relative; z-index: 1; }
+
+    .click-card { cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease; }
+    .click-card:hover { border-color: var(--beige30); background: rgba(221,212,195,0.06); transform: translateY(-1px); }
+    .click-card:active { transform: translateY(0); }
+    tr.click-row { cursor: pointer; }
+    tr.click-row:hover { background: rgba(221,212,195,0.07); }
+    .click-hint { font-size: 10px; color: var(--dim); opacity: 0; transition: opacity 0.15s; margin-top: 4px; letter-spacing: 0.03em; }
+    .click-card:hover .click-hint { opacity: 0.7; }
+
+    .hero { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .hero2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .hero-main { padding: 22px 24px; }
+    .hero-label {
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 10px;
+    }
+    .hero-amount {
+      font-size: 40px; font-weight: 500; color: var(--white);
+      letter-spacing: -0.02em; line-height: 1;
+    }
+    .hero-amount span { font-size: 17px; font-weight: 500; color: var(--muted); margin-right: 5px; }
+    .hero-sub { font-size: 13px; color: var(--dim); margin-top: 10px; letter-spacing: 0.03em; }
+
+    .stat-mini { padding: 20px 18px; display: flex; flex-direction: column; }
+    .stat-mini .sicon { font-size: 20px; margin-bottom: 10px; opacity: 0.7; }
+    .stat-mini .slabel {
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 8px;
+    }
+    .stat-mini .sval { font-size: 22px; font-weight: 500; color: var(--white); }
+    .stat-mini .sval.accent { color: var(--beige); }
+    .stat-mini .ssub { font-size: 13px; color: var(--dim); margin-top: 5px; letter-spacing: 0.02em; }
+    .mom-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 12px; font-weight: 700; padding: 3px 9px;
+      border-radius: 20px; margin-top: 10px; letter-spacing: 0.04em;
+      width: fit-content;
+    }
+    .mom-badge.up   { background: rgba(224,112,112,0.12); color: #e07070; border: 1px solid rgba(224,112,112,0.22); }
+    .mom-badge.down { background: rgba(126,200,154,0.12); color: #7ec89a; border: 1px solid rgba(126,200,154,0.22); }
+    .mom-badge.flat { background: var(--beige12); color: var(--muted); border: 1px solid var(--glass-border); }
+    .cat-bar-wrap { margin-top: 10px; height: 3px; background: var(--beige12); border-radius: 2px; overflow: hidden; }
+    .cat-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+
+    .mom-section { margin-bottom: 12px; padding: 20px 22px; }
+    .mom-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .mom-title {
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.14em;
+    }
+    .mom-period-note { font-size: 13px; color: var(--dim); letter-spacing: 0.02em; }
+    .mom-totals { display: flex; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid var(--glass-border); margin-bottom: 14px; }
+    .mom-block .mom-period-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .mom-block .mom-period-val { font-size: 24px; font-weight: 500; color: var(--white); }
+    .mom-sep { font-size: 20px; color: var(--dim); }
+    .mom-delta { margin-left: auto; text-align: right; }
+    .mom-pct { font-size: 32px; font-weight: 600; }
+    .mom-pct.up   { color: #e07070; }
+    .mom-pct.down { color: #7ec89a; }
+    .mom-pct.flat { color: var(--muted); }
+    .mom-pct-sub { font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 3px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .mom-cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .mom-cat {
+      background: rgba(0,0,0,0.35); border: 1px solid var(--glass-border);
+      border-radius: 10px; padding: 12px 14px;
+    }
+    .mom-cat-name { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 7px; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mom-cat-row { display: flex; align-items: center; justify-content: space-between; }
+    .mom-cat-val { font-size: 16px; font-weight: 500; color: var(--white); }
+    .mom-badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 20px; letter-spacing: 0.03em; }
+    .mom-badge.up   { background: rgba(200,80,80,0.15); color: #e07070; }
+    .mom-badge.down { background: rgba(100,180,130,0.15); color: #7ec89a; }
+    .mom-badge.flat { background: var(--beige06); color: var(--muted); }
+    .mom-badge.new  { background: var(--beige12); color: var(--beige); }
+
+    .forecast-card { padding: 14px 18px; margin-bottom: 14px; }
+    .forecast-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+    .forecast-title { font-size: 13px; font-weight: 700; color: var(--white); letter-spacing: 0.03em; }
+    .forecast-sub { font-size: 11px; color: var(--dim); }
+    .forecast-body { display: flex; align-items: flex-start; gap: 0; margin-bottom: 12px; }
+    .forecast-block { flex: 1; min-width: 0; }
+    .forecast-block-label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+    .forecast-val { font-size: 18px; font-weight: 700; color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .forecast-val-sub { font-size: 11px; color: var(--dim); margin-top: 3px; }
+    .forecast-divider { width: 1px; background: var(--glass-border); margin: 0 16px; align-self: stretch; }
+    .forecast-vs { margin-top: 5px; }
+    .forecast-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .forecast-bar-track { flex: 1; height: 4px; background: rgba(221,212,195,0.12); border-radius: 4px; overflow: hidden; }
+    .forecast-bar-fill { height: 100%; background: linear-gradient(90deg, #7aaecf 0%, #a98fcc 100%); border-radius: 4px; transition: width 0.6s ease; }
+    .forecast-bar-fill.over { background: linear-gradient(90deg, #e07070, #c8855a); }
+    .forecast-bar-label { font-size: 10px; color: var(--dim); white-space: nowrap; }
+
+    .filter-wrap { margin-bottom: 14px; }
+    .filter-block {
+      display: flex; flex-direction: column; gap: 7px;
+    }
+    .filter-block-label {
+      font-size: 10px; font-weight: 700; color: var(--dim);
+      text-transform: uppercase; letter-spacing: 0.18em;
+    }
+    .filter-rows {
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .filter-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+    .filter-divider {
+      width: 1px; height: 32px; background: var(--glass-border);
+      align-self: center; flex-shrink: 0;
+    }
+
+    .pill-group {
+      display: flex; align-items: center;
+      background: rgba(0,0,0,0.40);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px; padding: 3px; gap: 2px;
+      backdrop-filter: blur(16px);
+    }
+    .pgpill {
+      background: none; border: none;
+      color: var(--muted); font-size: 14px; font-weight: 500;
+      letter-spacing: 0.04em;
+      padding: 7px 18px; border-radius: 5px; cursor: pointer;
+      transition: all 0.18s; white-space: nowrap;
+      font-family: inherit;
+    }
+    .pgpill:hover { color: var(--white); background: var(--beige06); }
+    .pgpill.active {
+      background: var(--beige);
+      color: #000; font-weight: 700;
+    }
+
+    .cat-pill-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .cpill {
+      background: rgba(0,0,0,0.35); border: 1px solid var(--glass-border);
+      color: var(--muted); border-radius: 20px;
+      padding: 6px 16px; font-size: 13px; font-weight: 500;
+      letter-spacing: 0.04em; cursor: pointer;
+      transition: all 0.18s; white-space: nowrap;
+      font-family: inherit;
+    }
+    .cpill:hover { border-color: var(--beige30); color: var(--white); }
+    .cpill.active {
+      background: var(--beige12);
+      border-color: var(--beige30); color: var(--white);
+    }
+    .cpill.faded { opacity: 0.30; }
+    .cpill.clear { border-color: rgba(200,80,80,0.25); color: rgba(200,80,80,0.75); }
+    .cpill.clear:hover { background: rgba(200,80,80,0.08); color: #e07070; }
+
+    .custom-pill {
+      background: rgba(0,0,0,0.40); border: 1px solid var(--glass-border);
+      color: var(--muted); border-radius: 6px;
+      padding: 8px 16px; font-size: 14px; font-weight: 500;
+      letter-spacing: 0.03em; cursor: pointer;
+      display: flex; align-items: center; gap: 6px; transition: all 0.18s;
+      font-family: inherit;
+    }
+    .custom-pill:hover { border-color: var(--beige30); color: var(--white); }
+    .custom-pill.active { border-color: var(--beige30); color: var(--white); background: var(--beige06); }
+
+    .cal-wrap { position: relative; }
+    .cal-popover {
+      display: none; position: absolute; top: calc(100% + 8px); left: 0; z-index: 200;
+      background: rgba(10,10,8,0.94);
+      backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.70);
+      padding: 18px; min-width: 280px;
+    }
+    .cal-popover.open { display: block; }
+    .cal-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px; }
+    .cal-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .cal-input {
+      width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
+      border-radius: 6px; padding: 9px 10px; font-size: 13px; color: var(--white); outline: none;
+      color-scheme: dark; font-family: inherit;
+    }
+    .cal-input:focus { border-color: var(--beige30); }
+    .cal-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+    .cal-apply  { background: var(--beige); color: #000; border: none; border-radius: 6px; padding: 8px 20px; font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: 0.04em; font-family: inherit; }
+    .cal-cancel { background: var(--beige06); color: var(--muted); border: 1px solid var(--glass-border); border-radius: 6px; padding: 8px 20px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit; }
+
+    .active-summary {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--beige06); border: 1px solid var(--glass-border);
+      border-radius: 20px; padding: 5px 16px;
+      font-size: 13px; font-weight: 500; letter-spacing: 0.04em;
+      color: var(--muted); margin-top: 8px;
+    }
+
+    .section-label {
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.16em; margin-bottom: 10px; padding-left: 2px;
+    }
+    .cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+    .cat-card {
+      background: rgba(0,0,0,0.40);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-left: 3px solid transparent;
+      border-radius: 12px; padding: 10px 12px;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+      cursor: pointer; user-select: none;
+    }
+    .cat-card:hover { background: rgba(221,212,195,0.07); }
+    .cat-card.cat-active { background: rgba(221,212,195,0.10); box-shadow: 0 0 0 1px rgba(221,212,195,0.18); }
+    .cat-card-icon { font-size: 15px; margin-bottom: 4px; opacity: 0.75; }
+    .cat-card-name { font-size: 10px; font-weight: 600; color: var(--muted); margin-bottom: 3px; letter-spacing: 0.10em; text-transform: uppercase; }
+    .cat-card-total { font-size: 17px; font-weight: 600; color: var(--white); }
+    .cat-card-count { font-size: 11px; font-weight: 400; color: var(--dim); margin-top: 2px; letter-spacing: 0.02em; }
+
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .chart-card { padding: 20px; }
+    .chart-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 16px; }
+
+    .table-card { overflow: hidden; margin-bottom: 4px; }
+    .table-head-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px 13px; border-bottom: 1px solid var(--glass-border);
+    }
+    .table-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    thead th {
+      background: rgba(0,0,0,0.25);
+      color: var(--muted); font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      padding: 11px 20px; text-align: left;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    tbody tr { border-bottom: 1px solid rgba(221,212,195,0.06); transition: background 0.15s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(221,212,195,0.04); }
+    td { padding: 13px 20px; vertical-align: middle; }
+    .td-date { color: var(--dim); white-space: nowrap; font-size: 14px; font-weight: 500; }
+    .td-merchant { font-weight: 600; color: var(--white); font-size: 14px; }
+    .td-merchant .sub { font-size: 12px; color: var(--dim); font-weight: 400; }
+    .td-amount { font-weight: 700; color: var(--beige); text-align: right; white-space: nowrap; font-size: 15px; }
+    .td-status { text-align: center; }
+    .status-ok   { display: inline-block; background: rgba(126,200,154,0.12); color: #7ec89a; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; letter-spacing: 0.05em; }
+    .status-fail { display: inline-block; background: rgba(200,100,100,0.12); color: #e07070; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; letter-spacing: 0.05em; }
+    .cat-chip { display: inline-block; font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.03em; }
+    .bank-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 4px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .bank-tag.maybank { background: rgba(0,180,130,0.14); color: #5ec8a8; border: 1px solid rgba(0,180,130,0.28); }
+    .bank-tag.ocbc    { background: rgba(202,0,0,0.14);   color: #e07070; border: 1px solid rgba(202,0,0,0.28); }
+    .bank-tag.bca     { background: rgba(30,120,220,0.14); color: #6eaaee; border: 1px solid rgba(30,120,220,0.28); }
+    .bank-tag.manual  { background: rgba(200,170,80,0.14); color: #d4b86a; border: 1px solid rgba(200,170,80,0.28); }
+    .add-tx-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--beige12); border: 1px solid var(--beige30);
+      color: var(--beige); font-size: 13px; font-weight: 600;
+      padding: 6px 14px; border-radius: 8px; cursor: pointer;
+      font-family: inherit; transition: background 0.15s, opacity 0.15s;
+      letter-spacing: 0.02em;
+    }
+    .add-tx-btn:hover { background: var(--beige30); }
+    .bank-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .bpill {
+      background: rgba(0,0,0,0.35); border: 1px solid var(--glass-border);
+      color: var(--muted); border-radius: 20px;
+      padding: 6px 16px; font-size: 13px; font-weight: 500;
+      letter-spacing: 0.04em; cursor: pointer;
+      transition: all 0.18s; white-space: nowrap;
+      font-family: inherit;
+    }
+    .bpill:hover { border-color: var(--beige30); color: var(--white); }
+    .bpill.active-maybank { background: rgba(0,180,130,0.14); border-color: rgba(0,180,130,0.35); color: #5ec8a8; }
+    .bpill.active-ocbc    { background: rgba(202,0,0,0.14);   border-color: rgba(202,0,0,0.35);   color: #e07070; }
+    .bpill.active-bca     { background: rgba(30,120,220,0.14); border-color: rgba(30,120,220,0.35); color: #6eaaee; }
+    .bpill.active-all     { background: var(--beige12); border-color: var(--beige30); color: var(--white); }
+
+    .loading {
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 14px; min-height: 300px;
+      color: var(--muted); font-size: 14px; letter-spacing: 0.04em;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 1.5px solid rgba(221,212,195,0.12);
+      border-top-color: var(--beige);
+      border-radius: 50%; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .progress { font-size: 13px; color: var(--dim); letter-spacing: 0.06em; }
+
+    .err {
+      margin: 16px;
+      background: rgba(200,80,80,0.06); border: 1px solid rgba(200,80,80,0.15);
+      border-radius: 12px; padding: 16px; font-size: 13px; color: #e07070;
+    }
+    .retry {
+      margin-top: 10px; display: inline-block;
+      background: rgba(200,80,80,0.10); color: #e07070;
+      border: 1px solid rgba(200,80,80,0.20); border-radius: 6px;
+      padding: 8px 18px; font-size: 13px; cursor: pointer; letter-spacing: 0.04em;
+      font-family: inherit;
+    }
+    .empty { text-align: center; padding: 60px; color: var(--muted); font-size: 14px; letter-spacing: 0.06em; }
+
+    .tab-bar { display: flex; gap: 4px; margin-bottom: 14px; }
+    .tab-btn {
+      background: rgba(0,0,0,0.35); border: 1px solid var(--glass-border);
+      color: var(--muted); border-radius: 8px;
+      padding: 9px 20px; font-size: 14px; font-weight: 500;
+      letter-spacing: 0.04em; cursor: pointer;
+      transition: all 0.18s; white-space: nowrap;
+      font-family: inherit;
+    }
+    .tab-btn:hover { border-color: var(--beige30); color: var(--white); }
+    .tab-btn.active { background: var(--beige12); border-color: var(--beige30); color: var(--white); font-weight: 600; }
+    .tab-count { display: inline-block; background: rgba(202,0,0,0.20); color: #e07070; border-radius: 20px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 5px; vertical-align: middle; }
+
+    .td-actions { text-align: right; white-space: nowrap; padding-right: 12px !important; }
+    .row-action-btn {
+      background: none; border: none; cursor: pointer;
+      padding: 4px 7px; border-radius: 6px; font-size: 13px;
+      opacity: 0; transition: opacity 0.15s, background 0.15s, color 0.15s;
+      color: var(--dim); font-family: inherit;
+    }
+    tr:hover .row-action-btn { opacity: 1; }
+    .row-action-btn:hover { background: var(--beige12); color: var(--white); }
+    .row-action-btn.del:hover { background: rgba(200,100,100,0.15); color: #e07070; }
+    .row-action-btn.del.confirming {
+      background: rgba(200,100,100,0.20); color: #e07070;
+      opacity: 1; font-size: 12px; font-weight: 600;
+    }
+
+    .sub-decide-btn {
+      border: 1px solid var(--beige30); background: none; cursor: pointer;
+      padding: 4px 9px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      font-family: inherit; margin-left: 5px; transition: background 0.15s, color 0.15s, border-color 0.15s;
+      color: var(--dim);
+    }
+    .sub-decide-btn.approve:hover { background: rgba(120,190,140,0.18); color: #82be8c; border-color: rgba(120,190,140,0.4); }
+    .sub-decide-btn.decline:hover { background: rgba(200,100,100,0.15); color: #e07070; border-color: rgba(200,100,100,0.4); }
+
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 3000;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-box {
+      background: #131210; border: 1px solid var(--glass-border);
+      border-radius: 16px; padding: 28px 32px; width: 380px; max-width: 90vw;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.85);
+    }
+    .modal-title { font-size: 15px; font-weight: 700; color: var(--white); margin-bottom: 20px; }
+    .modal-field { margin-bottom: 16px; }
+    .modal-label { font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+    .modal-input {
+      width: 100%; background: var(--beige06); border: 1px solid var(--glass-border);
+      color: var(--white); font-family: inherit; font-size: 14px;
+      padding: 10px 14px; border-radius: 8px; outline: none;
+      transition: border-color 0.15s; caret-color: var(--beige);
+    }
+    .modal-input:focus { border-color: var(--beige30); }
+    .modal-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
+    .modal-btn {
+      padding: 9px 22px; border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer; border: none; font-family: inherit; transition: opacity 0.15s;
+    }
+    .modal-btn:hover { opacity: 0.80; }
+    .modal-btn.cancel { background: var(--beige12); color: var(--muted); border: 1px solid var(--glass-border); }
+    .modal-btn.save   { background: var(--beige); color: #000; }
+
+    .split-orig { font-size: 13px; color: var(--muted); margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--glass-border); }
+    .split-orig strong { color: var(--white); }
+    .split-preview { margin-top: 4px; padding: 14px 16px; background: var(--beige06); border: 1px solid var(--glass-border); border-radius: 10px; }
+    .split-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 4px 0; }
+    .split-row.total { border-top: 1px solid var(--glass-border); margin-top: 6px; padding-top: 10px; font-weight: 700; color: var(--beige); font-size: 14px; }
+    .split-badge { color: var(--dim) !important; }
+    .row-action-btn.active-split { opacity: 1; color: var(--beige); }
+
+    .note-input {
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-family: inherit;
+      width: 140px;
+      padding: 2px 4px;
+      outline: none;
+      transition: border-color 0.15s, color 0.15s;
+      caret-color: var(--beige);
+    }
+    .note-input::placeholder { color: var(--dim); font-style: italic; }
+    .note-input:hover { border-bottom-color: var(--beige30); }
+    .note-input:focus { border-bottom-color: var(--beige60); color: var(--white); }
+    .note-input.has-note { color: var(--white); border-bottom-color: var(--beige30); }
+
+    .cat-chip-btn {
+      cursor: pointer; border: none; background: none; padding: 0;
+      display: inline-flex; align-items: center; gap: 4px;
+      font-family: inherit;
+    }
+    .cat-chip-btn:hover .cat-chip { opacity: 0.75; }
+    .cat-chip-btn .cat-edit-arrow {
+      font-size: 9px; opacity: 0; transition: opacity 0.15s;
+      color: var(--dim);
+    }
+    .cat-chip-btn:hover .cat-edit-arrow { opacity: 1; }
+    .cat-chip-btn.overridden .cat-chip { outline: 1px solid currentColor; outline-offset: 2px; }
+    .cat-dropdown {
+      position: fixed; z-index: 2000; padding: 6px;
+      min-width: 195px; max-height: 360px; overflow-y: auto;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.80);
+    }
+    .cat-dd-header {
+      font-size: 10px; font-weight: 700; color: var(--dim);
+      text-transform: uppercase; letter-spacing: 0.16em;
+      padding: 4px 10px 8px;
+    }
+    .cat-dd-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 10px; border-radius: 7px;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      color: var(--muted); transition: all 0.14s; white-space: nowrap;
+    }
+    .cat-dd-item:hover { background: var(--beige12); color: var(--white); }
+    .cat-dd-item.active { background: var(--beige12); color: var(--white); font-weight: 700; }
+    .cat-dd-item .dd-icon { font-size: 15px; min-width: 18px; }
+    .cat-dd-divider { height: 1px; background: var(--glass-border); margin: 4px 0; }
+
+    .fx-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .fx-warn { margin-bottom: 12px; padding: 12px 16px; background: rgba(200,150,50,0.08); border: 1px solid rgba(200,150,50,0.20); border-radius: 10px; font-size: 13px; color: rgba(220,180,80,0.90); }
+    .fx-rate-cell { font-size: 12px; color: var(--dim); white-space: nowrap; }
+    .fx-orig { font-weight: 700; font-size: 15px; white-space: nowrap; }
+    .fx-idr-equiv { font-weight: 700; color: var(--beige); font-size: 15px; white-space: nowrap; }
+    .fx-idr-sub { font-size: 12px; color: var(--dim); margin-top: 2px; }
+
+    .fx-rate-inputs { display:flex; flex-direction:column; gap:10px; margin-bottom:12px; padding:16px 18px; }
+    .fx-rate-header { margin-bottom:2px; }
+    .fx-rate-header-title { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.14em; }
+    .fx-rate-header-hint { font-size:12px; color:var(--dim); margin-top:3px; }
+    .fx-rate-rows { display:flex; flex-wrap:wrap; gap:8px; }
+    .fx-rate-row { display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); border-radius:10px; padding:10px 14px; }
+    .fx-rate-cur-info { display:flex; flex-direction:column; min-width:110px; }
+    .fx-rate-cur-name { font-size:14px; font-weight:700; }
+    .fx-rate-cur-sub { font-size:11px; color:var(--dim); margin-top:2px; }
+    .fx-rate-controls { display:flex; align-items:center; gap:6px; }
+    .fx-rate-eq { font-size:12px; color:var(--dim); white-space:nowrap; }
+    .fx-rate-input { width:130px; background:rgba(255,255,255,0.06); border:1px solid var(--glass-border); border-radius:6px; padding:7px 10px; font-size:13px; color:var(--white); outline:none; font-family:inherit; color-scheme:dark; }
+    .fx-rate-input:focus { border-color:var(--beige30); background:rgba(255,255,255,0.09); }
+    .fx-rate-input::placeholder { color:var(--dim); }
+    .fx-rate-result { font-size:12px; font-weight:600; white-space:nowrap; margin-left:2px; }
+
+    /* ── NEW: auth gate + sync badge (not in the original artifact) ── */
+    .auth-gate {
+      position: fixed; inset: 0; z-index: 4000;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--black);
+    }
+    .auth-card { padding: 40px 44px; text-align: center; max-width: 380px; }
+    .auth-card h1 { font-size: 22px; margin-bottom: 8px; }
+    .auth-card p { font-size: 13px; color: var(--dim); margin-bottom: 24px; line-height: 1.5; }
+    .gsi-btn {
+      background: var(--beige); color: #000; border: none; border-radius: 8px;
+      padding: 11px 24px; font-size: 14px; font-weight: 700; cursor: pointer;
+      letter-spacing: 0.02em; font-family: inherit;
+    }
+    .sync-badge { font-size: 12px; color: var(--dim); letter-spacing: 0.02em; white-space: nowrap; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"
+    integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi"
+    crossorigin="anonymous"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="gated">
+
+<div class="bg">
+  <div class="dust d1"></div><div class="dust d2"></div><div class="dust d3"></div>
+  <div class="dust d4"></div><div class="dust d5"></div><div class="dust d6"></div>
+</div>
+
+<div id="authGate" class="auth-gate">
+  <div class="glass auth-card">
+    <h1>Expense Tracker</h1>
+    <p>Sign in with the Google account that receives your Maybank, OCBC, and BCA bank emails. Your data is read from Gmail and synced to a private file in your own Google Drive — never stored anywhere else.</p>
+    <button id="signInBtn" class="gsi-btn">Sign in with Google</button>
+    <div id="authStatus" style="margin-top:14px;font-size:12px;color:var(--dim)"></div>
+  </div>
+</div>
+
+<div class="header">
+  <div class="hrow">
+    <div class="hleft">
+      <h1>Expense Tracker</h1>
+    </div>
+    <div class="hright">
+      <span id="driveSyncBadge" class="sync-badge"></span>
+      <button class="refresh-btn" id="refBtn" onclick="load(true)" disabled>⟳ Refresh</button>
+      <button class="refresh-btn" id="importDataBtn" disabled>⬇ Import old data</button>
+      <input type="file" id="importFileInput" accept="application/json" style="display:none;">
+      <button class="refresh-btn" id="signOutBtn" style="display:none;">Sign out</button>
+    </div>
+  </div>
+  <div class="hmeta" id="hmeta">Sign in to load your transactions…</div>
+</div>
+
+<div id="root" class="page"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   AUTH — Google Identity Services, silent token refresh
+   ══════════════════════════════════════════════════════════════════ */
+const CLIENT_ID = '271369266444-ekr1p1n98npap9sk4uvg0ndkki44385c.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.appdata';
+
+let tokenClient = null;
+let accessToken = null;
+let refreshTimer = null;
+let isSilentAttempt = false;
+
+const $ = id => document.getElementById(id);
+
+function initAuth(){
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (resp) => {
+      const wasSilent = isSilentAttempt;
+      isSilentAttempt = false;
+      const wasGated = document.body.classList.contains('gated');
+      if (resp.error){
+        if (wasSilent && wasGated){
+          // Silent auto sign-in on page load found no prior grant / no active Google
+          // session — this is the normal first-time case, not an error. Just show the gate.
+          $('authStatus').textContent = '';
+        } else if (wasSilent){
+          // A scheduled mid-session token renewal failed — the session genuinely expired.
+          clearTimeout(refreshTimer);
+          accessToken = null;
+          document.body.classList.add('gated');
+          $('authGate').style.display = 'flex';
+          $('authStatus').textContent = 'Session expired — please sign in again.';
+        } else {
+          $('authStatus').textContent = 'Sign-in failed: ' + resp.error;
+        }
+        return;
+      }
+      accessToken = resp.access_token;
+      scheduleSilentRefresh(resp.expires_in);
+      if (!wasSilent || wasGated) onSignedIn();
+    }
+  });
+  // Note: a fully unclicked auto sign-in on page load was tried here and removed — Google's
+  // OAuth popup is blocked by the browser when it isn't opened from a direct user gesture,
+  // so this always failed silently and just added console noise. The sign-in button below
+  // uses prompt:'' instead of forcing the consent screen, so the one unavoidable click per
+  // browser session resolves instantly (no visible Google screen) once access has been
+  // granted before — only a genuinely new grant shows the account picker/consent UI.
+}
+
+function scheduleSilentRefresh(expiresInSec){
+  clearTimeout(refreshTimer);
+  const ms = Math.max((Number(expiresInSec || 3600) - 600) * 1000, 60000);
+  refreshTimer = setTimeout(() => {
+    isSilentAttempt = true;
+    tokenClient.requestAccessToken({ prompt: '' });
+  }, ms);
+}
+
+$('signInBtn').addEventListener('click', () => {
+  $('authStatus').textContent = 'Signing in…';
+  isSilentAttempt = false;
+  // prompt:'' (vs. forcing 'select_account consent') lets Google skip the picker/consent
+  // screens entirely when you've already granted this app access before.
+  tokenClient.requestAccessToken({ prompt: '' });
+});
+$('signOutBtn').addEventListener('click', () => {
+  clearTimeout(refreshTimer);
+  if (accessToken) google.accounts.oauth2.revoke(accessToken, () => {});
+  accessToken = null;
+  document.body.classList.add('gated');
+  $('authGate').style.display = 'flex';
+  $('signOutBtn').style.display = 'none';
+  $('refBtn').disabled = true;
+  $('importDataBtn').disabled = true;
+  $('hmeta').textContent = 'Signed out.';
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   DRIVE APPDATA — generic JSON read/write + STATE persistence
+   ══════════════════════════════════════════════════════════════════ */
+
+async function driveFindFileByName(name){
+  const listUrl = 'https://www.googleapis.com/drive/v3/files?' + new URLSearchParams({
+    spaces: 'appDataFolder', q: `name='${name}'`, fields: 'files(id,name,headRevisionId)'
+  }).toString();
+  const r = await fetch(listUrl, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (!r.ok) throw new Error('Drive list ' + r.status + ': ' + (await r.text()).slice(0,300));
+  const d = await r.json();
+  return (d.files && d.files[0]) || null;
+}
+async function driveUploadJson(existingId, name, obj){
+  const boundary = 'ccTrackerBoundary';
+  const metadata = existingId ? {} : { name, parents: ['appDataFolder'] };
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(obj)}\r\n` +
+    `--${boundary}--`;
+  const url = existingId
+    ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart&fields=id,headRevisionId`
+    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,headRevisionId`;
+  const r = await fetch(url, {
+    method: existingId ? 'PATCH' : 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body
+  });
+  if (!r.ok) throw new Error('Drive upload ' + r.status + ': ' + (await r.text()).slice(0,300));
+  return r.json();
+}
+async function driveReadJson(fileId){
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  if (!r.ok) throw new Error('Drive read ' + r.status + ': ' + (await r.text()).slice(0,300));
+  return r.json();
+}
+async function driveGetRevision(fileId){
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=headRevisionId`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  if (!r.ok) throw new Error('Drive meta ' + r.status);
+  return (await r.json()).headRevisionId;
+}
+
+const DATA_FILE_NAME = 'cc-tracker-data.json';
+const STATE_MIRROR_KEY = 'cc_tracker_state_v1';
+
+function defaultState(){
+  return {
+    version: 1, cachedAt: null, watermark: null,
+    txns: [], payments: [], manualTxns: [],
+    catOverrides: {}, merchantCats: {}, txEdits: {}, splits: {}, notes: {},
+    merchantAutoNotes: {}, manualFxRates: {}, hiddenIds: [], subDecisions: {},
+    dateCategoryRules: [], ccPosExcludedIds: []
+  };
+}
+
+let STATE = defaultState();
+let driveFileId = null;
+let driveRevisionId = null;
+let saveTimer = null;
+
+function loadStateMirror(){ try{ return JSON.parse(localStorage.getItem(STATE_MIRROR_KEY) || 'null'); }catch(_){ return null; } }
+function saveStateMirror(state){ try{ localStorage.setItem(STATE_MIRROR_KEY, JSON.stringify(state)); }catch(_){} }
+
+function setSyncBadge(kind, msg){
+  const dot = { syncing: '🟡', synced: '🟢', error: '🔴', idle: '⚪' }[kind] || '⚪';
+  $('driveSyncBadge').textContent = dot + ' ' + msg;
+}
+
+async function driveLoadState(){
+  const file = await driveFindFileByName(DATA_FILE_NAME);
+  if (!file) return null;
+  driveFileId = file.id;
+  driveRevisionId = file.headRevisionId;
+  const data = await driveReadJson(file.id);
+  return { ...defaultState(), ...data };
+}
+
+function unionById(a, b){
+  const map = new Map();
+  for (const x of (a||[])) if (x && x.id) map.set(x.id, x);
+  for (const x of (b||[])) if (x && x.id) map.set(x.id, x);
+  return [...map.values()];
+}
+
+function mergeStates(remote, local){
+  const merged = { ...defaultState(), ...remote };
+  merged.txns = unionById(remote.txns, local.txns);
+  merged.manualTxns = unionById(remote.manualTxns, local.manualTxns);
+  merged.payments = unionById(remote.payments, local.payments);
+  merged.hiddenIds = [...new Set([...(remote.hiddenIds||[]), ...(local.hiddenIds||[])])];
+  merged.ccPosExcludedIds = [...new Set([...(remote.ccPosExcludedIds||[]), ...(local.ccPosExcludedIds||[])])];
+  for (const k of ['catOverrides','merchantCats','txEdits','splits','notes','merchantAutoNotes','manualFxRates','subDecisions']){
+    merged[k] = { ...(remote[k]||{}), ...(local[k]||{}) };
+  }
+  merged.dateCategoryRules = (local.dateCategoryRules && local.dateCategoryRules.length) ? local.dateCategoryRules : (remote.dateCategoryRules||[]);
+  const wms = [remote.watermark, local.watermark].filter(Boolean).sort();
+  merged.watermark = wms.length ? wms[wms.length-1] : null;
+  merged.cachedAt = new Date().toISOString();
+  return merged;
+}
+
+async function driveSaveState(state, allowRetry){
+  if (allowRetry === undefined) allowRetry = true;
+  setSyncBadge('syncing', 'Saving to Drive…');
+  try{
+    if (driveFileId){
+      const currentRev = await driveGetRevision(driveFileId);
+      if (driveRevisionId && currentRev !== driveRevisionId){
+        if (!allowRetry) throw new Error('conflict persisted after merge retry');
+        setSyncBadge('syncing', 'Another device changed the data — merging…');
+        const remote = await driveLoadState();
+        return driveSaveState(mergeStates(remote, state), false);
+      }
+    }
+    const saved = await driveUploadJson(driveFileId, DATA_FILE_NAME, state);
+    driveFileId = saved.id;
+    driveRevisionId = saved.headRevisionId;
+    STATE = state;
+    saveStateMirror(state);
+    setSyncBadge('synced', 'Synced ' + new Date().toLocaleTimeString());
+  }catch(e){
+    setSyncBadge('error', 'Sync failed: ' + (e.message || e));
+  }
+}
+
+function scheduleDriveSave(){
+  saveStateMirror(STATE);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => driveSaveState(STATE), 1500);
+}
+
+async function bootFromDrive(){
+  setSyncBadge('syncing', 'Loading from Drive…');
+  try{
+    const remote = await driveLoadState();
+    if (remote){
+      STATE = remote;
+      saveStateMirror(STATE);
+      setSyncBadge('synced', 'Loaded from Drive.');
+    } else {
+      setSyncBadge('synced', 'No Drive data yet — will create it on first sync.');
+    }
+  }catch(e){
+    setSyncBadge('error', 'Drive load failed: ' + (e.message || e));
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   GMAIL REST — search, thread fetch, MIME body decode
+   ══════════════════════════════════════════════════════════════════ */
+
+async function gmailFetch(path, params){
+  const url = 'https://gmail.googleapis.com/gmail/v1/users/me' + path +
+    (params ? '?' + new URLSearchParams(params).toString() : '');
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (!r.ok) throw new Error('Gmail API ' + r.status + ': ' + (await r.text()).slice(0,300));
+  return r.json();
+}
+async function searchThreads(query, targetCount=250){
+  const all=[]; let pageToken=null;
+  do{
+    const params={ q: query, maxResults: '50' };
+    if (pageToken) params.pageToken = pageToken;
+    const d = await gmailFetch('/threads', params);
+    if (d.threads) all.push(...d.threads);
+    pageToken = d.nextPageToken || null;
+  } while (pageToken && all.length < targetCount);
+  return all;
+}
+function base64UrlDecode(data){
+  const bin = atob(data.replace(/-/g,'+').replace(/_/g,'/'));
+  const bytes = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+function extractHeader(headers, name){
+  const h = (headers||[]).find(h => h.name.toLowerCase() === name.toLowerCase());
+  return h ? h.value : '';
+}
+function findBodyPart(payload, wantMime){
+  if (!payload) return null;
+  if (payload.mimeType === wantMime && payload.body && payload.body.data) return payload.body.data;
+  if (payload.parts) for (const p of payload.parts){ const f = findBodyPart(p, wantMime); if (f) return f; }
+  return null;
+}
+function extractHtmlBody(payload){
+  const h = findBodyPart(payload, 'text/html');
+  if (h) return base64UrlDecode(h);
+  const t = findBodyPart(payload, 'text/plain');
+  if (t) return base64UrlDecode(t);
+  return '';
+}
+async function getThreadMessages(threadId){
+  const d = await gmailFetch('/threads/' + threadId, { format: 'full' });
+  return (d.messages || []).map(m => ({
+    id: m.id,
+    date: new Date(parseInt(m.internalDate,10)).toISOString(),
+    subject: extractHeader(m.payload.headers, 'Subject'),
+    snippet: m.snippet || '',
+    htmlBody: extractHtmlBody(m.payload)
+  }));
+}
+async function fetchAndParse(threads, parseFn, onProgress, label){
+  const items=[]; const BATCH=6;
+  for (let i=0;i<threads.length;i+=BATCH){
+    if (onProgress) onProgress(`${label}: ${i+1}–${Math.min(i+BATCH,threads.length)} of ${threads.length}…`);
+    const batch = threads.slice(i,i+BATCH);
+    const results = await Promise.all(batch.map(async t => {
+      try{
+        const msgs = await getThreadMessages(t.id);
+        const out=[];
+        for (const m of msgs){ const tx = parseFn(m.htmlBody||'', m.date); if (tx){ tx.msgDate=m.date; tx.id=m.id; out.push(tx); } }
+        return out;
+      }catch(e){ return []; }
+    }));
+    for (const r of results) items.push(...r);
+  }
+  return items;
+}
+async function processMaybank(threads, onProgress){
+  const items=[]; const BATCH=6;
+  for (let i=0;i<threads.length;i+=BATCH){
+    if (onProgress) onProgress(`Maybank: ${i+1}–${Math.min(i+BATCH,threads.length)} of ${threads.length}…`);
+    const batch = threads.slice(i,i+BATCH);
+    const results = await Promise.all(batch.map(async t => {
+      try{
+        const msgs = await getThreadMessages(t.id);
+        const out=[];
+        for (const m of msgs){
+          const cb = (m.subject||'') + ' ' + (m.snippet||'');
+          let tx;
+          if (/jatuh tempo|informasi tagihan|billing|payment due/i.test(cb)){
+            tx = parseBillingFromSnippet(m.snippet||''); tx.msgDate=m.date;
+          } else if (/m2u/i.test(cb)){
+            tx = parseM2UFromSnippet(m.snippet||''); tx.msgDate=m.date; tx.txDate=m.date;
+          } else {
+            tx = parseTxFromBody(m.htmlBody||'', m.date);
+            if (tx){ tx.bank='Maybank'; tx.msgDate=m.date; }
+          }
+          if (tx){ tx.id=m.id; out.push(tx); }
+        }
+        return out;
+      }catch(e){ return []; }
+    }));
+    for (const r of results) items.push(...r);
+  }
+  return items;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BANK PARSERS — ported unchanged from Artifacts/maybank-cc-tracker
+   ══════════════════════════════════════════════════════════════════ */
+
+const HISTORY_START = '2026-06-01';
+const OCBC_SEARCH_Q = 'from:notifikasi@ocbc.id subject:"PEMBAYARAN DENGAN KARTU DEBIT BERHASIL"';
+const BCA_SEARCH_Q  = 'from:bca@bca.co.id subject:"Internet Transaction Journal"';
+
+function cleanMerchant(raw) {
+  return raw.replace(/^Grab\*\s*[A-Z0-9\-]+$/i,'Grab').replace(/^Grab\*\s*/i,'Grab ')
+    .replace(/XDT\*/gi,'').replace(/MCDONALD'?S?\s+\w+/i,"McDonald's")
+    .replace(/&amp;|&#39;/g,"'").replace(/\s+/g,' ').trim()||raw;
+}
+
+const CATEGORIES = {
+  'Food & Dining':        { color: '#c8855a', icon: '🍴' },
+  'Sports':               { color: '#d97a8c', icon: '🏸' },
+  'Transport':            { color: '#7aaecf', icon: '🚗' },
+  'Shopping':             { color: '#a98fcc', icon: '🛍️' },
+  'Tech & Subscriptions': { color: '#6dbfb0', icon: '💻' },
+  'Groceries':            { color: '#82be8c', icon: '🛒' },
+  'Travel':               { color: '#8899d4', icon: '✈️' },
+  'Fuel':                 { color: '#c8a86a', icon: '⛽' },
+  'Telecom':              { color: '#72bdc8', icon: '📱' },
+  'Transfer':             { color: '#6eaaee', icon: '💸' },
+  'Foreign':              { color: '#d4a96a', icon: '🌏' },
+  'Religion':             { color: '#b89fd4', icon: '🙏' },
+  'Entertainment':        { color: '#e0a060', icon: '🎬' },
+  'Ad Hoc':               { color: '#c8a0d4', icon: '📌' },
+  'Others':               { color: '#8a8878', icon: '📋' },
+};
+
+function categorize(merchant) {
+  const m=(merchant||'').toUpperCase().replace(/&AMP;|&#39;/g,'');
+  if(/GMS/.test(m))return'Religion';
+  if(/\bAYO\b|METRO\s*CAFFE/.test(m))return'Sports';
+  if(/UBER|GOJEK|GOCAR|GORIDE|BLUEBIRD|TAXI|UTOMO|SINGAPORE\s*AIR|SINGAPOREAIR/.test(m))return'Transport';
+  if(/GRAB|COFFEE|CAFE|KOPI|RESTO|RESTAURANT|BEBEK|AYAM|SOTO|BAKSO|WARUNG|DEPOT|KWETIAU|STEAMBOAT|MA LA|CHASIO|XIAO XIANG|FUSIA|TAEYANG|OLD TOWN|LIME|SENIMAN|HARLAN|BREEZE|KARBS|TOBY|TGC|APENG|SANLONG|MCD|MCDONALD/.test(m))return'Food & Dining';
+  if(/SUPERINDO|INDOMARET|ALFAMART|HYPERMART|CARREFOUR|RANCH MARKET|LOTTE|HERO|GIANT|SINAR LUCKY/.test(m))return'Groceries';
+  if(/SHOPEE|TOKOPEDIA|LAZADA|BUKALAPAK|BLIBLI|NIKE|UNIQLO|ZARA|H&M|BATAS LANGIT|XDT\*/.test(m))return'Shopping';
+  if(/ANTHROPIC|CLAUDE|APPLE|GOOGLE|NETFLIX|SPOTIFY|PAPER\.ID|ADOBE|MICROSOFT/.test(m))return'Tech & Subscriptions';
+  if(/SPBU|PERTAMINA|SHELL|VIVO/.test(m))return'Fuel';
+  if(/XL AXIATA|TELKOMSEL|INDOSAT|SMARTFREN|AXIS/.test(m))return'Telecom';
+  if(/SINGAPOREAIR|GARUDA|LION AIR|BATIK|CITILINK|HOTEL|RESORT|VILLA|AGODA|TRAVELOKA|TIKET/.test(m))return'Travel';
+  return'Others';
+}
+
+const FX_CURRENCIES=['USD','SGD','EUR','GBP','AUD','JPY','MYR','CNY','HKD','THB'];
+function parseTxFromBody(html,msgDate) {
+  const merchantM=html.match(/>VISA<\/p>[\s\S]{0,800}?<p[^>]*>\s*([^<\r\n]+?)\s*<\/p>/i);
+  const merchantRaw=merchantM?merchantM[1].trim():'Maybank TX';
+  const dateM=html.match(/(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{2,4}\s+\d{2}:\d{2})/i);
+  let txDate=msgDate;
+  if(dateM){try{const ds=dateM[1].replace(/(\d{1,2}\s+\w+\s+)(\d{2})(\s)/,(_,a,y,s)=>`${a}20${y}${s}`);const d=new Date(ds);if(!isNaN(d.getTime()))txDate=d.toISOString();}catch(_){}}
+  const statusM=html.match(/Sukses\/Approved|Approved|Gagal|Declined|Failed/i);
+  const merchantClean=cleanMerchant(merchantRaw);
+
+  const amtM=html.match(/IDR<\/p>[\s\S]{0,800}?<p[^>]*>\s*([\d,]+)\s*<\/p>/i);
+  if(amtM){
+    const amount=parseInt(amtM[1].replace(/,/g,''),10);
+    if(amount)return{merchantRaw,merchantClean,category:categorize(merchantRaw),amount,amountStr:'IDR '+amtM[1],status:statusM?statusM[0]:'Approved',txDate,type:'transaction'};
+  }
+
+  const txt=html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
+  for(const cur of FX_CURRENCIES){
+    if(!new RegExp('\\b'+cur+'\\b','i').test(txt))continue;
+    const fxAmtM=txt.match(new RegExp(cur+'[^\\d]{0,8}([\\d,\\.]+)','i'));
+    const amountOrig=fxAmtM?parseFloat(fxAmtM[1].replace(/,/g,'')):null;
+    if(!amountOrig||amountOrig<0.01)continue;
+    const idrM=txt.match(/(?:IDR|Rp)\s*([\d,]+)/i);
+    const amount=idrM?parseInt(idrM[1].replace(/,/g,''),10):0;
+    return{merchantRaw,merchantClean,category:categorize(merchantRaw),amount:amount||0,amountOrig,currency:cur,amountStr:`${cur} ${amountOrig}`,status:statusM?statusM[0]:'Approved',txDate,type:'transaction'};
+  }
+  return null;
+}
+function parseBillingFromSnippet(s){const d=s.match(/tanggal\s+([\d\w-]+)/i);return{merchantRaw:'Billing Reminder',merchantClean:'Billing Reminder',amount:null,amountStr:'—',status:'Info',txDate:null,dueDate:d?d[1]:null,type:'billing',bank:'Maybank'};}
+function parseM2UFromSnippet(s){const a=s.match(/(?:Nominal|Jumlah|Amount)[\s:]+Rp\s*([\d.,]+)/i);return{merchantRaw:'M2U Transfer',merchantClean:'M2U App Transfer',amount:a?parseInt(a[1].replace(/\./g,''),10):null,amountStr:a?'Rp '+a[1]:'—',status:'Info',txDate:null,type:'app',bank:'Maybank'};}
+
+function parseOCBCFromBody(html, msgDate) {
+  const amtM = html.match(/JUMLAH PEMBAYARAN[\s\S]{0,300}?<h4><span[^>]*>\s*([A-Z]{2,3})\s+([\d.]+)\s*<\/span>/i);
+  if (!amtM) return null;
+  const currency = amtM[1];
+  const amountOrig = parseFloat(amtM[2]);
+  if (!amountOrig) return null;
+  const dateM = html.match(/TANGGAL PEMBAYARAN[\s\S]{0,300}?<span[^>]*>(\d{1,2}\s+\w+\s+\d{4})<\/span>/i);
+  let txDate = msgDate;
+  if (dateM) { try { const d = new Date(dateM[1]); if (!isNaN(d.getTime())) txDate = d.toISOString(); } catch(_) {} }
+  return {
+    merchantRaw: `OCBC Debit`, merchantClean: `OCBC Debit`, category: 'Foreign',
+    amount: null, amountOrig, currency, amountStr: `${currency} ${amtM[2]}`,
+    status: 'Approved', txDate, type: 'transaction', bank: 'OCBC'
+  };
+}
+
+function parseBCAFromBody(html, msgDate) {
+  const txt = html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
+  const statusM = txt.match(/Status\s*:\s*(Successful|Failed|Pending)/i);
+  const status = statusM ? statusM[1] : 'Successful';
+  const dateM = txt.match(/Transaction Date\s*:\s*(\d{1,2}\s+\w+\s+\d{4}\s+[\d:]+)/i);
+  let txDate = msgDate;
+  if (dateM) { try { const d=new Date(dateM[1]); if(!isNaN(d.getTime()))txDate=d.toISOString(); } catch(_){} }
+
+  const isQRIS    = /Transaction Type\s*:\s*QRIS/i.test(txt);
+  const isTransfer = /Transfer Type\s*:/i.test(txt);
+  let merchantRaw, merchantClean, amount, amountStr, category;
+
+  if (isQRIS) {
+    const mM = txt.match(/Payment to\s*:\s*([^:]+?)(?:\s+Merchant Location|\s+Acquirer|\s+Terminal|$)/i);
+    merchantRaw   = mM ? mM[1].trim() : 'BCA QRIS';
+    merchantClean = cleanMerchant(merchantRaw);
+    const aM = txt.match(/Total Payment\s*:\s*IDR\s*([\d,]+(?:\.\d+)?)/i);
+    if (!aM) return null;
+    amount     = Math.round(parseFloat(aM[1].replace(/,/g,'')));
+    amountStr  = 'IDR ' + aM[1];
+    category   = categorize(merchantRaw);
+  } else if (isTransfer) {
+    const targetCurM = txt.match(/Target Currency\s*:\s*([A-Z]{3})/i);
+    const sourceCurM = txt.match(/Source Currency\s*:\s*([A-Z]{3})/i);
+    const targetCur  = targetCurM ? targetCurM[1].toUpperCase() : 'IDR';
+    const sourceCur  = sourceCurM ? sourceCurM[1].toUpperCase() : 'IDR';
+    const bM = txt.match(/Beneficiary Name\s*:\s*([^:]+?)(?:\s+Amount|\s+Remarks|\s+Reference|\s+Transaction Purpose|$)/i);
+    merchantRaw   = bM ? bM[1].trim() : 'BCA Transfer';
+    merchantClean = 'Transfer: ' + merchantRaw.split(' ').slice(0,3).join(' ');
+
+    if(targetCur !== 'IDR' || sourceCur !== 'IDR'){
+      const fxCur = targetCur !== 'IDR' ? targetCur : sourceCur;
+      const fxAmtM = txt.match(/(?:Target Amount|Amount)\s*:\s*[A-Z]{3}\s*([\d,\.]+)/i);
+      const idrAmtM = txt.match(/(?:Source Amount|Debit Amount|Amount)\s*:\s*IDR\s*([\d,\.]+)/i);
+      const amountOrig = fxAmtM ? parseFloat(fxAmtM[1].replace(/,/g,'')) : null;
+      amount = idrAmtM ? Math.round(parseFloat(idrAmtM[1].replace(/,/g,''))) : 0;
+      amountStr = amountOrig ? `${fxCur} ${amountOrig}` : fxCur;
+      return{merchantRaw,merchantClean,category:'Foreign',amount:amount||0,amountOrig:amountOrig||null,currency:fxCur,amountStr,status,txDate,type:'transaction',bank:'BCA'};
+    }
+
+    const aM = txt.match(/Amount\s*:\s*IDR\s*([\d,]+(?:\.\d+)?)/i);
+    if (!aM) return null;
+    amount     = Math.round(parseFloat(aM[1].replace(/,/g,'')));
+    amountStr  = 'IDR ' + aM[1];
+    category   = 'Transfer';
+  } else {
+    return null;
+  }
+
+  if (!amount || amount <= 0) return null;
+  return { merchantRaw, merchantClean, category, amount, amountStr, status, txDate, type:'transaction', bank:'BCA' };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   FORMAT HELPERS — ported unchanged
+   ══════════════════════════════════════════════════════════════════ */
+function fmtIDR(n){if(n==null)return'—';return'IDR '+n.toLocaleString('id-ID');}
+function fmtIDRShort(n){if(n==null)return'—';if(n>=1000000)return'IDR '+(n/1000000).toFixed(1).replace('.0','')+'jt';if(n>=1000)return'IDR '+(n/1000).toFixed(0)+'rb';return'IDR '+n.toLocaleString('id-ID');}
+function fmtDate(iso){if(!iso)return'—';try{return new Date(iso).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(_){return iso;}}
+function escH(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escAttr(s){return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/[\r\n]+/g,' ');}
+function monthName(d){return d.toLocaleDateString('id-ID',{month:'long',year:'numeric'});}
+
+/* ══════════════════════════════════════════════════════════════════
+   GLOBAL STATE — ported unchanged from Artifacts/maybank-cc-tracker
+   ══════════════════════════════════════════════════════════════════ */
+let chartBar=null,chartDonut=null,chartRepMonthly=null,chartRepCat=null,chartRepBank=null,ALL_TRANSACTIONS=[];
+let ALL_TRANSACTIONS_RAW=[]; // pipeline-applied snapshot before the hidden filter — CC Position still sees hidden txns
+let ACTIVE_BANK='all';
+let ACTIVE_TAB='reporting';
+function setTab(t){ACTIVE_TAB=t;renderAll(getFiltered());}
+let REPORT_PERIOD='month', REPORT_MONTH=(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})(), REPORT_YEAR=null;
+let CCP_EST_FROM='', CCP_EST_TO='';
+let ACTIVE_RANGE='all',CUSTOM_FROM=null,CUSTOM_TO=null,ACTIVE_CATEGORIES=new Set(),ACTIVE_MERCHANT=null;
+
+/* ══════════════════════════════════════════════════════════════════
+   OVERRIDE STORES — same function names as the original artifact, but
+   backed by Drive-synced STATE instead of localStorage. Every render/
+   modal function below calls these by name and needs no other changes.
+   ══════════════════════════════════════════════════════════════════ */
+function saveCache(t){ STATE.txns=t; STATE.cachedAt=new Date().toISOString(); scheduleDriveSave(); }
+function loadCache(){ if(!STATE.txns||!STATE.txns.length) return null; return { ts: STATE.cachedAt?Date.parse(STATE.cachedAt):Date.now(), data: STATE.txns }; }
+
+function getMFX(){ return STATE.manualFxRates; }
+function saveMFX(r){ STATE.manualFxRates=r; scheduleDriveSave(); }
+
+function getCatOverrides(){ return STATE.catOverrides; }
+function saveCatOverrides(o){ STATE.catOverrides=o; scheduleDriveSave(); }
+
+function getMerchantCats(){ return STATE.merchantCats; }
+function saveMerchantCats(o){ STATE.merchantCats=o; scheduleDriveSave(); }
+
+function getNotes(){ return STATE.notes; }
+function saveNotes(n){ STATE.notes=n; scheduleDriveSave(); }
+
+function getMerchantAutoNotes(){ return STATE.merchantAutoNotes; }
+function saveMerchantAutoNotes(obj){ STATE.merchantAutoNotes=obj; scheduleDriveSave(); }
+
+function getHidden(){ return new Set(STATE.hiddenIds); }
+function saveHidden(s){ STATE.hiddenIds=[...s]; scheduleDriveSave(); }
+
+function getCCPayments(){ return STATE.payments; }
+function saveCCPaymentsArr(arr){ STATE.payments=arr; scheduleDriveSave(); }
+
+function getCCPosExcluded(){ return new Set(STATE.ccPosExcludedIds); }
+function saveCCPosExcluded(s){ STATE.ccPosExcludedIds=[...s]; scheduleDriveSave(); }
+
+function getTxEdits(){ return STATE.txEdits; }
+function saveTxEdits(e){ STATE.txEdits=e; scheduleDriveSave(); }
+
+function getManualTxns(){ return STATE.manualTxns; }
+function saveManualTxns(arr){ STATE.manualTxns=arr; scheduleDriveSave(); }
+
+function getSplits(){ return STATE.splits; }
+function saveSplits(s){ STATE.splits=s; scheduleDriveSave(); }
+
+function getSubDecisions(){ return STATE.subDecisions; }
+function saveSubDecisions(d){ STATE.subDecisions=d; scheduleDriveSave(); }
+
+/* ══════════════════════════════════════════════════════════════════
+   OVERRIDE/EDIT PIPELINE — ported unchanged (idempotent: safe to
+   re-apply on top of already-adjusted data, since every function
+   computes from an absolute source, never relative to current t.amount)
+   ══════════════════════════════════════════════════════════════════ */
+function applyManualFXRates(txns){
+  const rates=getMFX();
+  for(const t of txns){
+    if(t.bank==='OCBC'&&t.currency&&t.amountOrig){
+      const rate=rates[t.currency];
+      if(rate){t.fxRate=rate;t.amount=Math.round(t.amountOrig*rate);}
+    }
+  }
+}
+function applyDateCategoryRules(txns){
+  for(const t of txns){
+    const d=(t.txDate||t.msgDate||'').slice(0,10);
+    if(!d)continue;
+    for(const r of STATE.dateCategoryRules){
+      if(d>=r.from&&d<=r.to){t.category=r.category;break;}
+    }
+  }
+}
+function applyCatOverrides(txns){
+  const ov=getCatOverrides();
+  for(const t of txns){if(t.id&&ov[t.id])t.category=ov[t.id];}
+}
+function applyMerchantCats(txns){
+  const mc=getMerchantCats();
+  if(!Object.keys(mc).length)return;
+  for(const t of txns){
+    const m=t.merchantClean||t.merchantRaw||'';
+    if(mc[m])t.category=mc[m];
+  }
+}
+function applyNotes(txns){
+  const notes=getNotes();
+  for(const t of txns){if(t.id&&notes[t.id]!==undefined)t.note=notes[t.id];}
+}
+function applyMerchantAutoNotes(txns){
+  const rules=getMerchantAutoNotes();
+  if(!Object.keys(rules).length)return;
+  const userNotes=getNotes();
+  for(const t of txns){
+    if(t.id&&userNotes[t.id]!==undefined)continue;
+    if(t.note)continue;
+    const m=(t.merchantClean||t.merchantRaw||'').toUpperCase();
+    for(const [pattern,rule] of Object.entries(rules)){
+      if(!m.includes(pattern.toUpperCase()))continue;
+      const note=typeof rule==='string'?rule:rule.note;
+      const requiredAmt=typeof rule==='object'&&rule.amount?rule.amount:null;
+      if(requiredAmt&&Math.round(t.amount||0)!==Math.round(requiredAmt))continue;
+      t.note=note;break;
+    }
+  }
+}
+function applyTxEdits(txns){
+  const edits=getTxEdits();
+  for(const t of txns){
+    if(t.id&&edits[t.id]){
+      if(edits[t.id].merchantClean!==undefined)t.merchantClean=edits[t.id].merchantClean;
+      if(edits[t.id].amount!==undefined)t.amount=edits[t.id].amount;
+    }
+  }
+}
+function applySplits(txns){
+  const splits=getSplits();
+  for(const t of txns){
+    const sp=splits[t.id];
+    if(!sp)continue;
+    const per=sp.originalAmount/sp.people;
+    t.amount=Math.round(sp.originalAmount-per*sp.paidCount);
+    t.splitInfo={people:sp.people,paidCount:sp.paidCount,originalAmount:sp.originalAmount,perPerson:Math.round(per)};
+  }
+}
+function applySubDecisions(txns){
+  const d=getSubDecisions();
+  for(const t of txns){
+    const m=t.merchantClean||t.merchantRaw||'Unknown';
+    if(d[m]==='approved')t.category='Tech & Subscriptions';
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   INTERACTIVE HANDLERS — ported unchanged
+   ══════════════════════════════════════════════════════════════════ */
+
+function updateMFXRate(cur, val){
+  const rates=getMFX();
+  const n=parseFloat(val);
+  if(n>0){rates[cur]=n;}else{delete rates[cur];}
+  saveMFX(rates);
+  for(const t of ALL_TRANSACTIONS){
+    if(t.bank==='OCBC'&&t.currency===cur&&t.amountOrig){
+      if(n>0){t.fxRate=n;t.amount=Math.round(t.amountOrig*n);}
+      else{t.fxRate=null;t.amount=null;}
+    }
+  }
+  renderAll(getFiltered());
+}
+
+function openCatDropdown(event,txId,currentCat){
+  document.querySelectorAll('.cat-dropdown').forEach(el=>el.remove());
+  event.stopPropagation();
+  const dd=document.createElement('div');
+  dd.className='cat-dropdown glass';
+  const hdr=document.createElement('div');
+  hdr.className='cat-dd-header';hdr.textContent='Change Category';
+  dd.appendChild(hdr);
+  const div=document.createElement('div');div.className='cat-dd-divider';dd.appendChild(div);
+  Object.entries(CATEGORIES).forEach(([cat,meta])=>{
+    const item=document.createElement('button');
+    item.className='cat-dd-item'+(cat===currentCat?' active':'');
+    item.innerHTML=`<span class="dd-icon">${meta.icon}</span>${cat}${cat===currentCat?' ✓':''}`;
+    item.onclick=e=>{e.stopPropagation();applyCatChange(txId,cat);dd.remove();};
+    dd.appendChild(item);
+  });
+  document.body.appendChild(dd);
+  const rect=dd.getBoundingClientRect();
+  const vw=window.innerWidth, vh=window.innerHeight;
+  let x=event.clientX+4, y=event.clientY+4;
+  if(x+rect.width>vw-8)x=event.clientX-rect.width-4;
+  if(y+rect.height>vh-8)y=event.clientY-rect.height-4;
+  dd.style.left=Math.max(8,x)+'px'; dd.style.top=Math.max(8,y)+'px';
+  const close=e=>{if(!dd.contains(e.target)){dd.remove();document.removeEventListener('click',close);}};
+  setTimeout(()=>document.addEventListener('click',close),0);
+}
+function applyCatChange(txId,newCat){
+  const ov=getCatOverrides();ov[txId]=newCat;saveCatOverrides(ov);
+  const tx=ALL_TRANSACTIONS.find(t=>t.id===txId)||ALL_TRANSACTIONS_RAW.find(t=>t.id===txId);
+  if(tx){
+    tx.category=newCat;
+    const merchant=tx.merchantClean||tx.merchantRaw||'';
+    if(merchant){const mc=getMerchantCats();mc[merchant]=newCat;saveMerchantCats(mc);}
+  }
+  renderAll(getFiltered());
+}
+
+function updateNote(txId,text){
+  const notes=getNotes();
+  if(text.trim()){notes[txId]=text.trim();}else{delete notes[txId];}
+  saveNotes(notes);
+  const tx=ALL_TRANSACTIONS.find(t=>t.id===txId);
+  if(tx)tx.note=text.trim()||undefined;
+}
+
+function initMerchantAutoNotes(){
+  const rules=getMerchantAutoNotes();
+  let changed=false;
+  const appleRule=rules['APPLE'];
+  const needsUpdate=!appleRule||(typeof appleRule==='string')||(typeof appleRule==='object'&&appleRule.amount!==199000);
+  if(needsUpdate){rules['APPLE']={note:'Apple One Subs',amount:199000};changed=true;}
+  if(changed)saveMerchantAutoNotes(rules);
+}
+
+function hideTransaction(id){
+  const manuals=getManualTxns();
+  const filtered=manuals.filter(t=>t.id!==id);
+  if(filtered.length!==manuals.length)saveManualTxns(filtered);
+  const h=getHidden();h.add(id);saveHidden(h);
+  ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>t.id!==id);
+  saveCache(ALL_TRANSACTIONS_RAW);
+  renderAll(getFiltered());
+}
+function deleteTransaction(id,btnEl){
+  if(btnEl.classList.contains('confirming')){
+    hideTransaction(id);
+  } else {
+    btnEl.classList.add('confirming');
+    btnEl.textContent='confirm?';
+    const t=setTimeout(()=>{
+      btnEl.classList.remove('confirming');
+      btnEl.textContent='🗑';
+    },2500);
+    btnEl._cancelTimer=t;
+  }
+}
+
+function addCCPayment(){
+  const dateEl=document.getElementById('ccpDate'),timeEl=document.getElementById('ccpTime'),noteEl=document.getElementById('ccpNote');
+  const date=dateEl?dateEl.value:'',timeVal=timeEl?timeEl.value:'',noteVal=noteEl?noteEl.value.trim():'';
+  if(!date){alert('Pick a date.');return;}
+  const dateTime=timeVal?`${date}T${timeVal}:00`:`${date}T23:59:59`;
+  const arr=getCCPayments();
+  arr.push({id:'ccp_'+Date.now(),date:dateTime,note:noteVal});
+  arr.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  saveCCPaymentsArr(arr);
+  renderAll(getFiltered());
+}
+function deleteCCPayment(id,btnEl){
+  if(btnEl.classList.contains('confirming')){
+    const arr=getCCPayments().filter(p=>p.id!==id);
+    saveCCPaymentsArr(arr);
+    renderAll(getFiltered());
+  } else {
+    btnEl.classList.add('confirming');
+    btnEl.textContent='confirm?';
+    const t=setTimeout(()=>{btnEl.classList.remove('confirming');btnEl.textContent='🗑';},2500);
+    btnEl._cancelTimer=t;
+  }
+}
+
+function toggleCCPosExclude(id,btnEl){
+  const ex=getCCPosExcluded();
+  if(ex.has(id)){
+    ex.delete(id);saveCCPosExcluded(ex);renderAll(getFiltered());
+  } else {
+    if(btnEl.classList.contains('confirming')){
+      ex.add(id);saveCCPosExcluded(ex);renderAll(getFiltered());
+    } else {
+      btnEl.classList.add('confirming');btnEl.textContent='confirm?';
+      setTimeout(()=>{if(btnEl){btnEl.classList.remove('confirming');btnEl.textContent='🗑';}},2500);
+    }
+  }
+}
+function applyCCEstimate(){
+  const f=document.getElementById('ccEstFrom')?.value,t=document.getElementById('ccEstTo')?.value;
+  if(!f||!t){alert('Pick both a From and To date.');return;}
+  CCP_EST_FROM=f;CCP_EST_TO=t;renderAll(getFiltered());
+}
+function clearCCEstimate(){CCP_EST_FROM='';CCP_EST_TO='';renderAll(getFiltered());}
+
+let _editId=null;
+function openEditModal(id){
+  const tx=ALL_TRANSACTIONS.find(t=>t.id===id);
+  if(!tx)return;
+  _editId=id;
+  document.getElementById('txEditModal')?.remove();
+  const el=document.createElement('div');
+  el.id='txEditModal'; el.className='modal-overlay';
+  const isFx=tx.bank==='OCBC'&&!!tx.amountOrig;
+  el.innerHTML=`<div class="modal-box glass">
+    <div class="modal-title">Edit Transaction</div>
+    <div class="modal-field">
+      <div class="modal-label">Merchant</div>
+      <input class="modal-input" id="editMerchant" type="text" value="${escH(tx.merchantClean||'')}" />
+    </div>
+    ${!isFx?`<div class="modal-field">
+      <div class="modal-label">Amount (IDR)</div>
+      <input class="modal-input" id="editAmount" type="number" min="0" value="${tx.amount||''}" />
+    </div>`:''}
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="modal-btn save" onclick="saveEditModal()">Save</button>
+    </div>
+  </div>`;
+  el.addEventListener('click',e=>{if(e.target===el)closeEditModal();});
+  el.addEventListener('keydown',e=>{if(e.key==='Escape')closeEditModal();if(e.key==='Enter')saveEditModal();});
+  document.body.appendChild(el);
+  setTimeout(()=>document.getElementById('editMerchant')?.focus(),40);
+}
+function closeEditModal(){document.getElementById('txEditModal')?.remove();_editId=null;}
+function saveEditModal(){
+  if(!_editId)return;
+  const edits=getTxEdits();
+  const m=document.getElementById('editMerchant')?.value.trim();
+  const a=document.getElementById('editAmount')?.value;
+  if(!edits[_editId])edits[_editId]={};
+  if(m)edits[_editId].merchantClean=m;
+  if(a&&parseFloat(a)>0)edits[_editId].amount=Math.round(parseFloat(a));
+  saveTxEdits(edits);
+  const tx=ALL_TRANSACTIONS.find(t=>t.id===_editId)||ALL_TRANSACTIONS_RAW.find(t=>t.id===_editId);
+  if(tx){if(m)tx.merchantClean=m;if(a&&parseFloat(a)>0)tx.amount=Math.round(parseFloat(a));saveCache(ALL_TRANSACTIONS_RAW);}
+  closeEditModal();
+  renderAll(getFiltered());
+}
+
+function mergeManualTxns(){
+  const manuals=getManualTxns();
+  const hidden=getHidden();
+  const existing=new Set(ALL_TRANSACTIONS.map(t=>t.id));
+  for(const t of manuals){
+    if(!hidden.has(t.id)&&!existing.has(t.id)){ALL_TRANSACTIONS.push(t);existing.add(t.id);}
+  }
+  ALL_TRANSACTIONS.sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0));
+}
+
+function openAddModal(){
+  document.getElementById('txAddModal')?.remove();
+  const today=new Date().toISOString().slice(0,10);
+  const catOptions=Object.keys(CATEGORIES).map(c=>`<option value="${escH(c)}">${CATEGORIES[c].icon} ${c}</option>`).join('');
+  const el=document.createElement('div');
+  el.id='txAddModal'; el.className='modal-overlay';
+  el.innerHTML=`<div class="modal-box glass">
+    <div class="modal-title">Add Transaction</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="modal-field" style="grid-column:1/-1">
+        <div class="modal-label">Merchant / Description</div>
+        <input class="modal-input" id="addMerchant" type="text" placeholder="e.g. Warung Bu Ati" autofocus />
+      </div>
+      <div class="modal-field">
+        <div class="modal-label">Date</div>
+        <input class="modal-input" id="addDate" type="date" value="${today}" />
+      </div>
+      <div class="modal-field">
+        <div class="modal-label">Amount (IDR)</div>
+        <input class="modal-input" id="addAmount" type="number" min="1" placeholder="e.g. 150000" />
+      </div>
+      <div class="modal-field">
+        <div class="modal-label">Category</div>
+        <select class="modal-input" id="addCategory">${catOptions}</select>
+      </div>
+      <div class="modal-field">
+        <div class="modal-label">Bank / Source</div>
+        <select class="modal-input" id="addBank">
+          <option value="Maybank">Maybank</option>
+          <option value="BCA">BCA</option>
+          <option value="OCBC">OCBC</option>
+          <option value="Cash">Cash</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="modal-field" style="grid-column:1/-1">
+        <div class="modal-label">Note (optional)</div>
+        <input class="modal-input" id="addNote" type="text" placeholder="Any context…" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeAddModal()">Cancel</button>
+      <button class="modal-btn save" onclick="saveAddModal()">Add</button>
+    </div>
+  </div>`;
+  el.addEventListener('click',e=>{if(e.target===el)closeAddModal();});
+  el.addEventListener('keydown',e=>{if(e.key==='Escape')closeAddModal();});
+  document.body.appendChild(el);
+  setTimeout(()=>document.getElementById('addMerchant')?.focus(),40);
+}
+function closeAddModal(){document.getElementById('txAddModal')?.remove();}
+function saveAddModal(){
+  const merchant=(document.getElementById('addMerchant')?.value||'').trim();
+  const date=document.getElementById('addDate')?.value;
+  const amtVal=document.getElementById('addAmount')?.value;
+  const category=document.getElementById('addCategory')?.value||'Others';
+  const bank=document.getElementById('addBank')?.value||'Cash';
+  const note=(document.getElementById('addNote')?.value||'').trim();
+  if(!merchant){document.getElementById('addMerchant').style.borderColor='#e07070';return;}
+  if(!amtVal||parseFloat(amtVal)<=0){document.getElementById('addAmount').style.borderColor='#e07070';return;}
+  const id='manual_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  const txDate=date||new Date().toISOString().slice(0,10);
+  const tx={
+    id, merchantRaw:merchant, merchantClean:merchant,
+    category, bank:(bank==='Cash'||bank==='Other')?'Manual':bank,
+    amount:Math.round(parseFloat(amtVal)), amountStr:'IDR '+parseFloat(amtVal).toLocaleString('id-ID'),
+    status:'Approved', txDate, msgDate:txDate, type:'transaction',
+    note:note||undefined, manual:true, manualBank:bank
+  };
+  const manuals=getManualTxns();
+  manuals.push(tx);
+  saveManualTxns(manuals);
+  if(note){const notes=getNotes();notes[id]=note;saveNotes(notes);}
+  ALL_TRANSACTIONS.push(tx);
+  ALL_TRANSACTIONS.sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0));
+  saveCache(ALL_TRANSACTIONS);
+  closeAddModal();
+  renderAll(getFiltered());
+}
+
+let _splitId=null;
+function openSplitModal(id){
+  const tx=ALL_TRANSACTIONS.find(t=>t.id===id);
+  if(!tx)return;
+  _splitId=id;
+  document.getElementById('txSplitModal')?.remove();
+  const splits=getSplits();
+  const existing=splits[id];
+  const baseAmount=existing?existing.originalAmount:(tx.amount||0);
+  const people=existing?existing.people:2;
+  const paidCount=existing?existing.paidCount:0;
+  const el=document.createElement('div');
+  el.id='txSplitModal'; el.className='modal-overlay';
+  el.innerHTML=`<div class="modal-box glass">
+    <div class="modal-title">Split Transaction</div>
+    <div class="split-orig">Full amount: <strong>${fmtIDR(baseAmount)}</strong></div>
+    <div class="modal-field">
+      <div class="modal-label">Split between how many people (incl. you)?</div>
+      <input class="modal-input" id="splitPeople" type="number" min="2" value="${people}" oninput="updateSplitPreview(${baseAmount})" />
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">How many of the others already paid you back?</div>
+      <input class="modal-input" id="splitPaid" type="number" min="0" value="${paidCount}" oninput="updateSplitPreview(${baseAmount})" />
+    </div>
+    <div class="split-preview" id="splitPreview"></div>
+    <div class="modal-actions">
+      ${existing?`<button class="modal-btn cancel" onclick="removeSplit()" style="margin-right:auto">Remove Split</button>`:''}
+      <button class="modal-btn cancel" onclick="closeSplitModal()">Cancel</button>
+      <button class="modal-btn save" onclick="saveSplitModal(${baseAmount})">Apply</button>
+    </div>
+  </div>`;
+  el.addEventListener('click',e=>{if(e.target===el)closeSplitModal();});
+  el.addEventListener('keydown',e=>{if(e.key==='Escape')closeSplitModal();});
+  document.body.appendChild(el);
+  updateSplitPreview(baseAmount);
+  setTimeout(()=>document.getElementById('splitPeople')?.focus(),40);
+}
+function closeSplitModal(){document.getElementById('txSplitModal')?.remove();_splitId=null;}
+function updateSplitPreview(baseAmount){
+  const peopleEl=document.getElementById('splitPeople');
+  const paidEl=document.getElementById('splitPaid');
+  const previewEl=document.getElementById('splitPreview');
+  if(!peopleEl||!paidEl||!previewEl)return;
+  let people=parseInt(peopleEl.value,10)||2;
+  if(people<2){people=2;peopleEl.value=2;}
+  let paid=parseInt(paidEl.value,10)||0;
+  if(paid<0)paid=0;
+  if(paid>people-1)paid=people-1;
+  paidEl.value=paid;
+  const per=baseAmount/people;
+  const settled=per*paid;
+  const remaining=baseAmount-settled;
+  previewEl.innerHTML=`
+    <div class="split-row"><span>Per person</span><span>${fmtIDR(Math.round(per))}</span></div>
+    <div class="split-row"><span>Already settled (${paid} paid)</span><span>− ${fmtIDR(Math.round(settled))}</span></div>
+    <div class="split-row total"><span>Your remaining expense</span><span>${fmtIDR(Math.round(remaining))}</span></div>
+  `;
+}
+function saveSplitModal(baseAmount){
+  if(!_splitId)return;
+  const peopleEl=document.getElementById('splitPeople');
+  const paidEl=document.getElementById('splitPaid');
+  let people=parseInt(peopleEl?.value,10)||2;
+  if(people<2)people=2;
+  let paid=parseInt(paidEl?.value,10)||0;
+  if(paid<0)paid=0;
+  if(paid>people-1)paid=people-1;
+  const splits=getSplits();
+  splits[_splitId]={originalAmount:baseAmount,people,paidCount:paid};
+  saveSplits(splits);
+  const tx=ALL_TRANSACTIONS.find(t=>t.id===_splitId)||ALL_TRANSACTIONS_RAW.find(t=>t.id===_splitId);
+  if(tx){
+    const per=baseAmount/people;
+    tx.amount=Math.round(baseAmount-per*paid);
+    tx.splitInfo={people,paidCount:paid,originalAmount:baseAmount,perPerson:Math.round(per)};
+    saveCache(ALL_TRANSACTIONS_RAW);
+  }
+  closeSplitModal();
+  renderAll(getFiltered());
+}
+function removeSplit(){
+  if(!_splitId)return;
+  const splits=getSplits();
+  const sp=splits[_splitId];
+  delete splits[_splitId];
+  saveSplits(splits);
+  const tx=ALL_TRANSACTIONS.find(t=>t.id===_splitId)||ALL_TRANSACTIONS_RAW.find(t=>t.id===_splitId);
+  if(tx&&sp){
+    tx.amount=sp.originalAmount;
+    delete tx.splitInfo;
+    saveCache(ALL_TRANSACTIONS_RAW);
+  }
+  closeSplitModal();
+  renderAll(getFiltered());
+}
+
+Chart.defaults.color='rgba(221,212,195,0.85)';
+Chart.defaults.borderColor='rgba(221,212,195,0.08)';
+
+/* ══════════════════════════════════════════════════════════════════
+   CHARTS, FILTERS, MOM, FORECAST — ported unchanged
+   ══════════════════════════════════════════════════════════════════ */
+
+function renderCharts(txns) {
+  const bC=document.getElementById('barChart');
+  if(bC){
+    if(chartBar){chartBar.destroy();chartBar=null;}
+    const bd={};
+    for(const t of txns){if(!t.amount||!t.txDate)continue;const d=new Date(t.txDate).toLocaleDateString('id-ID',{day:'2-digit',month:'short'});bd[d]=(bd[d]||0)+t.amount;}
+    chartBar=new Chart(bC,{type:'bar',
+      data:{labels:Object.keys(bd),datasets:[{data:Object.values(bd),backgroundColor:'rgba(221,212,195,0.40)',borderColor:'rgba(221,212,195,0.70)',borderWidth:1,borderRadius:5,hoverBackgroundColor:'rgba(221,212,195,0.65)'}]},
+      options:{responsive:true,plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(0,0,0,0.88)',borderColor:'rgba(221,212,195,0.12)',borderWidth:1,padding:10,titleColor:'#DDD4C3',bodyColor:'#DDD4C3',callbacks:{label:c=>' '+fmtIDR(c.parsed.y)}}},
+        scales:{y:{beginAtZero:true,ticks:{font:{size:12,weight:'500'},color:'rgba(221,212,195,0.75)',callback:v=>{if(v>=1000000)return'IDR '+(v/1000000).toFixed(1)+'jt';if(v>=1000)return'IDR '+(v/1000).toFixed(0)+'rb';return'IDR '+v;}},grid:{color:'rgba(221,212,195,0.05)'}},x:{ticks:{font:{size:12,weight:'500'},color:'rgba(221,212,195,0.75)'},grid:{display:false}}}}});
+  }
+  const dC=document.getElementById('donutChart');
+  if(dC){
+    if(chartDonut){chartDonut.destroy();chartDonut=null;}
+    const bc={};
+    for(const t of txns){if(!t.amount||!t.category)continue;bc[t.category]=(bc[t.category]||0)+t.amount;}
+    const cats=Object.keys(bc).sort((a,b)=>bc[b]-bc[a]);
+    const colors=cats.map(c=>CATEGORIES[c]?.color||'#8a8878');
+    const hasFilter=ACTIVE_CATEGORIES.size>0;
+    chartDonut=new Chart(dC,{type:'doughnut',
+      data:{labels:cats,datasets:[{
+        data:cats.map(c=>bc[c]),
+        backgroundColor:colors.map((c,i)=>(hasFilter&&!ACTIVE_CATEGORIES.has(cats[i]))?c+'0f':c+'40'),
+        borderColor:colors.map((c,i)=>(hasFilter&&!ACTIVE_CATEGORIES.has(cats[i]))?c+'25':c),
+        borderWidth:cats.map((_,i)=>ACTIVE_CATEGORIES.has(cats[i])?2.5:1.5),
+        hoverBackgroundColor:colors.map(c=>c+'70'),
+        hoverBorderWidth:2.5
+      }]},
+      options:{responsive:true,cutout:'70%',
+        onClick:(event,elements)=>{
+          if(elements.length>0){toggleCategory(cats[elements[0].index]);}
+        },
+        onHover:(event,elements)=>{
+          if(event.native)event.native.target.style.cursor=elements.length>0?'pointer':'default';
+        },
+        plugins:{
+          legend:{
+            position:'bottom',
+            labels:{font:{size:12,weight:'500'},boxWidth:9,padding:12,
+              color:(ctx)=>{
+                const cat=ctx.text;
+                return(hasFilter&&!ACTIVE_CATEGORIES.has(cat))?'rgba(221,212,195,0.28)':'rgba(221,212,195,0.85)';
+              }
+            },
+            onClick:(e,legendItem)=>{toggleCategory(legendItem.text);}
+          },
+          tooltip:{backgroundColor:'rgba(0,0,0,0.88)',borderColor:'rgba(221,212,195,0.12)',borderWidth:1,titleColor:'#DDD4C3',bodyColor:'#DDD4C3',
+            callbacks:{
+              label:c=>' '+fmtIDR(c.parsed),
+              title:items=>`${items[0].label}${ACTIVE_CATEGORIES.has(items[0].label)?' ✓ (click to remove)':' (click to filter)'}`
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+function startOfDay(d){const x=new Date(d);x.setHours(0,0,0,0);return x;}
+function endOfDay(d){const x=new Date(d);x.setHours(23,59,59,999);return x;}
+function getRangeBounds(r){
+  const now=new Date();
+  if(r==='week'){const m=new Date(now);m.setDate(now.getDate()-((now.getDay()+6)%7));return[startOfDay(m),endOfDay(now)];}
+  if(r==='month')return[new Date(now.getFullYear(),now.getMonth(),1),endOfDay(now)];
+  if(r==='year')return[new Date(now.getFullYear(),0,1),endOfDay(now)];
+  if(r==='lastmonth'){const lm=new Date(now.getFullYear(),now.getMonth()-1,1);return[lm,new Date(now.getFullYear(),now.getMonth(),0,23,59,59,999)];}
+  if(r==='custom'&&CUSTOM_FROM&&CUSTOM_TO)return[startOfDay(new Date(CUSTOM_FROM)),endOfDay(new Date(CUSTOM_TO))];
+  return null;
+}
+function getFiltered(){
+  const b=getRangeBounds(ACTIVE_RANGE);
+  return ALL_TRANSACTIONS.filter(t=>{
+    if(b){const d=new Date(t.txDate||t.msgDate||0);if(d<b[0]||d>b[1])return false;}
+    if(ACTIVE_CATEGORIES.size>0&&!ACTIVE_CATEGORIES.has(t.category))return false;
+    if(ACTIVE_BANK!=='all'&&t.bank!==ACTIVE_BANK)return false;
+    if(ACTIVE_MERCHANT&&(t.merchantClean||t.merchantRaw||'Unknown')!==ACTIVE_MERCHANT)return false;
+    return true;
+  });
+}
+function applyFilter(r){ACTIVE_RANGE=r;renderAll(getFiltered());}
+function setBank(b){ACTIVE_BANK=b;renderAll(getFiltered());}
+function toggleCategory(c){ACTIVE_CATEGORIES.has(c)?ACTIVE_CATEGORIES.delete(c):ACTIVE_CATEGORIES.add(c);renderAll(getFiltered());}
+function clearCategories(){ACTIVE_CATEGORIES.clear();renderAll(getFiltered());}
+function clearMerchantFilter(){ACTIVE_MERCHANT=null;renderAll(getFiltered());}
+
+function reportGoTo(opts){
+  opts=opts||{};
+  ACTIVE_RANGE='all';CUSTOM_FROM=null;CUSTOM_TO=null;
+  if(opts.monthKey){
+    const[y,mo]=opts.monthKey.split('-').map(Number);
+    const from=new Date(y,mo-1,1),to=new Date(y,mo,0);
+    const pad=n=>String(n).padStart(2,'0');
+    CUSTOM_FROM=`${from.getFullYear()}-${pad(from.getMonth()+1)}-${pad(from.getDate())}`;
+    CUSTOM_TO=`${to.getFullYear()}-${pad(to.getMonth()+1)}-${pad(to.getDate())}`;
+    ACTIVE_RANGE='custom';
+  }else if(opts.range){
+    ACTIVE_RANGE=opts.range;
+  }
+  ACTIVE_BANK=opts.bank||'all';
+  ACTIVE_CATEGORIES=new Set(opts.category?[opts.category]:(opts.categories||[]));
+  ACTIVE_MERCHANT=opts.merchant||null;
+  ACTIVE_TAB='overview';
+  renderAll(getFiltered());
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function applyCustomRange(){const f=document.getElementById('calFrom')?.value,t=document.getElementById('calTo')?.value;if(!f||!t)return;CUSTOM_FROM=f;CUSTOM_TO=t;toggleCal(false);ACTIVE_RANGE='custom';renderAll(getFiltered());}
+function toggleCal(force){const p=document.getElementById('calPopover');if(!p)return;const o=force!==undefined?force:!p.classList.contains('open');p.classList.toggle('open',o);if(o&&CUSTOM_FROM)document.getElementById('calFrom').value=CUSTOM_FROM;if(o&&CUSTOM_TO)document.getElementById('calTo').value=CUSTOM_TO;}
+document.addEventListener('click',e=>{const w=document.getElementById('calWrap');if(w&&!w.contains(e.target))toggleCal(false);});
+
+function getMoMData(){
+  const now=new Date(),ts=new Date(now.getFullYear(),now.getMonth(),1),ls=new Date(now.getFullYear(),now.getMonth()-1,1),le=new Date(now.getFullYear(),now.getMonth(),0,23,59,59,999);
+  const thisTx=ALL_TRANSACTIONS.filter(t=>{const d=new Date(t.txDate||t.msgDate||0);return d>=ts&&d<=endOfDay(now);});
+  const lastTx=ALL_TRANSACTIONS.filter(t=>{const d=new Date(t.txDate||t.msgDate||0);return d>=ls&&d<=le;});
+  const tT=thisTx.reduce((s,t)=>s+(t.amount||0),0),lT=lastTx.reduce((s,t)=>s+(t.amount||0),0);
+  const tC={},lC={};
+  for(const t of thisTx){if(t.category)tC[t.category]=(tC[t.category]||0)+(t.amount||0);}
+  for(const t of lastTx){if(t.category)lC[t.category]=(lC[t.category]||0)+(t.amount||0);}
+  const cats=[...new Set([...Object.keys(tC),...Object.keys(lC)])];
+  return{thisTotal:tT,lastTotal:lT,thisMonth:monthName(now),lastMonth:monthName(ls),catData:cats.map(c=>({cat:c,thisAmt:tC[c]||0,lastAmt:lC[c]||0})).sort((a,b)=>b.thisAmt-a.thisAmt)};
+}
+
+function renderMoM(){
+  if(!ALL_TRANSACTIONS.length)return'';
+  const{thisTotal,lastTotal,thisMonth,lastMonth,catData}=getMoMData();
+  if(!thisTotal&&!lastTotal)return'';
+  const diff=thisTotal-lastTotal,pct=lastTotal>0?Math.round((diff/lastTotal)*100):null;
+  const dir=diff>0?'up':diff<0?'down':'flat';
+  const pctStr=pct!==null?`${diff>0?'+':''}${pct}%`:thisTotal>0?'NEW':'—';
+  const arrow=dir==='up'?'↑':dir==='down'?'↓':'→';
+  const cards=catData.slice(0,6).map(({cat,thisAmt,lastAmt})=>{
+    const meta=CATEGORIES[cat]||{icon:'📋'};
+    let b='',c='flat';
+    if(lastAmt===0&&thisAmt>0){b='NEW';c='new';}
+    else if(lastAmt>0){const p=Math.round(((thisAmt-lastAmt)/lastAmt)*100);c=p>0?'up':p<0?'down':'flat';b=`${p>0?'+':''}${p}%`;}
+    else{b='—';}
+    const a=c==='up'?'↑':c==='down'?'↓':c==='new'?'★':'';
+    return`<div class="mom-cat"><div class="mom-cat-name">${meta.icon} ${cat}</div><div class="mom-cat-row"><span class="mom-cat-val">${fmtIDRShort(thisAmt)}</span><span class="mom-badge ${c}">${a} ${b}</span></div></div>`;
+  }).join('');
+  return`<div class="glass mom-section">
+    <div class="mom-head"><div class="mom-title">Month vs Month</div><div class="mom-period-note">${lastMonth} → ${thisMonth}</div></div>
+    <div class="mom-totals">
+      <div class="mom-block"><div class="mom-period-label">${lastMonth}</div><div class="mom-period-val">${fmtIDR(lastTotal)}</div></div>
+      <div class="mom-sep">→</div>
+      <div class="mom-block"><div class="mom-period-label">${thisMonth}</div><div class="mom-period-val">${fmtIDR(thisTotal)}</div></div>
+      <div class="mom-delta"><div class="mom-pct ${dir}">${arrow} ${pctStr}</div><div class="mom-pct-sub">${diff>0?'more spending':diff<0?'less spending':'no change'}</div></div>
+    </div>
+    <div class="mom-cats">${cards}</div>
+  </div>`;
+}
+
+function renderForecast(){
+  if(!ALL_TRANSACTIONS.length)return'';
+  const now=new Date();
+  const curY=now.getFullYear(),curM=now.getMonth(),curD=now.getDate();
+  const daysInMonth=new Date(curY,curM+1,0).getDate();
+  const daysLeft=daysInMonth-curD;
+  const monthKey=`${curY}-${String(curM+1).padStart(2,'0')}`;
+  const thisMo=ALL_TRANSACTIONS.filter(t=>(t.amount||0)>0&&(t.txDate||t.msgDate||'').slice(0,7)===monthKey);
+  const spentSoFar=thisMo.reduce((s,t)=>s+(t.amount||0),0);
+  if(!spentSoFar||curD<2)return'';
+  const dailyRate=spentSoFar/curD;
+  const projected=Math.round(dailyRate*daysInMonth);
+  const prevDate=new Date(curY,curM-1,1);
+  const prevKey=`${prevDate.getFullYear()}-${String(prevDate.getMonth()+1).padStart(2,'0')}`;
+  const lastTotal=ALL_TRANSACTIONS.filter(t=>(t.amount||0)>0&&(t.txDate||t.msgDate||'').slice(0,7)===prevKey)
+    .reduce((s,t)=>s+(t.amount||0),0);
+  const projDiff=lastTotal>0?Math.round(((projected-lastTotal)/lastTotal)*100):null;
+  const dir=projDiff===null?'flat':projDiff>0?'up':projDiff<0?'down':'flat';
+  const arrow=dir==='up'?'↑':dir==='down'?'↓':'';
+  const pctLabel=projDiff!==null?`${arrow} ${projDiff>0?'+':''}${projDiff}% vs last month`:'';
+  const barPct=Math.min(110,Math.round((spentSoFar/projected)*100));
+  const isOver=barPct>=100;
+  const monthNameEn=now.toLocaleDateString('en-US',{month:'long'});
+  return`<div class="glass forecast-card">
+    <div class="forecast-head">
+      <div class="forecast-title">📊 ${monthNameEn} Forecast</div>
+      <div class="forecast-sub">Day ${curD} of ${daysInMonth} · ${daysLeft} day${daysLeft!==1?'s':''} left</div>
+    </div>
+    <div class="forecast-body">
+      <div class="forecast-block">
+        <div class="forecast-block-label">Spent so far</div>
+        <div class="forecast-val">${fmtIDR(spentSoFar)}</div>
+        <div class="forecast-val-sub">${fmtIDR(Math.round(dailyRate))}/day avg</div>
+      </div>
+      <div class="forecast-divider"></div>
+      <div class="forecast-block">
+        <div class="forecast-block-label">Projected total</div>
+        <div class="forecast-val">${fmtIDR(projected)}</div>
+        ${pctLabel?`<div class="forecast-vs"><span class="mom-badge ${dir}">${pctLabel}</span></div>`:''}
+      </div>
+      <div class="forecast-divider"></div>
+      <div class="forecast-block">
+        <div class="forecast-block-label">Remaining budget est.</div>
+        <div class="forecast-val">${fmtIDR(Math.max(0,projected-spentSoFar))}</div>
+        <div class="forecast-val-sub">~${fmtIDR(Math.round(Math.max(0,projected-spentSoFar)/Math.max(1,daysLeft)))}/day</div>
+      </div>
+    </div>
+    <div class="forecast-bar-wrap">
+      <div class="forecast-bar-track"><div class="forecast-bar-fill${isOver?' over':''}" style="width:${Math.min(100,barPct)}%"></div></div>
+      <div class="forecast-bar-label">${barPct}% of projected spend used</div>
+    </div>
+  </div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CC POSITION TAB — ported unchanged
+   ══════════════════════════════════════════════════════════════════ */
+function renderCCPositionContent(){
+  const hidden=getHidden();
+  const excluded=getCCPosExcluded();
+  const mbAll=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='Maybank'&&t.type!=='billing'&&t.amount!=null)
+    .sort((a,b)=>new Date(a.txDate||a.msgDate||0)-new Date(b.txDate||b.msgDate||0));
+  const payments=getCCPayments();
+  const lastPayment=payments.length?payments[payments.length-1]:null;
+  const lastPayDate=lastPayment?new Date(lastPayment.date):null;
+  const sinceLastPay=mbAll.filter(t=>{
+    if(!lastPayDate)return true;
+    const d=new Date(t.txDate||t.msgDate||0);
+    return d>lastPayDate;
+  });
+  const currentBalance=sinceLastPay.filter(t=>!excluded.has(t.id)).reduce((s,t)=>s+((t.splitInfo?t.splitInfo.originalAmount:t.amount)||0),0);
+  const excludedCount=sinceLastPay.filter(t=>excluded.has(t.id)).length;
+  const daysSince=lastPayDate?Math.floor((Date.now()-lastPayDate.getTime())/86400000):null;
+  const fmtPayDate=d=>{const s=d.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});const h=d.getHours(),m=d.getMinutes();return(h||m)?s+' '+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'):s;};
+  const hiddenCount=mbAll.filter(t=>hidden.has(t.id)).length;
+
+  const histRows=[...payments].sort((a,b)=>new Date(b.date)-new Date(a.date)).map((p,_,arr)=>{
+    const sortedAsc=[...payments].sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const myIdx=sortedAsc.findIndex(x=>x.id===p.id);
+    const prevDate=myIdx>0?new Date(sortedAsc[myIdx-1].date):null;
+    const thisDate=new Date(p.date);
+    const periodTxns=mbAll.filter(t=>{const d=new Date(t.txDate||t.msgDate||0);return(!prevDate||d>prevDate)&&d<=thisDate;});
+    const periodTotal=periodTxns.reduce((s,t)=>s+((t.splitInfo?t.splitInfo.originalAmount:t.amount)||0),0);
+    return`<tr>
+      <td class="td-date">${fmtPayDate(new Date(p.date))}</td>
+      <td class="td-amount">${fmtIDR(Math.round(periodTotal))}</td>
+      <td style="color:var(--dim);font-size:13px">${periodTxns.length} txn${periodTxns.length===1?'':'s'}</td>
+      <td style="color:var(--dim);font-size:13px">${escH(p.note||'—')}</td>
+      <td class="td-actions"><button class="row-action-btn del" onclick="deleteCCPayment('${p.id}',this)" title="Delete">🗑</button></td>
+    </tr>`;
+  }).join('');
+
+  const outRows=[...sinceLastPay].sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0)).map(t=>{
+    const meta=CATEGORIES[t.category]||{color:'#8a8878',icon:'📋'};
+    const wasHidden=hidden.has(t.id);
+    const isExcluded=excluded.has(t.id);
+    return`<tr style="${isExcluded?'opacity:0.45;text-decoration:line-through':wasHidden?'opacity:0.7':''}">
+      <td class="td-date">${fmtDate(t.txDate||t.msgDate)}</td>
+      <td class="td-merchant">${escH(t.merchantClean||t.merchantRaw||'—')}${wasHidden&&!isExcluded?' <span style="color:#e07070;font-size:11px;font-weight:700">· removed</span>':''}${isExcluded?' <span style="color:#a8a898;font-size:11px;font-weight:700">· excluded from balance</span>':''}</td>
+      <td><span class="cat-chip" style="background:${meta.color}18;color:${meta.color};border:1px solid ${meta.color}30">${meta.icon} ${t.category||'Uncategorized'}</span></td>
+      <td class="td-amount">${t.splitInfo?fmtIDR(t.splitInfo.originalAmount)+'<br><span style="font-size:11px;color:var(--dim)">(split: '+fmtIDR(t.amount)+')</span>':fmtIDR(t.amount)}</td>
+      <td class="td-actions"><button class="row-action-btn del" onclick="toggleCCPosExclude('${t.id}',this)" title="${isExcluded?'Restore to balance':'Exclude from balance'}">${isExcluded?'↩':'🗑'}</button></td>
+    </tr>`;
+  }).join('');
+
+  let estimatorResult='';
+  if(CCP_EST_FROM&&CCP_EST_TO){
+    const from=new Date(CCP_EST_FROM+'T00:00:00'),to=new Date(CCP_EST_TO+'T23:59:59');
+    const inRange=mbAll.filter(t=>{const d=new Date(t.txDate||t.msgDate||0);return d>=from&&d<=to;});
+    const estTotal=inRange.reduce((s,t)=>s+((t.splitInfo?t.splitInfo.originalAmount:t.amount)||0),0);
+    const estRows=inRange.sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0)).map(t=>{
+      const meta=CATEGORIES[t.category]||{color:'#8a8878',icon:'📋'};
+      return`<tr>
+        <td class="td-date">${fmtDate(t.txDate||t.msgDate)}</td>
+        <td class="td-merchant">${escH(t.merchantClean||t.merchantRaw||'—')}</td>
+        <td><span class="cat-chip" style="background:${meta.color}18;color:${meta.color};border:1px solid ${meta.color}30">${meta.icon} ${t.category||'Uncategorized'}</span></td>
+        <td class="td-amount">${t.splitInfo?fmtIDR(t.splitInfo.originalAmount)+'<br><span style="font-size:11px;color:var(--dim)">(split: '+fmtIDR(t.amount)+')</span>':fmtIDR(t.amount)}</td>
+      </tr>`;
+    }).join('');
+    estimatorResult=`<div class="glass table-card" style="border-left:2px solid #a98fcc55;margin-top:0">
+      <div class="table-head-row">
+        <div>
+          <div class="table-title">📋 Estimated Billing: ${fmtIDR(estTotal)}</div>
+          <div style="font-size:12px;color:var(--dim);margin-top:2px">${inRange.length} transactions · ${CCP_EST_FROM} → ${CCP_EST_TO}</div>
+        </div>
+      </div>
+      ${inRange.length===0?'<div class="empty">No transactions found in this date range.</div>':`
+      <table>
+        <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
+        <tbody>${estRows}</tbody>
+      </table>`}
+    </div>`;
+  }
+
+  return`
+    <div class="hero">
+      <div class="glass hero-main" style="border-left:2px solid #d4b86a55">
+        <div class="hero-label">Current Maybank CC Position</div>
+        <div class="hero-amount"><span>IDR</span>${Math.round(currentBalance).toLocaleString('id-ID')}</div>
+        <div class="hero-sub">${lastPayDate?`Since last payment on ${fmtPayDate(lastPayDate)} (${daysSince} day${daysSince===1?'':'s'} ago) · ${sinceLastPay.length} txn${sinceLastPay.length===1?'':'s'}${excludedCount?` · ${excludedCount} excluded`:''}`:`No payment logged yet — showing all ${mbAll.length} Maybank transactions on record`}</div>
+      </div>
+      <div class="glass stat-mini">
+        <div class="sicon">🧾</div>
+        <div class="slabel">All-Time Maybank Txns</div>
+        <div class="sval">${mbAll.length}</div>
+        <div class="ssub">${hiddenCount?`includes ${hiddenCount} removed from Overview`:'none removed'}</div>
+      </div>
+      <div class="glass stat-mini">
+        <div class="sicon">✅</div>
+        <div class="slabel">Paid-Through Markers</div>
+        <div class="sval">${payments.length}</div>
+        <div class="ssub">${lastPayment?`cutoff: ${fmtPayDate(new Date(lastPayment.date))}`:'mark your first payment below'}</div>
+      </div>
+    </div>
+
+    <div class="glass" style="padding:16px 18px;margin:14px 0">
+      <div style="font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0.04em;margin-bottom:10px">🔍 BILLING ESTIMATOR — pick a date range to see total charges for that period</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div><div class="cal-label">From</div><input class="cal-input" type="date" id="ccEstFrom" value="${CCP_EST_FROM}" style="width:150px"></div>
+        <div><div class="cal-label">To</div><input class="cal-input" type="date" id="ccEstTo" value="${CCP_EST_TO}" style="width:150px"></div>
+        <button class="cal-apply" onclick="applyCCEstimate()">Calculate</button>
+        ${CCP_EST_FROM?`<button class="cal-cancel" onclick="clearCCEstimate()">Clear</button>`:''}
+      </div>
+    </div>
+
+    ${estimatorResult}
+
+    <div class="glass" style="padding:16px 18px;margin:14px 0">
+      <div style="font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0.04em;margin-bottom:10px">✅ MARK AS PAID THROUGH — everything up to this date &amp; time is settled</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div><div class="cal-label">Date &amp; Time Cutoff</div><div style="display:flex;gap:6px;align-items:center"><input class="cal-input" type="date" id="ccpDate" style="width:140px"><input class="cal-input" type="time" id="ccpTime" style="width:110px"></div></div>
+        <div style="flex:1;min-width:160px"><div class="cal-label">Note (optional)</div><input class="cal-input" type="text" id="ccpNote" placeholder="e.g. Paid in full via M2U"></div>
+        <button class="cal-apply" onclick="addCCPayment()">✓ Mark Paid Through</button>
+      </div>
+    </div>
+
+    ${payments.length?`
+    <div class="glass table-card">
+      <div class="table-head-row"><div class="table-title">Paid-Through History</div></div>
+      <table>
+        <thead><tr><th>Cutoff Date &amp; Time</th><th style="text-align:right">Total Charged</th><th>Txns</th><th>Note</th><th></th></tr></thead>
+        <tbody>${histRows}</tbody>
+      </table>
+    </div>`:''}
+
+    <div class="glass table-card" style="margin-top:12px">
+      <div class="table-head-row"><div class="table-title">${sinceLastPay.length} Transactions in Current Balance${excludedCount?` <span style="color:var(--dim);font-size:12px;font-weight:400">(${excludedCount} excluded)</span>`:''}
+      </div><div style="font-size:12px;color:var(--dim)">${lastPayDate?`Since ${fmtPayDate(lastPayDate)}`:'All-time'}</div></div>
+      ${sinceLastPay.length===0?'<div class="empty">No charges since your last payment.</div>':`
+      <table>
+        <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th style="text-align:right">Amount</th><th></th></tr></thead>
+        <tbody>${outRows}</tbody>
+      </table>`}
+    </div>
+  `;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   FOREIGN CURRENCY TAB — ported unchanged
+   ══════════════════════════════════════════════════════════════════ */
+const CUR_COLOR={'AUD':'#6dbfb0','SGD':'#7aaecf','USD':'#82be8c','EUR':'#a98fcc','GBP':'#8899d4','JPY':'#c8a86a','MYR':'#72bdc8','CNY':'#c8855a','HKD':'#8899d4','THB':'#c8be6a'};
+const CUR_FLAG={'AUD':'🇦🇺','SGD':'🇸🇬','USD':'🇺🇸','EUR':'🇪🇺','GBP':'🇬🇧','JPY':'🇯🇵','MYR':'🇲🇾','CNY':'🇨🇳','HKD':'🇭🇰','THB':'🇹🇭'};
+
+function renderForeignContent(allTxns, ocbcTxns){
+  if(!ocbcTxns.length)return`<div class="empty">No foreign currency transactions found.</div>`;
+  const byCur={};
+  for(const t of ocbcTxns){
+    const c=t.currency||'???';
+    if(!byCur[c])byCur[c]={orig:0,idr:0,count:0,txns:[]};
+    byCur[c].orig+=t.amountOrig||0;
+    byCur[c].idr+=(t.amount||0);
+    byCur[c].count++;
+    byCur[c].txns.push(t);
+  }
+  const mfx=getMFX();
+  const totalIDR=ocbcTxns.reduce((s,t)=>s+(t.amount||0),0);
+  const heroCards=Object.entries(byCur).map(([cur,d])=>{
+    const col=CUR_COLOR[cur]||'#8a8878';
+    const flag=CUR_FLAG[cur]||'🌐';
+    const rate=mfx[cur];
+    return`<div class="glass stat-mini" style="border-left:2px solid ${col}55">
+      <div class="sicon">${flag}</div>
+      <div class="slabel">${cur} Spent</div>
+      <div class="sval" style="color:${col};font-size:20px">${cur} ${d.orig.toFixed(2)}</div>
+      ${d.idr?`<div class="ssub">≈ ${fmtIDR(d.idr)}</div>`:`<div class="ssub" style="color:var(--dim)">Set rate below ↓</div>`}
+      <div style="font-size:12px;color:var(--dim);margin-top:5px">${d.count} tx${rate?` · 1 ${cur} = IDR ${Math.round(rate).toLocaleString('id-ID')}`:' · no rate yet'}</div>
+    </div>`;
+  }).join('');
+  const totalCard=totalIDR
+    ?`<div class="glass hero-main">
+        <div class="hero-label">Total Foreign (IDR Equiv.)</div>
+        <div class="hero-amount"><span>IDR</span>${totalIDR.toLocaleString('id-ID')}</div>
+        <div class="hero-sub">${ocbcTxns.length} foreign transactions · Manual rates</div>
+      </div>`
+    :`<div class="glass hero-main">
+        <div class="hero-label">Total Foreign (IDR Equiv.)</div>
+        <div class="hero-amount" style="font-size:22px;color:var(--muted);padding-top:6px">Enter rates below</div>
+        <div class="hero-sub">${ocbcTxns.length} foreign transactions · Set exchange rates to see total</div>
+      </div>`;
+  const rateInputRows=Object.entries(byCur).map(([cur,d])=>{
+    const col=CUR_COLOR[cur]||'#8a8878';
+    const flag=CUR_FLAG[cur]||'🌐';
+    const savedRate=mfx[cur]||'';
+    const idrTotal=savedRate?fmtIDR(Math.round(d.orig*savedRate)):'';
+    return`<div class="fx-rate-row" style="border-left:2px solid ${col}55">
+      <span style="font-size:20px">${flag}</span>
+      <div class="fx-rate-cur-info">
+        <span class="fx-rate-cur-name" style="color:${col}">${cur}</span>
+        <span class="fx-rate-cur-sub">${d.count} tx · ${cur} ${d.orig.toFixed(2)} total</span>
+      </div>
+      <div class="fx-rate-controls">
+        <span class="fx-rate-eq">1 ${cur} =</span>
+        <input class="fx-rate-input" type="number" min="0" step="any"
+          placeholder="e.g. 10500"
+          value="${savedRate}"
+          onchange="updateMFXRate('${cur}',this.value)"
+          style="${savedRate?`border-color:${col}55`:''}"
+        >
+        <span class="fx-rate-eq">IDR</span>
+      </div>
+      ${idrTotal?`<span class="fx-rate-result" style="color:${col}">≈ ${idrTotal}</span>`:`<span class="fx-rate-result" style="color:var(--dim)">—</span>`}
+    </div>`;
+  }).join('');
+  const sorted=[...ocbcTxns].sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0));
+  const tableRows=sorted.map(t=>{
+    const col=CUR_COLOR[t.currency]||'#8a8878';
+    const flag=CUR_FLAG[t.currency]||'🌐';
+    const origAmt=`${flag} ${t.currency} ${(t.amountOrig||0).toFixed(2)}`;
+    const rate=mfx[t.currency];
+    const rateStr=rate?`1 ${t.currency} = IDR ${Math.round(rate).toLocaleString('id-ID')}`:'—';
+    const idrEquiv=t.amount?fmtIDR(t.amount):`<span style="color:var(--dim);font-size:12px">No rate set</span>`;
+    return`<tr>
+      <td class="td-date">${fmtDate(t.txDate||t.msgDate)}</td>
+      <td class="td-merchant">OCBC Debit<br><span class="sub">Debit Card</span></td>
+      <td><span style="background:${col}1a;color:${col};border:1px solid ${col}30;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;letter-spacing:0.06em">${flag} ${t.currency}</span></td>
+      <td style="text-align:right"><span class="fx-orig" style="color:${col}">${origAmt}</span></td>
+      <td style="text-align:right"><span class="fx-rate-cell">${rateStr}</span></td>
+      <td style="text-align:right"><span class="fx-idr-equiv">${idrEquiv}</span></td>
+      <td class="td-status"><span class="status-ok">✓ OK</span></td>
+    </tr>`;
+  }).join('');
+  return`
+    <div class="fx-hero">${totalCard}${heroCards}</div>
+    <div class="glass fx-rate-inputs">
+      <div class="fx-rate-header">
+        <div class="fx-rate-header-title">💱 Exchange Rates (IDR per 1 unit)</div>
+        <div class="fx-rate-header-hint">Type the rate and press Tab or Enter to apply.</div>
+      </div>
+      <div class="fx-rate-rows">${rateInputRows}</div>
+    </div>
+    <div class="glass table-card">
+      <div class="table-head-row">
+        <div class="table-title">${ocbcTxns.length} Foreign Transactions</div>
+        <div style="font-size:12px;color:var(--dim)">OCBC Debit Card · Manual exchange rates</div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Date</th><th>Description</th><th>Currency</th>
+          <th style="text-align:right">Original Amount</th>
+          <th style="text-align:right">FX Rate (to IDR)</th>
+          <th style="text-align:right">IDR Equivalent</th>
+          <th style="text-align:center">Status</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+const BANK_COLOR={'Maybank':'#5ec8a8','OCBC':'#e07070','BCA':'#6eaaee','Manual':'#d4b86a'};
+
+function detectSubscriptionCandidates(idr){
+  const byM={};
+  for(const t of idr){
+    const m=t.merchantClean||t.merchantRaw||'Unknown';
+    const d=new Date(t.txDate||t.msgDate||0);
+    if(isNaN(d.getTime()))continue;
+    const mk=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if(!byM[m])byM[m]={months:new Set(),amounts:[],category:t.category,lastDate:d,count:0};
+    byM[m].months.add(mk);
+    byM[m].amounts.push(t.amount||0);
+    byM[m].count++;
+    byM[m].category=t.category;
+    if(d>byM[m].lastDate)byM[m].lastDate=d;
+  }
+  const EXCLUDE_CATS=new Set(['Tech & Subscriptions','Telecom','Transfer']);
+  const decisions=getSubDecisions();
+  const out=[];
+  for(const [m,d] of Object.entries(byM)){
+    if(d.months.size<2)continue;
+    if(EXCLUDE_CATS.has(d.category))continue;
+    if(decisions[m])continue;
+    const avg=d.amounts.reduce((s,a)=>s+a,0)/d.amounts.length;
+    const variance=d.amounts.reduce((s,a)=>s+Math.pow(a-avg,2),0)/d.amounts.length;
+    const cv=avg?Math.sqrt(variance)/avg:1;
+    if(cv<0.2){
+      out.push({merchant:m,monthsSeen:d.months.size,avgAmount:avg,count:d.count,category:d.category,lastDate:d.lastDate});
+    }
+  }
+  return out.sort((a,b)=>b.monthsSeen-a.monthsSeen||b.avgAmount-a.avgAmount);
+}
+function approveSubscription(merchant,event){
+  if(event)event.stopPropagation();
+  const d=getSubDecisions();d[merchant]='approved';saveSubDecisions(d);
+  applySubDecisions(ALL_TRANSACTIONS);
+  saveCache(ALL_TRANSACTIONS_RAW);
+  renderAll(getFiltered());
+}
+function declineSubscription(merchant,event){
+  if(event)event.stopPropagation();
+  const d=getSubDecisions();d[merchant]='declined';saveSubDecisions(d);
+  renderAll(getFiltered());
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   REPORTING TAB — ported unchanged
+   ══════════════════════════════════════════════════════════════════ */
+function getReportMonthOptions(){
+  const set=new Set();
+  for(const t of ALL_TRANSACTIONS){if(!(t.amount>0))continue;const d=new Date(t.txDate||t.msgDate||0);if(isNaN(d.getTime()))continue;set.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);}
+  return[...set].sort().reverse();
+}
+function getReportYearOptions(){
+  const set=new Set();
+  for(const t of ALL_TRANSACTIONS){if(!(t.amount>0))continue;const d=new Date(t.txDate||t.msgDate||0);if(isNaN(d.getTime()))continue;set.add(String(d.getFullYear()));}
+  return[...set].sort().reverse();
+}
+function getReportTxns(){
+  if(REPORT_PERIOD==='month'&&REPORT_MONTH){
+    return ALL_TRANSACTIONS.filter(t=>{const d=new Date(t.txDate||t.msgDate||0);if(isNaN(d.getTime()))return false;return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`===REPORT_MONTH;});
+  }
+  if(REPORT_PERIOD==='year'&&REPORT_YEAR){
+    return ALL_TRANSACTIONS.filter(t=>{const d=new Date(t.txDate||t.msgDate||0);if(isNaN(d.getTime()))return false;return String(d.getFullYear())===REPORT_YEAR;});
+  }
+  return ALL_TRANSACTIONS;
+}
+function setReportPeriod(p){
+  REPORT_PERIOD=p;
+  if(p==='month'&&!REPORT_MONTH)REPORT_MONTH=getReportMonthOptions()[0]||null;
+  if(p==='year'&&!REPORT_YEAR)REPORT_YEAR=getReportYearOptions()[0]||null;
+  renderAll(getFiltered());
+}
+function setReportMonth(k){REPORT_MONTH=k;renderAll(getFiltered());}
+function setReportYear(y){REPORT_YEAR=y;renderAll(getFiltered());}
+function reportPeriodLabel(){
+  if(REPORT_PERIOD==='month'&&REPORT_MONTH){const[yy,mm]=REPORT_MONTH.split('-');return new Date(+yy,+mm-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});}
+  if(REPORT_PERIOD==='year'&&REPORT_YEAR)return REPORT_YEAR;
+  return'All Time';
+}
+function renderReportPeriodBar(){
+  const monthOpts=getReportMonthOptions(),yearOpts=getReportYearOptions();
+  return`<div class="glass" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;margin-bottom:14px">
+    <span style="font-size:12px;color:var(--dim);font-weight:600;letter-spacing:0.04em">PERIOD</span>
+    <div style="display:flex;gap:6px">
+      ${['all','month','year'].map(p=>{const l={all:'All Time',month:'Monthly',year:'Yearly'};return`<button class="pgpill ${REPORT_PERIOD===p?'active':''}" onclick="setReportPeriod('${p}')">${l[p]}</button>`;}).join('')}
+    </div>
+    ${REPORT_PERIOD==='month'?`<select onchange="setReportMonth(this.value)" style="background:rgba(255,255,255,0.06);color:var(--white);border:1px solid rgba(221,212,195,0.18);border-radius:8px;padding:6px 10px;font-size:13px">
+      ${monthOpts.map(k=>{const[yy,mm]=k.split('-');const l=new Date(+yy,+mm-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});return`<option value="${k}" ${REPORT_MONTH===k?'selected':''}>${l}</option>`;}).join('')}
+    </select>`:''}
+    ${REPORT_PERIOD==='year'?`<select onchange="setReportYear(this.value)" style="background:rgba(255,255,255,0.06);color:var(--white);border:1px solid rgba(221,212,195,0.18);border-radius:8px;padding:6px 10px;font-size:13px">
+      ${yearOpts.map(y=>`<option value="${y}" ${REPORT_YEAR===y?'selected':''}>${y}</option>`).join('')}
+    </select>`:''}
+  </div>`;
+}
+function renderReportContent(allTxns){
+  const idr=allTxns.filter(t=>(t.amount||0)>0);
+  if(!idr.length)return`<div class="empty">No transactions yet.</div>`;
+  const total=idr.reduce((s,t)=>s+(t.amount||0),0);
+  const byMonth={};
+  for(const t of idr){
+    const d=new Date(t.txDate||t.msgDate||0);
+    if(isNaN(d.getTime()))continue;
+    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if(!byMonth[key])byMonth[key]={total:0,count:0,label:d.toLocaleDateString('en-US',{month:'short',year:'2-digit'})};
+    byMonth[key].total+=t.amount;byMonth[key].count++;
+  }
+  const monthKeys=Object.keys(byMonth).sort();
+  const numMonths=monthKeys.length||1;
+  const avgMonthly=Math.round(total/numMonths);
+  const byCat={};
+  for(const t of idr){if(!t.category)continue;if(!byCat[t.category])byCat[t.category]={total:0,count:0};byCat[t.category].total+=t.amount;byCat[t.category].count++;}
+  const catSorted=Object.entries(byCat).sort((a,b)=>b[1].total-a[1].total);
+  const byBank={};
+  for(const t of idr){const b=t.bank||'Other';if(!byBank[b])byBank[b]={total:0,count:0};byBank[b].total+=t.amount;byBank[b].count++;}
+  const byMerchant={};
+  for(const t of idr){const m=t.merchantClean||t.merchantRaw||'Unknown';if(!byMerchant[m])byMerchant[m]={total:0,count:0};byMerchant[m].total+=t.amount;byMerchant[m].count++;}
+  const byMerchantSpend={}, byMerchantTransfer={};
+  for(const t of idr){
+    const m=t.merchantClean||t.merchantRaw||'Unknown';
+    const bucket=t.category==='Transfer'?byMerchantTransfer:byMerchantSpend;
+    if(!bucket[m])bucket[m]={total:0,count:0};
+    bucket[m].total+=t.amount;bucket[m].count++;
+  }
+  const topSpending=Object.entries(byMerchantSpend).sort((a,b)=>b[1].total-a[1].total).slice(0,10);
+  const topTransfers=Object.entries(byMerchantTransfer).sort((a,b)=>b[1].total-a[1].total).slice(0,10);
+  const maxSpending=topSpending[0]?topSpending[0][1].total:1;
+  const maxTransferAmt=topTransfers[0]?topTransfers[0][1].total:1;
+  const now=new Date();
+  const monthStart=new Date(now.getFullYear(),now.getMonth(),1);
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const dayOfMonth=now.getDate();
+  const thisMonthTxns=idr.filter(t=>{const d=new Date(t.txDate||t.msgDate||0);return d>=monthStart&&d<=now;});
+  const thisMonthTotal=thisMonthTxns.reduce((s,t)=>s+(t.amount||0),0);
+  const projectedMonthEnd=dayOfMonth>0?Math.round(thisMonthTotal/dayOfMonth*daysInMonth):0;
+  const biggestTx=idr.reduce((m,t)=>(!m||(t.amount||0)>(m.amount||0))?t:m,null);
+  const mostFrequent=Object.entries(byMerchant).sort((a,b)=>b[1].count-a[1].count)[0]||null;
+  const avgTxSize=Math.round(total/idr.length);
+  const subsCandidates=detectSubscriptionCandidates(idr);
+  const topCat=catSorted[0]||null;
+  const topCatMeta=topCat?CATEGORIES[topCat[0]]||{color:'#8a8878',icon:'📋'}:null;
+  const periodTitle=REPORT_PERIOD==='all'?'All-Time':reportPeriodLabel();
+  const periodPhrase=REPORT_PERIOD==='all'?'all-time':`in ${reportPeriodLabel()}`;
+  const showCurrentMonthCards=REPORT_PERIOD==='all';
+
+  return`
+    <div class="hero">
+      <div class="glass hero-main click-card" onclick="reportGoTo({})" title="View all transactions">
+        <div class="hero-label">${periodTitle} Total Spend</div>
+        <div class="hero-amount"><span>IDR</span>${total.toLocaleString('id-ID')}</div>
+        <div class="hero-sub">${idr.length} transactions · ${numMonths} month${numMonths!==1?'s':''} tracked</div>
+        <div class="click-hint">→ view all transactions</div>
+      </div>
+      <div class="glass stat-mini click-card" onclick="reportGoTo({})" title="View all transactions">
+        <div class="sicon">📊</div>
+        <div class="slabel">Avg / Month</div>
+        <div class="sval"><span style="font-size:14px;color:var(--muted);margin-right:3px">IDR</span>${avgMonthly.toLocaleString('id-ID')}</div>
+        <div class="ssub">across ${numMonths} month${numMonths!==1?'s':''}</div>
+        <div class="click-hint">→ view all transactions</div>
+      </div>
+      <div class="glass stat-mini${topCat?' click-card':''}"${topCat?` onclick="reportGoTo({category:'${escAttr(topCat[0])}'})" title="View ${escAttr(topCat[0])} transactions"`:''}>
+        ${topCat?`
+        <div class="sicon">${topCatMeta.icon}</div>
+        <div class="slabel">Biggest Category</div>
+        <div class="sval" style="color:${topCatMeta.color};font-size:18px">${topCat[0]}</div>
+        <div class="ssub">${fmtIDRShort(topCat[1].total)} ${periodPhrase} · ${topCat[1].count} tx</div>
+        <div class="click-hint">→ view ${escH(topCat[0])} transactions</div>
+        `:`<div class="sicon">◈</div><div class="slabel">Biggest Category</div><div class="sval" style="color:var(--dim)">—</div>`}
+      </div>
+    </div>
+
+    <div class="hero2">
+      ${showCurrentMonthCards?`
+      <div class="glass stat-mini click-card" onclick="reportGoTo({range:'month'})" title="View this month's transactions">
+        <div class="sicon">🗓️</div>
+        <div class="slabel">This Month So Far</div>
+        <div class="sval"><span style="font-size:13px;color:var(--muted);margin-right:3px">IDR</span>${thisMonthTotal.toLocaleString('id-ID')}</div>
+        <div class="ssub">${thisMonthTxns.length} tx · day ${dayOfMonth} of ${daysInMonth}</div>
+        <div class="click-hint">→ view this month</div>
+      </div>
+      <div class="glass stat-mini click-card" onclick="reportGoTo({range:'month'})" title="View this month's transactions (basis for projection)">
+        <div class="sicon">📈</div>
+        <div class="slabel">Projected Month-End</div>
+        <div class="sval accent"><span style="font-size:13px;color:var(--muted);margin-right:3px">IDR</span>${projectedMonthEnd.toLocaleString('id-ID')}</div>
+        <div class="ssub">at current pace</div>
+        <div class="click-hint">→ view this month</div>
+      </div>
+      `:''}
+      <div class="glass stat-mini${biggestTx?' click-card':''}"${biggestTx?` onclick="reportGoTo({merchant:'${escAttr(biggestTx.merchantClean||biggestTx.merchantRaw||'Unknown')}',monthKey:'${new Date(biggestTx.txDate||biggestTx.msgDate||0).getFullYear()}-${String(new Date(biggestTx.txDate||biggestTx.msgDate||0).getMonth()+1).padStart(2,'0')}'})" title="View this transaction"`:''}>
+        <div class="sicon">💥</div>
+        <div class="slabel">Biggest Single Expense</div>
+        ${biggestTx?`<div class="sval" style="font-size:17px">${fmtIDRShort(biggestTx.amount)}</div><div class="ssub">${escH(biggestTx.merchantClean||biggestTx.merchantRaw||'—')} · ${fmtDate(biggestTx.txDate||biggestTx.msgDate)}</div><div class="click-hint">→ view this transaction</div>`:`<div class="sval" style="color:var(--dim)">—</div>`}
+      </div>
+      <div class="glass stat-mini${mostFrequent?' click-card':''}"${mostFrequent?` onclick="reportGoTo({merchant:'${escAttr(mostFrequent[0])}'})" title="View all transactions from ${escAttr(mostFrequent[0])}"`:''}>
+        <div class="sicon">🔁</div>
+        <div class="slabel">Most Frequent Merchant</div>
+        ${mostFrequent?`<div class="sval" style="font-size:17px">${escH(mostFrequent[0])}</div><div class="ssub">${mostFrequent[1].count} visits · ${fmtIDRShort(mostFrequent[1].total)} total</div><div class="click-hint">→ view all from this merchant</div>`:`<div class="sval" style="color:var(--dim)">—</div>`}
+      </div>
+      <div class="glass stat-mini click-card" onclick="reportGoTo({})" title="View all transactions">
+        <div class="sicon">🧾</div>
+        <div class="slabel">Avg Transaction Size</div>
+        <div class="sval"><span style="font-size:13px;color:var(--muted);margin-right:3px">IDR</span>${avgTxSize.toLocaleString('id-ID')}</div>
+        <div class="ssub">across ${idr.length} transactions</div>
+        <div class="click-hint">→ view all transactions</div>
+      </div>
+    </div>
+
+    ${(()=>{
+      const latest=[...idr].sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0)).slice(0,5);
+      if(!latest.length)return'';
+      return`<div class="glass table-card">
+        <div class="table-head-row"><div class="table-title">🕐 Latest 5 Transactions</div><div style="font-size:12px;color:var(--dim)">${periodTitle}</div></div>
+        <table>
+          <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
+          <tbody>${latest.map(t=>{const meta=CATEGORIES[t.category]||{color:'#8a8878',icon:'📋'};return`<tr class="click-row" onclick="reportGoTo({merchant:'${escAttr(t.merchantClean||t.merchantRaw||'')}'})" title="View all from ${escAttr(t.merchantClean||'')}">
+            <td class="td-date">${fmtDate(t.txDate||t.msgDate)}</td>
+            <td class="td-merchant">${escH(t.merchantClean||t.merchantRaw||'—')}</td>
+            <td><span class="cat-chip" style="background:${meta.color}18;color:${meta.color};border:1px solid ${meta.color}30">${meta.icon} ${t.category||'Uncategorized'}</span></td>
+            <td class="td-amount">${fmtIDR(t.amount)}</td>
+          </tr>`;}).join('')}</tbody>
+        </table>
+      </div>`;
+    })()}
+
+    ${subsCandidates.length?`
+    <div class="glass table-card" style="border-left:2px solid #d4b86a55">
+      <div class="table-head-row"><div class="table-title">🔁 Possible Subscriptions — Recurring Charges to Review</div></div>
+      <table>
+        <thead><tr><th>Merchant</th><th>Current Category</th><th style="text-align:center">Months Seen</th><th style="text-align:right">Avg Amount</th><th>Last Charged</th><th style="text-align:center">Subscription?</th></tr></thead>
+        <tbody>${subsCandidates.map(c=>{const meta=CATEGORIES[c.category]||{color:'#8a8878',icon:'📋'};return`<tr class="click-row" onclick="reportGoTo({merchant:'${escAttr(c.merchant)}'})" title="View all transactions from ${escAttr(c.merchant)}">
+          <td class="td-merchant">${escH(c.merchant)}</td>
+          <td><span class="cat-chip" style="background:${meta.color}18;color:${meta.color};border:1px solid ${meta.color}30">${meta.icon} ${c.category||'Uncategorized'}</span></td>
+          <td style="text-align:center;color:var(--dim)">${c.monthsSeen}</td>
+          <td class="td-amount">${fmtIDR(Math.round(c.avgAmount))}</td>
+          <td class="td-date">${fmtDate(c.lastDate)}</td>
+          <td style="text-align:center;white-space:nowrap">
+            <button class="sub-decide-btn approve" onclick="approveSubscription('${escAttr(c.merchant)}',event)" title="Yes — recategorize as Tech &amp; Subscriptions">✓ Approve</button>
+            <button class="sub-decide-btn decline" onclick="declineSubscription('${escAttr(c.merchant)}',event)" title="No — not a subscription, stop flagging">✕ Decline</button>
+          </td>
+        </tr>`;}).join('')}</tbody>
+      </table>
+      <div style="padding:10px 18px;font-size:12px;color:var(--dim)">Flagged because each recurs in 2+ different months at a consistent amount. Approve to recategorize as Tech & Subscriptions, or decline to stop flagging it.</div>
+    </div>
+    `:''}
+
+    <div class="charts-grid" style="grid-template-columns:1fr">
+      <div class="glass chart-card"><div class="chart-title">Monthly Spending Trend (All Time)</div><canvas id="repMonthlyChart" height="100"></canvas></div>
+    </div>
+    <div class="charts-grid">
+      <div class="glass chart-card"><div class="chart-title">By Category (${periodTitle})</div><canvas id="repCatChart" height="160"></canvas></div>
+      <div class="glass chart-card"><div class="chart-title">By Bank / Source (${periodTitle})</div><canvas id="repBankChart" height="160"></canvas></div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="glass table-card">
+        <div class="table-head-row"><div class="table-title">Top ${topSpending.length} Spending (${periodTitle})</div></div>
+        ${topSpending.length?`<table>
+          <thead><tr><th>Merchant</th><th></th><th style="text-align:right">Total Spent</th><th style="text-align:center">Tx</th></tr></thead>
+          <tbody>${topSpending.map(([m,d],i)=>`<tr class="click-row" onclick="reportGoTo({merchant:'${escAttr(m)}'})" title="View all transactions from ${escAttr(m)}">
+            <td class="td-merchant">${i+1}. ${escH(m)}</td>
+            <td style="min-width:90px"><div class="cat-bar-wrap" style="margin-top:0"><div class="cat-bar-fill" style="width:${Math.round(d.total/maxSpending*100)}%;background:var(--beige)"></div></div></td>
+            <td class="td-amount">${fmtIDR(d.total)}</td>
+            <td style="text-align:center;color:var(--dim)">${d.count}</td>
+          </tr>`).join('')}</tbody>
+        </table>`:`<div class="empty">No spending recorded.</div>`}
+      </div>
+      <div class="glass table-card">
+        <div class="table-head-row"><div class="table-title">Top ${topTransfers.length} Transfers (${periodTitle})</div></div>
+        ${topTransfers.length?`<table>
+          <thead><tr><th>Recipient</th><th></th><th style="text-align:right">Total Sent</th><th style="text-align:center">Tx</th></tr></thead>
+          <tbody>${topTransfers.map(([m,d],i)=>`<tr class="click-row" onclick="reportGoTo({merchant:'${escAttr(m)}',category:'Transfer'})" title="View all transfers to ${escAttr(m)}">
+            <td class="td-merchant">${i+1}. ${escH(m)}</td>
+            <td style="min-width:90px"><div class="cat-bar-wrap" style="margin-top:0"><div class="cat-bar-fill" style="width:${Math.round(d.total/maxTransferAmt*100)}%;background:${CATEGORIES['Transfer'].color}"></div></div></td>
+            <td class="td-amount">${fmtIDR(d.total)}</td>
+            <td style="text-align:center;color:var(--dim)">${d.count}</td>
+          </tr>`).join('')}</tbody>
+        </table>`:`<div class="empty">No transfers recorded.</div>`}
+      </div>
+    </div>
+  `;
+}
+function renderReportCharts(allTxns){
+  const idr=allTxns.filter(t=>(t.amount||0)>0);
+  const mC=document.getElementById('repMonthlyChart');
+  if(mC){
+    if(chartRepMonthly){chartRepMonthly.destroy();chartRepMonthly=null;}
+    const idrAllTime=ALL_TRANSACTIONS.filter(t=>(t.amount||0)>0);
+    const byMonth={};
+    for(const t of idrAllTime){
+      const d=new Date(t.txDate||t.msgDate||0);
+      if(isNaN(d.getTime()))continue;
+      const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      if(!byMonth[key])byMonth[key]={total:0,label:d.toLocaleDateString('en-US',{month:'short',year:'2-digit'})};
+      byMonth[key].total+=t.amount;
+    }
+    const keys=Object.keys(byMonth).sort();
+    chartRepMonthly=new Chart(mC,{type:'line',
+      data:{labels:keys.map(k=>byMonth[k].label),datasets:[{data:keys.map(k=>byMonth[k].total),
+        borderColor:'rgba(221,212,195,0.85)',backgroundColor:'rgba(221,212,195,0.12)',borderWidth:2,
+        fill:true,tension:0.3,
+        pointRadius:4,pointBackgroundColor:'rgba(221,212,195,0.90)',pointBorderColor:'rgba(0,0,0,0.6)',pointBorderWidth:1.5,
+        pointHoverRadius:6,pointHoverBackgroundColor:'#fff',pointHitRadius:14}]},
+      options:{responsive:true,
+        interaction:{mode:'nearest',intersect:false,axis:'x'},
+        onClick:(e,els)=>{if(els.length>0)reportGoTo({monthKey:keys[els[0].index]});},
+        onHover:(e,els)=>{if(e.native)e.native.target.style.cursor=els.length>0?'pointer':'default';},
+        plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(0,0,0,0.88)',borderColor:'rgba(221,212,195,0.12)',borderWidth:1,padding:10,titleColor:'#DDD4C3',bodyColor:'#DDD4C3',callbacks:{label:c=>' '+fmtIDR(c.parsed.y),afterLabel:()=>'(click to view)'}}},
+        scales:{y:{beginAtZero:true,ticks:{font:{size:12,weight:'500'},color:'rgba(221,212,195,0.75)',callback:v=>{if(v>=1000000)return'IDR '+(v/1000000).toFixed(1)+'jt';if(v>=1000)return'IDR '+(v/1000).toFixed(0)+'rb';return'IDR '+v;}},grid:{color:'rgba(221,212,195,0.05)'}},x:{ticks:{font:{size:12,weight:'500'},color:'rgba(221,212,195,0.75)'},grid:{display:false}}}}});
+  }
+  const cC=document.getElementById('repCatChart');
+  if(cC){
+    if(chartRepCat){chartRepCat.destroy();chartRepCat=null;}
+    const byCat={};
+    for(const t of idr){if(!t.category)continue;byCat[t.category]=(byCat[t.category]||0)+t.amount;}
+    const cats=Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
+    const colors=cats.map(c=>CATEGORIES[c]?.color||'#8a8878');
+    chartRepCat=new Chart(cC,{type:'doughnut',
+      data:{labels:cats,datasets:[{data:cats.map(c=>byCat[c]),backgroundColor:colors.map(c=>c+'40'),borderColor:colors,borderWidth:1.5,hoverBackgroundColor:colors.map(c=>c+'70'),hoverBorderWidth:2.5}]},
+      options:{responsive:true,cutout:'70%',
+        onClick:(e,els)=>{if(els.length>0)reportGoTo({category:cats[els[0].index]});},
+        onHover:(e,els)=>{if(e.native)e.native.target.style.cursor=els.length>0?'pointer':'default';},
+        plugins:{legend:{position:'bottom',labels:{font:{size:12,weight:'500'},boxWidth:9,padding:12,color:'rgba(221,212,195,0.85)'},onClick:(e,li)=>{reportGoTo({category:li.text});}},
+          tooltip:{backgroundColor:'rgba(0,0,0,0.88)',borderColor:'rgba(221,212,195,0.12)',borderWidth:1,titleColor:'#DDD4C3',bodyColor:'#DDD4C3',callbacks:{label:c=>' '+fmtIDR(c.parsed),afterLabel:()=>'(click to view)'}}}}});
+  }
+  const bC=document.getElementById('repBankChart');
+  if(bC){
+    if(chartRepBank){chartRepBank.destroy();chartRepBank=null;}
+    const byBank={};
+    for(const t of idr){const b=t.bank||'Other';byBank[b]=(byBank[b]||0)+t.amount;}
+    const banks=Object.keys(byBank).sort((a,b)=>byBank[b]-byBank[a]);
+    const colors=banks.map(b=>BANK_COLOR[b]||'#8a8878');
+    chartRepBank=new Chart(bC,{type:'doughnut',
+      data:{labels:banks,datasets:[{data:banks.map(b=>byBank[b]),backgroundColor:colors.map(c=>c+'40'),borderColor:colors,borderWidth:1.5,hoverBackgroundColor:colors.map(c=>c+'70'),hoverBorderWidth:2.5}]},
+      options:{responsive:true,cutout:'70%',
+        onClick:(e,els)=>{if(els.length>0)reportGoTo({bank:banks[els[0].index]});},
+        onHover:(e,els)=>{if(e.native)e.native.target.style.cursor=els.length>0?'pointer':'default';},
+        plugins:{legend:{position:'bottom',labels:{font:{size:12,weight:'500'},boxWidth:9,padding:12,color:'rgba(221,212,195,0.85)'},onClick:(e,li)=>{reportGoTo({bank:li.text});}},
+          tooltip:{backgroundColor:'rgba(0,0,0,0.88)',borderColor:'rgba(221,212,195,0.12)',borderWidth:1,titleColor:'#DDD4C3',bodyColor:'#DDD4C3',callbacks:{label:c=>' '+fmtIDR(c.parsed),afterLabel:()=>'(click to view)'}}}}});
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   MAIN RENDER — ported unchanged
+   ══════════════════════════════════════════════════════════════════ */
+function renderAll(txns){
+  const allOCBC=ALL_TRANSACTIONS.filter(t=>t.bank==='OCBC');
+  const ocbcTxns=txns.filter(t=>t.bank==='OCBC');
+  const idrTxns=txns.filter(t=>t.amount>0);
+  const total=idrTxns.reduce((s,t)=>s+(t.amount||0),0);
+  const byCat={};
+  for(const t of idrTxns){if(!t.category)continue;if(!byCat[t.category])byCat[t.category]={total:0,count:0};byCat[t.category].total+=(t.amount||0);byCat[t.category].count++;}
+  const sc=Object.entries(byCat).sort((a,b)=>b[1].total-a[1].total);
+  const rl={all:'All Time',week:'This Week',lastmonth:'Last Month',month:'This Month',year:'This Year',custom:`${CUSTOM_FROM} → ${CUSTOM_TO}`};
+  const arl=rl[ACTIVE_RANGE]||'Custom';
+  const hcf=ACTIVE_CATEGORIES.size>0;
+
+  const tabBar=`<div class="tab-bar">
+    <button class="tab-btn ${ACTIVE_TAB==='reporting'?'active':''}" onclick="setTab('reporting')">📈 Reporting</button>
+    <button class="tab-btn ${ACTIVE_TAB==='overview'?'active':''}" onclick="setTab('overview')">💳 Overview</button>
+    <button class="tab-btn ${ACTIVE_TAB==='foreign'?'active':''}" onclick="setTab('foreign')">🌏 Foreign Currency${allOCBC.length?`<span class="tab-count">${allOCBC.length}</span>`:''}</button>
+    <button class="tab-btn ${ACTIVE_TAB==='ccposition'?'active':''}" onclick="setTab('ccposition')">🧾 CC Position</button>
+  </div>`;
+
+  if(ACTIVE_TAB==='ccposition'){
+    document.getElementById('root').innerHTML=tabBar+renderCCPositionContent();
+    return;
+  }
+  if(ACTIVE_TAB==='reporting'){
+    const repTxns=getReportTxns();
+    document.getElementById('root').innerHTML=tabBar+renderReportPeriodBar()+renderReportContent(repTxns);
+    requestAnimationFrame(()=>renderReportCharts(repTxns));
+    return;
+  }
+  if(ACTIVE_TAB==='foreign'){
+    document.getElementById('root').innerHTML=tabBar+renderForeignContent(txns,ocbcTxns);
+    return;
+  }
+
+  document.getElementById('root').innerHTML=tabBar+`
+    ${renderForecast()}
+    ${renderMoM()}
+
+    <div class="filter-wrap glass" style="padding:16px 18px">
+      <div class="filter-rows">
+        <div class="filter-row">
+          <div class="filter-block">
+            <div class="filter-block-label">📅 Date Period</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="pill-group">
+                ${['all','week','lastmonth','month','year'].map(r=>{const l={all:'All',week:'Week',lastmonth:'Last Mo',month:'Month',year:'Year'};return`<button class="pgpill ${ACTIVE_RANGE===r?'active':''}" onclick="applyFilter('${r}')">${l[r]}</button>`;}).join('')}
+              </div>
+              <div class="cal-wrap" id="calWrap">
+                <button class="custom-pill ${ACTIVE_RANGE==='custom'?'active':''}" onclick="toggleCal()">
+                  ⊡ ${ACTIVE_RANGE==='custom'&&CUSTOM_FROM?CUSTOM_FROM+' → '+CUSTOM_TO:'Custom'}
+                </button>
+                <div class="cal-popover" id="calPopover">
+                  <div class="cal-label">Date Range</div>
+                  <div class="cal-inputs">
+                    <div><div class="cal-label">From</div><input class="cal-input" type="date" id="calFrom" value="${CUSTOM_FROM||''}"></div>
+                    <div><div class="cal-label">To</div><input class="cal-input" type="date" id="calTo" value="${CUSTOM_TO||''}"></div>
+                  </div>
+                  <div class="cal-actions">
+                    <button class="cal-cancel" onclick="CUSTOM_FROM=null;CUSTOM_TO=null;toggleCal(false);applyFilter('all')">Clear</button>
+                    <button class="cal-apply" onclick="applyCustomRange()">Apply</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="filter-divider"></div>
+          <div class="filter-block">
+            <div class="filter-block-label">🏦 Bank</div>
+            <div class="bank-pills">
+              <button class="bpill ${ACTIVE_BANK==='all'?'active-all':''}" onclick="setBank('all')">All</button>
+              <button class="bpill ${ACTIVE_BANK==='Maybank'?'active-maybank':''}" onclick="setBank('Maybank')">Maybank</button>
+              <button class="bpill ${ACTIVE_BANK==='OCBC'?'active-ocbc':''}" onclick="setBank('OCBC')">OCBC</button>
+              <button class="bpill ${ACTIVE_BANK==='BCA'?'active-bca':''}" onclick="setBank('BCA')">BCA</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      ${(ACTIVE_RANGE!=='all'||hcf||ACTIVE_BANK!=='all'||ACTIVE_MERCHANT)?`<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="active-summary">${txns.length} of ${ALL_TRANSACTIONS.length} shown${ACTIVE_RANGE!=='all'?` · ${arl}`:''}${ACTIVE_BANK!=='all'?` · ${ACTIVE_BANK}`:''}${hcf?` · ${[...ACTIVE_CATEGORIES].join(', ')}`:''}${ACTIVE_MERCHANT?` · "${escH(ACTIVE_MERCHANT)}"`:''}
+      </span>${hcf?`<button class="cpill clear" onclick="clearCategories()">✕ Clear category</button>`:''} ${ACTIVE_MERCHANT?`<button class="cpill clear" onclick="clearMerchantFilter()">✕ Clear merchant filter</button>`:''}</div>`:''}
+    </div>
+
+    <div class="section-label">Spending by Category</div>
+    <div class="cat-grid">
+      ${sc.map(([cat,d])=>{const meta=CATEGORIES[cat]||{color:'#8a8878',icon:'📋'};const isAct=ACTIVE_CATEGORIES.has(cat);return`<div class="cat-card${isAct?' cat-active':''}" style="border-left-color:${meta.color}${isAct?';box-shadow:0 0 0 1px '+meta.color+'40':''}" onclick="toggleCategory('${cat.replace(/'/g,"\\'")}')"><div class="cat-card-icon">${meta.icon}</div><div class="cat-card-name">${cat}</div><div class="cat-card-total">${fmtIDRShort(d.total)}</div><div class="cat-card-count">${d.count} txn</div></div>`;}).join('')}
+    </div>
+
+    <div class="charts-grid">
+      <div class="glass chart-card"><div class="chart-title">Daily Spending</div><canvas id="barChart" height="130"></canvas></div>
+      <div class="glass chart-card"><div class="chart-title">By Category</div><canvas id="donutChart" height="130"></canvas></div>
+    </div>
+
+    <div class="glass table-card">
+      <div class="table-head-row"><div class="table-title">${txns.length} Transactions</div><button class="add-tx-btn" onclick="openAddModal()">＋ Add</button></div>
+      ${txns.length===0?'<div class="empty">No transactions in this period.</div>':`
+      <table>
+        <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Notes</th><th>Bank</th><th style="text-align:right">Amount</th><th style="text-align:center">Status</th><th></th></tr></thead>
+        <tbody>${txns.map(t=>{const meta=CATEGORIES[t.category]||{color:'#8a8878',icon:'📋'};const ok=/sukses|approved|successful/i.test(t.status||'');const isOCBC=t.bank==='OCBC';const isBCA=t.bank==='BCA';const isManual=t.bank==='Manual';const bankTag=isOCBC?'ocbc':isBCA?'bca':isManual?'manual':'maybank';const bankLabel=isOCBC?'OCBC':isBCA?'BCA':isManual?(t.manualBank||'Manual'):'Maybank';const isOverridden=!!getCatOverrides()[t.id];const txNote=t.note||'';const safeId=escH(t.id||'');const sp=t.splitInfo;const splitSub=sp?`<br><span class="sub split-badge">👥 split ${sp.people}w · ${sp.paidCount} paid · was ${fmtIDR(sp.originalAmount)}</span>`:'';return`<tr>
+          <td class="td-date">${fmtDate(t.txDate||t.msgDate)}</td>
+          <td class="td-merchant">${escH(t.merchantClean)}${isOCBC?`<br><span class="sub">Debit Card · ${t.currency||''}</span>`:t.currency&&!isOCBC?`<br><span class="sub">${escH(t.amountStr)}</span>`:isBCA&&t.merchantRaw!==t.merchantClean?`<br><span class="sub">${escH(t.merchantRaw)}</span>`:(!isOCBC&&!isBCA&&t.merchantRaw!==t.merchantClean)?`<br><span class="sub">${escH(t.merchantRaw)}</span>`:''}${splitSub}</td>
+          <td><button class="cat-chip-btn${isOverridden?' overridden':''}" onclick="openCatDropdown(event,'${safeId}','${escH(t.category||'')}')" title="Click to change category"><span class="cat-chip" style="background:${meta.color}18;color:${meta.color};border:1px solid ${meta.color}30">${meta.icon} ${t.category}</span><span class="cat-edit-arrow" style="color:${meta.color}">▾</span></button></td>
+          <td><input class="note-input${txNote?' has-note':''}" type="text" placeholder="Add note…" value="${escH(txNote)}" data-id="${safeId}" onblur="updateNote(this.dataset.id,this.value)" onkeydown="if(event.key==='Enter'){this.blur();}" /></td>
+          <td><span class="bank-tag ${bankTag}">${bankLabel}</span></td>
+          <td class="td-amount">${isOCBC?(t.amount?`${fmtIDR(t.amount)}<br><span style="font-size:12px;color:var(--dim);font-weight:500">${escH(t.amountStr)}</span>`:`<span style="color:rgba(221,212,195,0.50);font-size:13px">${escH(t.amountStr)}</span>`):(t.currency&&!t.amount)?`<span style="color:#e0a060;font-size:12px;font-weight:600;cursor:pointer" onclick="openEditModal('${safeId}')">⚠ Set IDR</span>`:fmtIDR(t.amount)}</td>
+          <td class="td-status">${ok?'<span class="status-ok">✓ OK</span>':'<span class="status-fail">✗ Fail</span>'}</td>
+          <td class="td-actions"><button class="row-action-btn${sp?' active-split':''}" onclick="openSplitModal('${safeId}')" title="Split between people">👥</button><button class="row-action-btn" onclick="openEditModal('${safeId}')" title="Edit">✏️</button><button class="row-action-btn del" onclick="deleteTransaction('${safeId}',this)" title="Delete">🗑</button></td>
+        </tr>`;}).join('')}</tbody>
+      </table>`}
+    </div>
+  `;
+  requestAnimationFrame(()=>renderCharts(idrTxns));
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   FETCH + BOOT — Gmail REST replaces the cowork MCP calls; STATE (Drive)
+   replaces the old cache-only migration function
+   ══════════════════════════════════════════════════════════════════ */
+async function load(isRefresh=false){
+  const btn=document.getElementById('refBtn'),meta=document.getElementById('hmeta');
+  if(btn)btn.disabled=true;
+  const cached=loadCache();
+  if(!isRefresh){
+    if(cached&&cached.data&&cached.data.length){
+      ALL_TRANSACTIONS=cached.data.map(t=>({...t}));
+      applyManualFXRates(ALL_TRANSACTIONS);
+      applyDateCategoryRules(ALL_TRANSACTIONS);
+      applyMerchantCats(ALL_TRANSACTIONS);
+      applyCatOverrides(ALL_TRANSACTIONS);
+      applySubDecisions(ALL_TRANSACTIONS);
+      applyNotes(ALL_TRANSACTIONS);
+      applyMerchantAutoNotes(ALL_TRANSACTIONS);
+      applyTxEdits(ALL_TRANSACTIONS);
+      applySplits(ALL_TRANSACTIONS);
+      ALL_TRANSACTIONS_RAW=[...ALL_TRANSACTIONS];
+      {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
+      mergeManualTxns();
+      ACTIVE_RANGE='all';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';
+      renderAll(ALL_TRANSACTIONS);initMerchantAutoNotes();
+      const mb=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='Maybank').length,oc=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='OCBC').length,bca=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='BCA').length;
+      meta.textContent=`${mb} Maybank + ${oc} OCBC + ${bca} BCA · click Refresh for latest`;
+      if(btn)btn.disabled=false;
+      return;
+    }
+  }
+  const isInc=isRefresh&&!!(cached?.data?.length);
+  const watermark=STATE.watermark;
+  let afterDate;
+  if(isInc&&watermark){
+    const d=new Date(watermark);d.setDate(d.getDate()-1);
+    afterDate=`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  } else {
+    afterDate=HISTORY_START.replace(/-/g,'/');
+  }
+  const mbQuery=`from:maybank after:${afterDate}`;
+  const ocQuery=`${OCBC_SEARCH_Q} after:${afterDate}`;
+  const bcaQuery=`${BCA_SEARCH_Q} after:${afterDate}`;
+  meta.textContent=isInc?'Checking for new transactions…':'First load — fetching history…';
+  if(!isInc){document.getElementById('root').innerHTML=`<div class="loading"><div class="spinner"></div><div>Fetching transaction history…</div><div class="progress" id="prog"></div></div>`;}
+  const sp=t=>{const e=document.getElementById('prog');if(e)e.textContent=t;};
+  try{
+    sp('Searching Gmail (Maybank, OCBC, BCA)…');
+    const [mbThreads,ocThreads,bcaThreads]=await Promise.all([
+      searchThreads(mbQuery,250),searchThreads(ocQuery,250),searchThreads(bcaQuery,250)
+    ]);
+    sp(`Found ${mbThreads.length} Maybank + ${ocThreads.length} OCBC + ${bcaThreads.length} BCA. Fetching…`);
+    const mbItems=await processMaybank(mbThreads,sp);
+    const ocParsed=await fetchAndParse(ocThreads,parseOCBCFromBody,sp,'OCBC');
+    const bcaParsed=await fetchAndParse(bcaThreads,parseBCAFromBody,sp,'BCA');
+    const mbFinal=mbItems.filter(t=>(t.amount&&t.amount>0)||t.currency);
+    const ocFinal=ocParsed.filter(t=>t.amountOrig&&t.amountOrig>0);
+    const bcaFinal=bcaParsed.filter(t=>(t.amount&&t.amount>0)||t.currency);
+    let combined=[...mbFinal,...ocFinal,...bcaFinal].sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0));
+
+    if(isInc&&cached&&cached.data){
+      const ei=new Set(cached.data.map(t=>t.id).filter(Boolean));
+      const nw=combined.filter(t=>!ei.has(t.id));
+      combined=[...nw,...cached.data].sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0));
+    }
+    combined=combined.filter(t=>(t.txDate||t.msgDate||'')>=HISTORY_START);
+
+    const newestDate=combined.reduce((acc,t)=>{const d=t.txDate||t.msgDate;return(d&&d>acc)?d:acc;},watermark||'1970-01-01');
+    STATE.watermark=newestDate;
+
+    ALL_TRANSACTIONS=combined.map(t=>({...t}));
+    applyManualFXRates(ALL_TRANSACTIONS);
+    applyDateCategoryRules(ALL_TRANSACTIONS);
+    applyMerchantCats(ALL_TRANSACTIONS);
+    applyCatOverrides(ALL_TRANSACTIONS);
+    applySubDecisions(ALL_TRANSACTIONS);
+    applyNotes(ALL_TRANSACTIONS);
+    applyMerchantAutoNotes(ALL_TRANSACTIONS);
+    applyTxEdits(ALL_TRANSACTIONS);
+    applySplits(ALL_TRANSACTIONS);
+    ALL_TRANSACTIONS_RAW=[...ALL_TRANSACTIONS];
+    {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
+    mergeManualTxns();
+    saveCache(ALL_TRANSACTIONS_RAW);
+    ACTIVE_RANGE='all';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';
+    renderAll(ALL_TRANSACTIONS);
+    initMerchantAutoNotes();
+    const mb=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='Maybank').length,oc=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='OCBC').length,bca=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='BCA').length;
+    meta.textContent=`Synced ${new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})} · ${mb} Maybank + ${oc} OCBC + ${bca} BCA`;
+  }catch(e){
+    document.getElementById('root').innerHTML=`<div class="err"><strong>Failed to load</strong><br>${escH(e.message||String(e))}<br><button class="retry" onclick="load()">Retry</button></div>`;
+    meta.textContent='Error';
+  }
+  if(btn)btn.disabled=false;
+}
+
+async function onSignedIn(){
+  document.body.classList.remove('gated');
+  $('authGate').style.display='none';
+  $('signOutBtn').style.display='inline-block';
+  $('refBtn').disabled=false;
+  $('importDataBtn').disabled=false;
+  try{
+    const r=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile',{headers:{Authorization:'Bearer '+accessToken}});
+    const d=await r.json();
+    if(d.emailAddress)$('hmeta').textContent='Signed in as '+d.emailAddress+' · loading…';
+  }catch(e){}
+  await bootFromDrive();
+  load();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   MIGRATION IMPORT — JSON export from the old Cowork tool
+   ══════════════════════════════════════════════════════════════════ */
+$('importDataBtn').addEventListener('click', () => $('importFileInput').click());
+$('importFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('hmeta').textContent = 'Reading ' + file.name + '…';
+  try{
+    const text = await file.text();
+    const imported = JSON.parse(text);
+    const normalized = {
+      ...defaultState(),
+      txns: imported.txns || [],
+      payments: imported.payments || [],
+      manualTxns: imported.manualTxns || [],
+      catOverrides: imported.catOverrides || {},
+      merchantCats: imported.merchantCats || {},
+      txEdits: imported.txEdits || {},
+      splits: imported.splits || {},
+      notes: imported.notes || {},
+      merchantAutoNotes: imported.merchantAutoNotes || {},
+      manualFxRates: imported.manualFxRates || {},
+      hiddenIds: imported.hiddenIds || [],
+      subDecisions: imported.subDecisions || {},
+      dateCategoryRules: imported.dateCategoryRules || [],
+      ccPosExcludedIds: imported.ccPosExcludedIds || []
+    };
+    STATE = mergeStates(STATE, normalized);
+    const newestDate=STATE.txns.reduce((acc,t)=>{const d=t.txDate||t.msgDate;return(d&&d>acc)?d:acc;},STATE.watermark||'1970-01-01');
+    STATE.watermark=newestDate;
+    scheduleDriveSave();
+    load();
+  }catch(err){
+    $('hmeta').textContent = 'Import failed: ' + (err.message || err);
+  }
+  e.target.value = '';
+});
+
+window.addEventListener('load', initAuth);
+</script>
+</body>
+</html>
