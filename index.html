@@ -214,7 +214,7 @@
     }
 
     .pill-group {
-      display: flex; align-items: center;
+      display: flex; align-items: center; flex-wrap: wrap;
       background: rgba(0,0,0,0.40);
       border: 1px solid var(--glass-border);
       border-radius: 8px; padding: 3px; gap: 2px;
@@ -2491,7 +2491,7 @@ function renderAll(txns){
         <div class="filter-row">
           <div class="filter-block">
             <div class="filter-block-label">📅 Date Period</div>
-            <div style="display:flex;align-items:center;gap:6px">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <div class="pill-group">
                 ${['all','week','lastmonth','month','year'].map(r=>{const l={all:'All',week:'Week',lastmonth:'Last Mo',month:'Month',year:'Year'};return`<button class="pgpill ${ACTIVE_RANGE===r?'active':''}" onclick="applyFilter('${r}')">${l[r]}</button>`;}).join('')}
               </div>
