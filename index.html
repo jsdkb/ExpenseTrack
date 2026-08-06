@@ -1192,7 +1192,7 @@ let ACTIVE_TAB='reporting';
 function setTab(t){ACTIVE_TAB=t;renderAll(getFiltered());}
 let REPORT_PERIOD='month', REPORT_MONTH=(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})(), REPORT_YEAR=null;
 let CCP_EST_FROM='', CCP_EST_TO='';
-let ACTIVE_RANGE='all',CUSTOM_FROM=null,CUSTOM_TO=null,ACTIVE_CATEGORIES=new Set(),ACTIVE_MERCHANT=null;
+let ACTIVE_RANGE='month',CUSTOM_FROM=null,CUSTOM_TO=null,ACTIVE_CATEGORIES=new Set(),ACTIVE_MERCHANT=null;
 
 /* ══════════════════════════════════════════════════════════════════
    OVERRIDE STORES — same function names as the original artifact, but
@@ -2648,7 +2648,7 @@ async function load(isRefresh=false){
       ALL_TRANSACTIONS_RAW=[...ALL_TRANSACTIONS];
       {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
       mergeManualTxns();
-      ACTIVE_RANGE='all';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';
+      ACTIVE_RANGE='month';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';
       renderAll(ALL_TRANSACTIONS);initMerchantAutoNotes();
       const mb=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='Maybank').length,oc=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='OCBC').length,bca=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='BCA').length;
       meta.textContent=`${mb} Maybank + ${oc} OCBC + ${bca} BCA · click Refresh for latest`;
@@ -2709,7 +2709,7 @@ async function load(isRefresh=false){
     {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
     mergeManualTxns();
     saveCache(ALL_TRANSACTIONS_RAW);
-    ACTIVE_RANGE='all';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';
+    ACTIVE_RANGE='month';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';
     renderAll(ALL_TRANSACTIONS);
     initMerchantAutoNotes();
     const mb=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='Maybank').length,oc=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='OCBC').length,bca=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='BCA').length;
