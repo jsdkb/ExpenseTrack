@@ -625,6 +625,7 @@
         font-family: inherit; font-size: 10px; font-weight: 700; color: #000;
       }
       .tx-action.split { background: var(--beige); }
+      .tx-action.category { background: #8aa0c4; }
       .tx-action.delete { background: #e07070; color: #2a0a0a; }
       .tx-swipe-content {
         position: relative; display: flex; align-items: center; justify-content: space-between;
@@ -2612,6 +2613,7 @@ function renderAll(txns){
         <div class="tx-swipe-row">
           <div class="tx-swipe-actions">
             <button class="tx-action split" data-action="split" data-id="${safeId}"><span>👥</span><span>Split</span></button>
+            <button class="tx-action category" data-action="category" data-id="${safeId}" data-cat="${escH(t.category||'')}"><span>🏷️</span><span>Category</span></button>
             <button class="tx-action delete" data-action="delete" data-id="${safeId}"><span>🗑</span><span>Delete</span></button>
           </div>
           <div class="tx-swipe-content">
@@ -2779,7 +2781,7 @@ $('exportBtn').addEventListener('click', exportToExcel);
    no re-binding after that.
    ══════════════════════════════════════════════════════════════════ */
 (function setupSwipeActions(){
-  const REVEAL = 144;
+  const REVEAL = 216;
   let activeRow = null, activeContent = null, startX = 0, startY = 0, baseX = 0, dragging = null, currentX = 0;
 
   function closeRow(row){
@@ -2839,6 +2841,7 @@ $('exportBtn').addEventListener('click', exportToExcel);
       const row = actionBtn.closest('.tx-swipe-row');
       if (actionBtn.dataset.action === 'delete') hideTransaction(id);
       else if (actionBtn.dataset.action === 'split') openSplitModal(id);
+      else if (actionBtn.dataset.action === 'category') openCatDropdown(e, id, actionBtn.dataset.cat);
       closeRow(row);
       return;
     }
