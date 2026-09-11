@@ -349,6 +349,7 @@
     .bank-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 4px; letter-spacing: 0.08em; text-transform: uppercase; }
     .bank-tag.maybank { background: rgba(0,180,130,0.14); color: #5ec8a8; border: 1px solid rgba(0,180,130,0.28); }
     .bank-tag.ocbc    { background: rgba(202,0,0,0.14);   color: #e07070; border: 1px solid rgba(202,0,0,0.28); }
+    .bank-tag.ocbccc  { background: rgba(190,100,210,0.14); color: #c58fd4; border: 1px solid rgba(190,100,210,0.28); }
     .bank-tag.bca     { background: rgba(30,120,220,0.14); color: #6eaaee; border: 1px solid rgba(30,120,220,0.28); }
     .bank-tag.manual  { background: rgba(200,170,80,0.14); color: #d4b86a; border: 1px solid rgba(200,170,80,0.28); }
     .add-tx-btn {
@@ -372,6 +373,7 @@
     .bpill:hover { border-color: var(--beige30); color: var(--white); }
     .bpill.active-maybank { background: rgba(0,180,130,0.14); border-color: rgba(0,180,130,0.35); color: #5ec8a8; }
     .bpill.active-ocbc    { background: rgba(202,0,0,0.14);   border-color: rgba(202,0,0,0.35);   color: #e07070; }
+    .bpill.active-ocbccc  { background: rgba(190,100,210,0.14); border-color: rgba(190,100,210,0.35); color: #c58fd4; }
     .bpill.active-bca     { background: rgba(30,120,220,0.14); border-color: rgba(30,120,220,0.35); color: #6eaaee; }
     .bpill.active-all     { background: var(--beige12); border-color: var(--beige30); color: var(--white); }
 
@@ -1032,6 +1034,7 @@ async function processMaybank(threads, onProgress){
 
 const HISTORY_START = '2026-06-01';
 const OCBC_SEARCH_Q = 'from:notifikasi@ocbc.id subject:"PEMBAYARAN DENGAN KARTU DEBIT BERHASIL"';
+const OCBC_CC_SEARCH_Q = 'from:notifikasi@ocbc.id subject:"Credit Card Transaction Notification"';
 const BCA_SEARCH_Q  = 'from:bca@bca.co.id subject:"Internet Transaction Journal"';
 
 function cleanMerchant(raw) {
@@ -1120,6 +1123,35 @@ function parseOCBCFromBody(html, msgDate) {
   };
 }
 
+function parseOCBCCreditFromBody(html, msgDate) {
+  // Grey details box holds a DD/MM/YY date cell immediately followed by
+  // a "MERCHANT NAME - CUR amount" cell, e.g. "SOME MERCHANT NAME - IDR12,345.00".
+  const m = html.match(/<td><b>(\d{2}\/\d{2}\/\d{2})<\/b><\/td>\s*<td><b>\s*([^<]+?)\s*-\s*([A-Za-z]{2,3})\s?([\d,]+(?:\.\d{2})?)\s*<\/b><\/td>/i);
+  if (!m) return null;
+  const [dd, mm, yy] = m[1].split('/').map(n => parseInt(n, 10));
+  let txDate = msgDate;
+  const d = new Date(2000 + yy, mm - 1, dd, 12, 0, 0);
+  if (!isNaN(d.getTime())) txDate = d.toISOString();
+  const merchantRaw = m[2].replace(/&amp;|&#39;/g, "'").trim();
+  const currency = m[3].toUpperCase();
+  const numStr = m[4];
+  const value = parseFloat(numStr.replace(/,/g, ''));
+  if (!value) return null;
+  const merchantClean = cleanMerchant(merchantRaw);
+  if (currency === 'IDR') {
+    return {
+      merchantRaw, merchantClean, category: categorize(merchantRaw),
+      amount: Math.round(value), amountStr: 'IDR ' + numStr,
+      status: 'Approved', txDate, type: 'transaction', bank: 'OCBC CC'
+    };
+  }
+  return {
+    merchantRaw, merchantClean, category: 'Foreign',
+    amount: null, amountOrig: value, currency, amountStr: `${currency} ${numStr}`,
+    status: 'Approved', txDate, type: 'transaction', bank: 'OCBC CC'
+  };
+}
+
 function parseBCAFromBody(html, msgDate) {
   const txt = html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
   const statusM = txt.match(/Status\s*:\s*(Successful|Failed|Pending)/i);
@@ -1193,6 +1225,9 @@ let ACTIVE_TAB='reporting';
 function setTab(t){ACTIVE_TAB=t;renderAll(getFiltered());}
 let REPORT_PERIOD='month', REPORT_MONTH=(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})(), REPORT_YEAR=null;
 let CCP_EST_FROM='', CCP_EST_TO='';
+let CCP_CARD='Maybank';
+const CC_CARDS=[{key:'Maybank',label:'Maybank CC',color:'#d4b86a'},{key:'OCBC CC',label:'OCBC CC',color:'#c58fd4'}];
+function setCCCard(k){CCP_CARD=k;renderAll(getFiltered());}
 let ACTIVE_RANGE='month',CUSTOM_FROM=null,CUSTOM_TO=null,ACTIVE_CATEGORIES=new Set(),ACTIVE_MERCHANT=null;
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1423,7 +1458,7 @@ function addCCPayment(){
   if(!date){alert('Pick a date.');return;}
   const dateTime=timeVal?`${date}T${timeVal}:00`:`${date}T23:59:59`;
   const arr=getCCPayments();
-  arr.push({id:'ccp_'+Date.now(),date:dateTime,note:noteVal});
+  arr.push({id:'ccp_'+Date.now(),date:dateTime,note:noteVal,card:CCP_CARD});
   arr.sort((a,b)=>new Date(a.date)-new Date(b.date));
   saveCCPaymentsArr(arr);
   renderAll(getFiltered());
@@ -1547,6 +1582,7 @@ function openAddModal(){
           <option value="Maybank">Maybank</option>
           <option value="BCA">BCA</option>
           <option value="OCBC">OCBC</option>
+          <option value="OCBC CC">OCBC CC</option>
           <option value="Cash">Cash</option>
           <option value="Other">Other</option>
         </select>
@@ -1909,9 +1945,10 @@ function renderForecast(){
 function renderCCPositionContent(){
   const hidden=getHidden();
   const excluded=getCCPosExcluded();
-  const mbAll=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='Maybank'&&t.type!=='billing'&&t.amount!=null)
+  const card=CC_CARDS.find(c=>c.key===CCP_CARD)||CC_CARDS[0];
+  const mbAll=ALL_TRANSACTIONS_RAW.filter(t=>t.bank===card.key&&t.type!=='billing'&&t.amount!=null)
     .sort((a,b)=>new Date(a.txDate||a.msgDate||0)-new Date(b.txDate||b.msgDate||0));
-  const payments=getCCPayments();
+  const payments=getCCPayments().filter(p=>(p.card||'Maybank')===card.key);
   const lastPayment=payments.length?payments[payments.length-1]:null;
   const lastPayDate=lastPayment?new Date(lastPayment.date):null;
   const sinceLastPay=mbAll.filter(t=>{
@@ -1983,16 +2020,18 @@ function renderCCPositionContent(){
     </div>`;
   }
 
+  const cardTabs=`<div class="bank-pills" style="margin-bottom:14px">${CC_CARDS.map(c=>`<button class="bpill ${c.key===card.key?(c.key==='OCBC CC'?'active-ocbccc':'active-maybank'):''}" onclick="setCCCard('${c.key}')">${c.label}</button>`).join('')}</div>`;
   return`
+    ${cardTabs}
     <div class="hero">
-      <div class="glass hero-main" style="border-left:2px solid #d4b86a55">
-        <div class="hero-label">Current Maybank CC Position</div>
+      <div class="glass hero-main" style="border-left:2px solid ${card.color}55">
+        <div class="hero-label">Current ${card.label} Position</div>
         <div class="hero-amount"><span>IDR</span>${Math.round(currentBalance).toLocaleString('id-ID')}</div>
-        <div class="hero-sub">${lastPayDate?`Since last payment on ${fmtPayDate(lastPayDate)} (${daysSince} day${daysSince===1?'':'s'} ago) · ${sinceLastPay.length} txn${sinceLastPay.length===1?'':'s'}${excludedCount?` · ${excludedCount} excluded`:''}`:`No payment logged yet — showing all ${mbAll.length} Maybank transactions on record`}</div>
+        <div class="hero-sub">${lastPayDate?`Since last payment on ${fmtPayDate(lastPayDate)} (${daysSince} day${daysSince===1?'':'s'} ago) · ${sinceLastPay.length} txn${sinceLastPay.length===1?'':'s'}${excludedCount?` · ${excludedCount} excluded`:''}`:`No payment logged yet — showing all ${mbAll.length} ${card.label} transactions on record`}</div>
       </div>
       <div class="glass stat-mini">
         <div class="sicon">🧾</div>
-        <div class="slabel">All-Time Maybank Txns</div>
+        <div class="slabel">All-Time ${card.label} Txns</div>
         <div class="sval">${mbAll.length}</div>
         <div class="ssub">${hiddenCount?`includes ${hiddenCount} removed from Overview`:'none removed'}</div>
       </div>
@@ -2158,7 +2197,7 @@ function renderForeignContent(allTxns, ocbcTxns){
   `;
 }
 
-const BANK_COLOR={'Maybank':'#5ec8a8','OCBC':'#e07070','BCA':'#6eaaee','Manual':'#d4b86a'};
+const BANK_COLOR={'Maybank':'#5ec8a8','OCBC':'#e07070','OCBC CC':'#c58fd4','BCA':'#6eaaee','Manual':'#d4b86a'};
 
 function detectSubscriptionCandidates(idr){
   const byM={};
@@ -2574,6 +2613,7 @@ function renderAll(txns){
               <button class="bpill ${ACTIVE_BANK==='all'?'active-all':''}" onclick="setBank('all')">All</button>
               <button class="bpill ${ACTIVE_BANK==='Maybank'?'active-maybank':''}" onclick="setBank('Maybank')">Maybank</button>
               <button class="bpill ${ACTIVE_BANK==='OCBC'?'active-ocbc':''}" onclick="setBank('OCBC')">OCBC</button>
+              <button class="bpill ${ACTIVE_BANK==='OCBC CC'?'active-ocbccc':''}" onclick="setBank('OCBC CC')">OCBC CC</button>
               <button class="bpill ${ACTIVE_BANK==='BCA'?'active-bca':''}" onclick="setBank('BCA')">BCA</button>
             </div>
           </div>
@@ -2598,7 +2638,7 @@ function renderAll(txns){
       ${txns.length===0?'<div class="empty">No transactions in this period.</div>':`
       <table class="overview-tx-table">
         <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Notes</th><th>Bank</th><th style="text-align:right">Amount</th><th style="text-align:center">Status</th><th></th></tr></thead>
-        <tbody>${txns.map(t=>{const meta=CATEGORIES[t.category]||{color:'#8a8878',icon:'📋'};const ok=/sukses|approved|successful/i.test(t.status||'');const isOCBC=t.bank==='OCBC';const isBCA=t.bank==='BCA';const isManual=t.bank==='Manual';const bankTag=isOCBC?'ocbc':isBCA?'bca':isManual?'manual':'maybank';const bankLabel=isOCBC?'OCBC':isBCA?'BCA':isManual?(t.manualBank||'Manual'):'Maybank';const isOverridden=!!getCatOverrides()[t.id];const txNote=t.note||'';const safeId=escH(t.id||'');const sp=t.splitInfo;const splitSub=sp?`<br><span class="sub split-badge">👥 split ${sp.people}w · ${sp.paidCount} paid · was ${fmtIDR(sp.originalAmount)}</span>`:'';return`<tr>
+        <tbody>${txns.map(t=>{const meta=CATEGORIES[t.category]||{color:'#8a8878',icon:'📋'};const ok=/sukses|approved|successful/i.test(t.status||'');const isOCBC=t.bank==='OCBC';const isOCBCCC=t.bank==='OCBC CC';const isBCA=t.bank==='BCA';const isManual=t.bank==='Manual';const bankTag=isOCBC?'ocbc':isOCBCCC?'ocbccc':isBCA?'bca':isManual?'manual':'maybank';const bankLabel=isOCBC?'OCBC':isOCBCCC?'OCBC CC':isBCA?'BCA':isManual?(t.manualBank||'Manual'):'Maybank';const isOverridden=!!getCatOverrides()[t.id];const txNote=t.note||'';const safeId=escH(t.id||'');const sp=t.splitInfo;const splitSub=sp?`<br><span class="sub split-badge">👥 split ${sp.people}w · ${sp.paidCount} paid · was ${fmtIDR(sp.originalAmount)}</span>`:'';return`<tr>
           <td class="td-date">${fmtDate(t.txDate||t.msgDate)}</td>
           <td class="td-merchant">${escH(t.merchantClean)}${isOCBC?`<br><span class="sub">Debit Card · ${t.currency||''}</span>`:t.currency&&!isOCBC?`<br><span class="sub">${escH(t.amountStr)}</span>`:isBCA&&t.merchantRaw!==t.merchantClean?`<br><span class="sub">${escH(t.merchantRaw)}</span>`:(!isOCBC&&!isBCA&&t.merchantRaw!==t.merchantClean)?`<br><span class="sub">${escH(t.merchantRaw)}</span>`:''}${splitSub}</td>
           <td><button class="cat-chip-btn${isOverridden?' overridden':''}" onclick="openCatDropdown(event,'${safeId}','${escH(t.category||'')}')" title="Click to change category"><span class="cat-chip" style="background:${meta.color}18;color:${meta.color};border:1px solid ${meta.color}30">${meta.icon} ${t.category}</span><span class="cat-edit-arrow" style="color:${meta.color}">▾</span></button></td>
@@ -2652,8 +2692,8 @@ async function load(isRefresh=false){
       mergeManualTxns();
       ACTIVE_RANGE='month';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';
       renderAll(ALL_TRANSACTIONS);initMerchantAutoNotes();
-      const mb=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='Maybank').length,oc=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='OCBC').length,bca=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='BCA').length;
-      meta.textContent=`${mb} Maybank + ${oc} OCBC + ${bca} BCA · click Refresh for latest`;
+      const mb=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='Maybank').length,oc=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='OCBC').length,occ=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='OCBC CC').length,bca=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='BCA').length;
+      meta.textContent=`${mb} Maybank + ${oc} OCBC + ${occ} OCBC CC + ${bca} BCA · click Refresh for latest`;
       if(btn)btn.disabled=false;
       return;
     }
@@ -2669,23 +2709,26 @@ async function load(isRefresh=false){
   }
   const mbQuery=`from:maybank after:${afterDate}`;
   const ocQuery=`${OCBC_SEARCH_Q} after:${afterDate}`;
+  const ocCcQuery=`${OCBC_CC_SEARCH_Q} after:${afterDate}`;
   const bcaQuery=`${BCA_SEARCH_Q} after:${afterDate}`;
   meta.textContent=isInc?'Checking for new transactions…':'First load — fetching history…';
   if(!isInc){document.getElementById('root').innerHTML=`<div class="loading"><div class="spinner"></div><div>Fetching transaction history…</div><div class="progress" id="prog"></div></div>`;}
   const sp=t=>{const e=document.getElementById('prog');if(e)e.textContent=t;};
   try{
-    sp('Searching Gmail (Maybank, OCBC, BCA)…');
-    const [mbThreads,ocThreads,bcaThreads]=await Promise.all([
-      searchThreads(mbQuery,250),searchThreads(ocQuery,250),searchThreads(bcaQuery,250)
+    sp('Searching Gmail (Maybank, OCBC, OCBC CC, BCA)…');
+    const [mbThreads,ocThreads,ocCcThreads,bcaThreads]=await Promise.all([
+      searchThreads(mbQuery,250),searchThreads(ocQuery,250),searchThreads(ocCcQuery,250),searchThreads(bcaQuery,250)
     ]);
-    sp(`Found ${mbThreads.length} Maybank + ${ocThreads.length} OCBC + ${bcaThreads.length} BCA. Fetching…`);
+    sp(`Found ${mbThreads.length} Maybank + ${ocThreads.length} OCBC + ${ocCcThreads.length} OCBC CC + ${bcaThreads.length} BCA. Fetching…`);
     const mbItems=await processMaybank(mbThreads,sp);
     const ocParsed=await fetchAndParse(ocThreads,parseOCBCFromBody,sp,'OCBC');
+    const ocCcParsed=await fetchAndParse(ocCcThreads,parseOCBCCreditFromBody,sp,'OCBC CC');
     const bcaParsed=await fetchAndParse(bcaThreads,parseBCAFromBody,sp,'BCA');
     const mbFinal=mbItems.filter(t=>(t.amount&&t.amount>0)||t.currency);
     const ocFinal=ocParsed.filter(t=>t.amountOrig&&t.amountOrig>0);
+    const ocCcFinal=ocCcParsed.filter(t=>(t.amount&&t.amount>0)||t.currency);
     const bcaFinal=bcaParsed.filter(t=>(t.amount&&t.amount>0)||t.currency);
-    let combined=[...mbFinal,...ocFinal,...bcaFinal].sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0));
+    let combined=[...mbFinal,...ocFinal,...ocCcFinal,...bcaFinal].sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0));
 
     if(isInc&&cached&&cached.data){
       const ei=new Set(cached.data.map(t=>t.id).filter(Boolean));
@@ -2714,8 +2757,8 @@ async function load(isRefresh=false){
     ACTIVE_RANGE='month';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';
     renderAll(ALL_TRANSACTIONS);
     initMerchantAutoNotes();
-    const mb=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='Maybank').length,oc=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='OCBC').length,bca=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='BCA').length;
-    meta.textContent=`Synced ${new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})} · ${mb} Maybank + ${oc} OCBC + ${bca} BCA`;
+    const mb=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='Maybank').length,oc=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='OCBC').length,occ=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='OCBC CC').length,bca=ALL_TRANSACTIONS_RAW.filter(t=>t.bank==='BCA').length;
+    meta.textContent=`Synced ${new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})} · ${mb} Maybank + ${oc} OCBC + ${occ} OCBC CC + ${bca} BCA`;
   }catch(e){
     document.getElementById('root').innerHTML=`<div class="err"><strong>Failed to load</strong><br>${escH(e.message||String(e))}<br><button class="retry" onclick="load()">Retry</button></div>`;
     meta.textContent='Error';
