@@ -2709,7 +2709,12 @@ async function load(isRefresh=false){
   }
   const mbQuery=`from:maybank after:${afterDate}`;
   const ocQuery=`${OCBC_SEARCH_Q} after:${afterDate}`;
-  const ocCcQuery=`${OCBC_CC_SEARCH_Q} after:${afterDate}`;
+  // OCBC CC is a source added after the incremental watermark was already advanced by the other
+  // banks, so its own history predates `afterDate` and would otherwise never get backfilled.
+  // Give it a one-time full-history scan until at least one OCBC CC txn has been synced.
+  const hasOcbcCcHistory=(cached?.data||[]).some(t=>t.bank==='OCBC CC');
+  const ocCcAfterDate=hasOcbcCcHistory?afterDate:HISTORY_START.replace(/-/g,'/');
+  const ocCcQuery=`${OCBC_CC_SEARCH_Q} after:${ocCcAfterDate}`;
   const bcaQuery=`${BCA_SEARCH_Q} after:${afterDate}`;
   meta.textContent=isInc?'Checking for new transactions…':'First load — fetching history…';
   if(!isInc){document.getElementById('root').innerHTML=`<div class="loading"><div class="spinner"></div><div>Fetching transaction history…</div><div class="progress" id="prog"></div></div>`;}
