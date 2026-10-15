@@ -1,6 +1,6 @@
 # ExpenseTrack — UX Guideline
 
-**Version 1.0 · 2026-10-15 · Status: approved direction, not yet implemented**
+**Version 1.0 · 2026-10-15 · Status: FINAL — approved by the user 2026-10-15**
 
 This document is the design source of truth for ExpenseTrack on web and mobile. Every UI change
 should follow it; anything that needs to break a rule here should update this file first.
@@ -994,12 +994,12 @@ Use before calling any UI change done.
 
 ## 20. Open items
 
-Functional decisions this guideline leaves to the user:
+Functional decisions, with the user's answers (2026-10-15):
 
-1. **Hide-amounts mode** — a toggle (eye icon in the top bar) that blurs all money values for use in
-   public. Recommended; needs a yes.
-2. **Bulk categorise** — long-press multi-select on mobile / checkbox column on web to set the
-   category for many rows at once. Recommended if categorising is frequent.
-3. **Budgets per category** — the progress-bar component (§8.10) is ready for it; not in scope yet.
-4. **App rename** — if ExpenseTrack becomes a wealth tracker, the wordmark (§13) changes; the system
-   itself does not.
+1. **Hide-amounts mode** — **Yes.** A toggle (eye icon in the top bar) that blurs all money values
+   for use in public.
+2. **Bulk categorise** — **Yes.** Long-press multi-select on mobile, a checkbox column on web, to
+   set the category for many rows at once.
+3. **Budgets per category** — **Later.** The progress-bar component (§8.10) is ready for it.
+4. **App rename** — **Decide later.** If ExpenseTrack becomes a wealth tracker, the wordmark (§13)
+   changes; the system itself does not.
