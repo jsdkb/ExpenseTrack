@@ -1,0 +1,29 @@
+{
+  "scope": "Dependencies observed in index.html; no installation or network validation performed",
+  "dependencies": [
+    {
+      "name": "Chart.js",
+      "version": "4.5.0",
+      "source": "https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"
+    },
+    {
+      "name": "Google Identity Services",
+      "version": null,
+      "source": "https://accounts.google.com/gsi/client",
+      "version_policy": "Vendor-managed endpoint; not pinned or reproducible offline"
+    },
+    {
+      "name": "Google Fonts (Inter 400/500/600/700, Silkscreen 400/700)",
+      "version": null,
+      "source": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Silkscreen:wght@400;700&display=swap",
+      "version_policy": "Vendor-managed stylesheet; falls back to the system font stack if unreachable"
+    },
+    {
+      "name": "Lucide icons (subset)",
+      "version": null,
+      "source": "Inline SVG sprite copied into index.html (ISC licence notice in the file)",
+      "version_policy": "Not a runtime dependency"
+    }
+  ],
+  "limitations": ["Gmail and Drive access require separate live authorization and verification", "This inventory is not a dependency lock or a clean-machine setup test"]
+}
