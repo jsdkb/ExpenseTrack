@@ -13,9 +13,9 @@
       "version_policy": "Vendor-managed endpoint; not pinned or reproducible offline"
     },
     {
-      "name": "Google Fonts (Inter 400/500/600/700, Silkscreen 400/700)",
+      "name": "Google Fonts (Inter 400/500/600/700)",
       "version": null,
-      "source": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Silkscreen:wght@400;700&display=swap",
+      "source": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
       "version_policy": "Vendor-managed stylesheet; falls back to the system font stack if unreachable"
     },
     {

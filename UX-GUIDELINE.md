@@ -1,6 +1,7 @@
 # ExpenseTrack — UX Guideline
 
-**Version 1.0 · 2026-10-15 · Status: FINAL — approved by the user 2026-10-15**
+**Version 1.1 · 2026-10-16 · Status: FINAL — v1.0 approved 2026-10-15; v1.1 ("calm private-banking"
+brand and home-screen revision) approved 2026-10-16**
 
 This document is the design source of truth for ExpenseTrack on web and mobile. Every UI change
 should follow it; anything that needs to break a rule here should update this file first.
@@ -11,8 +12,12 @@ Accounts, Month-end Close).
 
 **Visual reference:** the "Algorithmic Trading Dashboard" (OnlyGenius) by ZeeFrames, an Awwwards
 nominee (March 2026) — https://www.awwwards.com/sites/algorithmic-trading-dashboard. We borrow its
-*qualities* — near-black cards, a headline KPI row, vivid charts, a strong brand moment — not its
-layout pixel-for-pixel or its assets.
+*qualities* — near-black cards, a headline number, clear charts — not its layout or its assets.
+
+**v1.1 direction — "calm private-banking" (user, 2026-10-16):** the v1.0 pixel wordmark, glitch,
+orange→violet glow and 8-bit art read as a gamer aesthetic. v1.1 replaces them with a restrained,
+institutional look: one typeface, a geometric monogram, solid accent colour used sparingly, no glow
+anywhere, and a home screen organised like a financial statement rather than a row of tiles.
 
 > **Privacy rule applies to this file too.** The repo is public. Every number, merchant and date in
 > the examples below is a placeholder. Never paste real figures into this guideline or into mockups
@@ -34,7 +39,7 @@ layout pixel-for-pixel or its assets.
 10. [Mobile patterns](#10-mobile-patterns)
 11. [Screen blueprints](#11-screen-blueprints)
 12. [States: loading, empty, error, offline](#12-states-loading-empty-error-offline)
-13. [Brand moments](#13-brand-moments)
+13. [Brand (v1.1)](#13-brand-v11)
 14. [Content, numbers & formatting](#14-content-numbers--formatting)
 15. [Motion](#15-motion)
 16. [Accessibility](#16-accessibility)
@@ -51,8 +56,8 @@ layout pixel-for-pixel or its assets.
    thing on screen. If a decoration competes with a figure, the decoration loses.
 2. **Answer the question in one glance.** Every screen opens with the answer to its main question
    ("How much have I spent this month?", "What do I owe and when?") before any detail.
-3. **Calm daily, loud rarely.** Bold branding (pixel wordmark, orange→violet glow) is reserved for
-   sign-in, first sync and empty states. Screens you look at every day stay calm.
+3. **Calm everywhere.** The brand is quiet: an Inter wordmark and a monogram, never glow, pixel art
+   or decorative gradients. Confidence comes from typography, spacing and alignment.
 4. **Colour means something.** Accent = interactive. Category colours = the same category everywhere.
    Green/red = good/bad *for you*, not up/down.
 5. **Same app, two postures.** Web is for analysis (wide, side-by-side, hover detail). Mobile is for
@@ -69,7 +74,7 @@ layout pixel-for-pixel or its assets.
 
 | Topic | Decision | Why |
 |---|---|---|
-| Direction | "Calm terminal" — dark, sleek cards; vivid charts | User liked the reference's dark cards, KPI row, colourful charts and bold branding |
+| Direction | "Calm private-banking" (v1.1) — dark, sleek cards; restrained colour; statement-style home | v1.0 "calm terminal" + bold branding read as gamer; user asked for more professional (2026-10-16) |
 | Primary accent | Blue-violet | Closest to the reference; user's choice |
 | Navigation | Web: left sidebar. Mobile: bottom tab bar | Best usability for 4–5 top-level sections: always visible, one thumb-tap away. Hamburger menus measurably reduce navigation use |
 | Feel / density | Balanced | User's choice: generous cards, but the key numbers and lists visible without much scrolling |
@@ -78,8 +83,8 @@ layout pixel-for-pixel or its assets.
 | Home KPIs | Spend-first: This month spend · CC outstanding/due · Avg per month · Biggest category | User's choice |
 | Mobile jobs | Quick status, categorise & notes, review subscriptions, full reports | User uses the phone for all four — so mobile must be complete, not a lite version |
 | Scope | ExpenseTrack only, full future IA planned | User's choice |
-| Branding placement | Sign-in, first sync, empty states, small sidebar wordmark | Designer's call (delegated): keeps daily screens calm so numbers stand out |
-| Font | Inter (UI) + Silkscreen (wordmark only) | Designer's call; see §6 |
+| Branding placement | Monogram + Inter wordmark in the sidebar, sign-in and loader; nothing decorative | Designer's call (delegated), revised in v1.1 |
+| Font | Inter only (UI and wordmark) | v1.1 dropped Silkscreen; see §6 |
 | Currency display | `Rp` prefix in UI; `IDR` only where currencies sit side by side | Local convention, shorter; see §14 |
 
 ---
@@ -104,7 +109,7 @@ layout pixel-for-pixel or its assets.
 
 ```
 ┌──────────────────────┐
-│ ▣ EXPENSETRACK       │  ← small pixel wordmark (brand), 56px tall area
+│ ▣ ExpenseTrack       │  ← monogram + Inter 600 wordmark, 56px tall area
 ├──────────────────────┤
 │ ◎ Overview           │  ← active: accent-soft fill, accent-text label, 3px left bar
 │ ◔ Spending           │
@@ -213,8 +218,8 @@ Dark mode shows depth with **lighter surfaces, not shadows**. Only `--surface-3`
 | `--accent-hover` | `#6C6CFF` | `#4338CA` | Hover/pressed fill |
 | `--accent-text` | `#9A9AFF` | `#4338CA` | Links, active nav label, accent text on dark surfaces |
 | `--accent-soft` | `rgba(108,108,255,0.14)` | `rgba(79,70,229,0.10)` | Active nav background, selected chip |
-| `--grad-primary` | `linear-gradient(135deg,#3B82F6 0%,#7C5CFF 100%)` | same | Main trend chart line/fill, progress bars |
-| `--grad-brand` | `radial-gradient(120% 120% at 50% 100%,#FF5A1F 0%,#C2410C 35%,#4C1D95 75%,#0A0A0F 100%)` | same | Brand moments only (§13) |
+| `--grad-primary` | `linear-gradient(135deg,#3B82F6 0%,#7C5CFF 100%)` | same | Retired in v1.1 — charts and progress bars use solid `--accent` (fill at 16% fading to 0) |
+| `--brand-panel` | `#0C0D14` + 1px ledger grid at 4% | same (the panel stays dark in both themes) | Sign-in left panel only (§11.1). v1.1 removed `--grad-brand` |
 
 ### 5.3 Colour — semantic
 
@@ -289,8 +294,8 @@ muted `CATEGORIES` colours with a vivid set tuned for the dark UI.
 - **Inter** (Google Fonts, weights 400/500/600/700) for everything. Enable tabular figures on all
   numbers: `font-variant-numeric: tabular-nums;` — every digit is the same width, so amounts line up
   and don't jitter when they change.
-- **Silkscreen** (Google Fonts, 400/700) — pixel font, **wordmark and brand moments only**. Never for
-  body text, numbers or buttons.
+- **Wordmark:** Inter 600, mixed case "ExpenseTrack", −0.01em tracking, next to the monogram (§13).
+  v1.1 removed the Silkscreen pixel font entirely.
 - Fallback stack: `Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`.
 
 **Scale**
@@ -310,8 +315,8 @@ muted `CATEGORIES` colours with a vivid set tuned for the dark UI.
 - Form inputs on mobile use **16px** text — anything smaller makes iOS Safari zoom the page on focus.
 - Currency prefix inside a KPI renders at 60% of the value size in `--text-2`
   (e.g. <small>Rp</small> **12.345.678**).
-- Sentence case everywhere ("Biggest category", not "BIGGEST CATEGORY"). Uppercase only for the pixel
-  wordmark and sidebar group labels (`micro`, 0.08em tracking, `--text-3`).
+- Sentence case everywhere ("Biggest category", not "BIGGEST CATEGORY"). Uppercase only for sidebar
+  group labels and statement-strip labels (`micro`, 0.08em tracking, `--text-3`).
 
 ---
 
@@ -454,7 +459,7 @@ Esc closes, focus returns to the trigger. On mobile every menu becomes a bottom 
 Borrowed from the reference's "Certification progress tracker", used for paid-through progress,
 budget usage (future) and the Month-end Close stepper.
 
-- Track 8px, `--surface-2`, pill radius; fill `--grad-primary`; value label right-aligned above.
+- Track 6px, `--surface-2`, pill radius; fill solid `--accent`; value label right-aligned above.
 - Over 100% (e.g. over budget): fill turns `--bad`, overflow shown as a striped segment.
 - Stepper: numbered dots joined by a line; done = `--good` check, current = `--accent` ring,
   upcoming = `--text-3`.
@@ -496,7 +501,7 @@ matches automatically.
 
 | Question | Chart | Notes |
 |---|---|---|
-| How is spend trending over time? | **Area line** with `--grad-primary` fill (fades to 0% at the bottom) | Hero chart of Overview and Spending — echoes the reference's "Equity overview" |
+| How is spend trending over time? | **Area line**, solid `--accent` 2px line, accent fill 16% fading to 0 | Inside the Overview summary panel and on Spending |
 | Which months were high/low? | **Vertical bars**, single colour (`--accent`), current month highlighted, others at 55% opacity | |
 | Where does the money go? | **Ranked horizontal bars** in category colours, value + % on the right | Primary category view. Replaces donuts as the main breakdown |
 | Share at a glance | Small **donut** (≤ 6 slices + "Other"), 60% cutout, total in the centre | Secondary only, never the sole breakdown |
@@ -588,72 +593,95 @@ stay in a "To cancel" group until they stop appearing.
 
 Wireframes are structural, not pixel-exact. All numbers are placeholders.
 
-### 11.1 Sign-in (brand moment)
+### 11.1 Sign-in
 
-**Web**
+**Web (≥ 1024): split screen**
 ```
-┌───────────────────────────────────────────────────────────────┐
-│                 (--grad-brand glow fills the lower half)      │
-│                                                               │
-│                 E X P E N S E T R A C K   (Silkscreen 64px)   │
-│              Your cards, spending and wealth — in one place.  │
-│                                                               │
-│                    [  G  Continue with Google  ]              │
-│        Read-only Gmail + private app storage in your Drive.   │
-│     "Google hasn't verified this app" may appear — expected.  │
-└───────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────┬────────────────────────────────┐
+│ ▣ ExpenseTrack                   │                                │
+│ (--brand-panel, faint 1px grid)  │   Sign in                      │
+│                                  │   Use the Google account that  │
+│ Your spending, cards and wealth, │   receives your bank emails.   │
+│ in one place.                    │                                │
+│                                  │   [ Continue with Google ]     │
+│ ✓ Read-only Gmail                │                                │
+│ ✓ Private storage in your Drive  │   ▸ Why these permissions?     │
+│ ✓ No servers — runs in browser   │   "Google hasn't verified…"    │
+│                                  │                                │
+│ Private app · your data stays    │                                │
+│ in your own Google account       │                                │
+└──────────────────────────────────┴────────────────────────────────┘
 ```
-**Mobile:** same stack, wordmark 32px, button full width, explanation text collapsible
-("Why these permissions?").
+- Left panel 55%, `--brand-panel`, headline 36/44 600 in the dark-panel text colour, trust lines
+  `body` with a 16px `check` icon in `--accent-text`.
+- Right side `--bg`; content max 360px, vertically centred. The button is primary (`--accent`).
+- **Mobile / tablet:** a single column — monogram + wordmark, headline (24px), trust lines, then the
+  button full width. The explanation stays collapsible.
+- No glow, no animation beyond the standard fade-in.
 
-### 11.2 Overview (home)
+### 11.2 Overview (home) — v1.1 "statement" layout
+
+Question: *"Where do I stand this month?"* The page reads top-down like a statement: one headline
+figure with its trend, a strip of supporting figures, then detail.
 
 **Web (lg)**
 ```
 ┌ Sidebar ┐┌────────────────────────────────────────────────────────────────┐
-│         ││ Overview                          [This month ▾] [+ Add] [⟳]   │
-│         ││ Your spending at a glance                                       │
-│         ││┌──────────┐┌──────────┐┌──────────┐┌──────────┐                │
-│         │││This month││CC owed   ││Avg/month ││Biggest   │  ← KPI row     │
-│         │││Rp 12,3 jt││Rp 8,1 jt ││Rp 10,9 jt││[Food]    │                │
-│         │││▲ 8%      ││Due in 6d ││12 months ││Rp 3,2 jt │                │
-│         ││└──────────┘└──────────┘└──────────┘└──────────┘                │
-│         ││┌─ Spend trend ───────[6 mo ▾]─┐┌─ Where it went ──────────┐   │
-│         │││   area chart (8 cols)         ││ ranked category bars     │   │
-│         │││                               ││ (4 cols), top 6 + Other  │   │
-│         ││└───────────────────────────────┘└──────────────────────────┘   │
-│         ││┌─ Transactions ────────[search][filter]──────────────────────┐ │
-│         │││ table (12 cols), 50 rows, Show more                          │ │
-│         ││└──────────────────────────────────────────────────────────────┘ │
-│         ││┌─ Recurring charges to review (3) ───────────────[See all]───┐ │
-│         ││└──────────────────────────────────────────────────────────────┘ │
+│         ││ Good afternoon                  [This month ▾] [+ Add] [◉] [⟳] │
+│         ││ Thursday, 16 October · Synced 2 min ago                         │
+│         ││ (bank chips / active filter chips)                              │
+│         ││┌─ Summary panel (12) ──────────┬───────────────────────────────┐│
+│         │││ SPENT · THIS MONTH            │ Spend trend      [6 mo|12|All]││
+│         │││ Rp 12.345.678 (display)       │                               ││
+│         │││ ▼ 8% vs same days last month  │  area chart (accent, 220px)   ││
+│         │││ On pace for Rp 18,2 jt        │                               ││
+│         │││ ███████░░░ day 16 of 31       │                               ││
+│         │││ Daily average · Transactions  │                               ││
+│         ││└───────────────────────────────┴───────────────────────────────┘│
+│         ││┌─ Statement strip (12): 3 cells split by 1px rules ────────────┐│
+│         │││ CARDS OWED      │ AVERAGE PER MONTH │ BIGGEST CATEGORY         ││
+│         │││ Rp 8,1 jt       │ Rp 10,9 jt        │ [■] Food & Dining        ││
+│         ││└───────────────────────────────────────────────────────────────┘│
+│         ││┌─ Where it went (7) ─────────────┐┌─ Card status (5) ──────────┐│
+│         │││ ranked category bars, top 6     ││ Maybank CC     Rp 1,7 jt   ││
+│         │││                                 ││ Last paid 12 Sep · 34 d    ││
+│         │││                                 ││ OCBC CC        Rp 3,0 jt   ││
+│         │││                                 ││ No payment logged (warn)   ││
+│         ││└─────────────────────────────────┘└────────────────────────────┘│
+│         ││ Transactions (12) · Recurring charges (12)                      │
 └─────────┘└────────────────────────────────────────────────────────────────┘
 ```
+- The greeting follows local time (morning before 12:00, afternoon before 18:00, then evening).
+  No name.
+- Summary panel: one card with one divider. Left: `display` figure (40/44, 600, tabular), delta
+  line, pace line, a 6px bar for the share of the month elapsed, and two small facts. Right: the
+  trend chart with its range control.
+- Statement strip: one card, cells split by 1px `--border` rules, labels uppercase `micro`, values
+  `kpi` size, sub-lines `small`. Each cell is a button (cards owed → Credit cards, average →
+  Spending, biggest category → category filter).
+- Card status: one row per card — name, amount owed (right), "Last paid 12 Sep · 34 days ago" or a
+  `--warn` "No payment logged yet"; footer link "Open credit cards".
+- No coloured icon squares on summary figures (v1.1); icons stay in card headers only.
 
 **Mobile**
 ```
 ┌─────────────────────────────┐
-│ Overview   ●  [This month▾] +│
+│ Overview  [This month▾] ● ◉ +│
 ├─────────────────────────────┤
-│ ┌────────────┐┌────────────┐│
-│ │This month  ││CC owed     ││  2×2 KPIs = the quick status,
-│ │Rp 12,3 jt  ││Rp 8,1 jt   ││  fully above the fold
-│ │▲ 8%        ││Due in 6d   ││
-│ └────────────┘└────────────┘│
-│ ┌────────────┐┌────────────┐│
-│ │Avg/month   ││Biggest     ││
-│ └────────────┘└────────────┘│
+│ Good afternoon · 16 Oct      │
+│ ┌ Summary ─────────────────┐│
+│ │ SPENT · THIS MONTH        ││
+│ │ Rp 12,3 jt   ▼ 8%         ││
+│ │ On pace for Rp 18,2 jt    ││
+│ │ ███████░░░                ││
+│ │ area chart 160px          ││
+│ └───────────────────────────┘│
+│ ┌ Statement strip (3 rows) ┐│
 │ ┌ 3 recurring to review   ›┐│
-│ ┌ Spend trend ─────[6 mo▾]─┐│
-│ │ area chart, 200px        ││
-│ └──────────────────────────┘│
 │ ┌ Where it went ───────────┐│
-│ │ top 5 ranked bars        ││
-│ └──────────────────────────┘│
+│ ┌ Card status ─────────────┐│
 │ Today                -Rp 120rb│
-│ [■] Merchant      -Rp 85.000 │  ← swipeable rows
-│ [■] Merchant      -Rp 35.000 │
-│ Yesterday ...                │
+│ [■] Merchant      -Rp 85.000 │
 ├─────────────────────────────┤
 │ Overview Spending Cards More │
 └─────────────────────────────┘
@@ -688,7 +716,7 @@ Credit Cards                       [Card: All ▾]  [This cycle ▾]
 ```
 
 - **Card switcher:** "All cards" + each card detected (bank short code + last 4 digits). On mobile
-  it is a horizontal scroll of card "tiles" (credit-card shaped, 160×96, subtle `--grad-primary`
+  it is a horizontal scroll of card "tiles" (credit-card shaped, 160×96, subtle `--accent`
   edge on the selected one).
 - **History:** paid-through timeline as a vertical list of statement cycles with status badges.
 - **Foreign currency:** FX rate inputs as an editable list (currency code · rate · last updated),
@@ -751,11 +779,11 @@ everything else stays in the Drive appData file as today.
 
 | State | Pattern |
 |---|---|
-| **First load (no cache)** | Full-page brand loader: pixel wordmark + a thin `--grad-primary` progress line + live step text ("Reading Gmail… 240 / 592"). |
+| **First load (no cache)** | Full-page loader: monogram + wordmark, a thin `--accent` progress line and live step text ("Reading Gmail… 240 / 592"). |
 | **Load with cache** | Render cached data instantly; sync status shows "Syncing…"; changed numbers update in place with a 200ms fade (no count-up). |
 | **Card loading** | Skeleton blocks matching the final layout, `--surface-2` with a subtle 1.2s shimmer; disabled under reduced motion. Never a spinner in the middle of an empty card. |
 | **Empty (no data in period)** | Inside the card: 40px `--text-3` icon, one line ("No spending this week"), one action ("Show this month"). |
-| **Empty (brand-new user)** | Brand moment (§13): pixel illustration, "Connect your first card", primary action "Run first sync". |
+| **Empty (brand-new user)** | Calm card: `inbox` icon in an `--accent-soft` circle, one line of explanation, primary action "Run first sync". No illustration, no glow. |
 | **Error (card-level)** | Card keeps its frame; message in `--text-2` + "Retry" ghost button. |
 | **Error (app-level)** | Banner at top of content, `--bad` soft background, cause + one action. |
 | **Offline** | `--warn` banner: "You're offline — showing data from 14 Oct, 09:12". Edits queue and sync when back; queued count shown in the sync pill. |
@@ -763,22 +791,21 @@ everything else stays in the Drive appData file as today.
 
 ---
 
-## 13. Brand moments
+## 13. Brand (v1.1)
 
-Where the reference's bold personality lives — and **only** here:
+The brand is deliberately quiet:
 
-1. **Sign-in screen** — `--grad-brand` glow, Silkscreen wordmark 64px (32 mobile), a subtle
-   "glitch" (2-frame horizontal offset of the wordmark, once, 300ms) on load.
-2. **First sync loader** — wordmark + gradient progress line.
-3. **Brand-new-user empty state** — small pixel illustration (inline SVG, 8-bit card + coin), glow
-   behind it at 40% strength.
-4. **Sidebar wordmark** — Silkscreen 14px, `--text-1`, no glow. A tiny pixel logomark (5×5 grid "E")
+1. **Monogram** — a rounded square (radius 22%) in `--accent` holding three white horizontal bars
+   (100% / 70% / 100% width, left-aligned): an abstract "E" that also reads as ledger lines. It
    doubles as the favicon / home-screen icon.
-5. **Month closed** (Phase 3) — one-time confetti-free celebration: the stepper fills with the brand
-   gradient and the wordmark glitches once.
+2. **Wordmark** — "ExpenseTrack" in Inter 600, −0.01em, `--text-1`; 15px in the sidebar, 18px on
+   sign-in and the loader.
+3. **Sign-in** — the split layout in §11.1. The only "brand surface" is the dark `--brand-panel`
+   with a faint ledger grid.
+4. **Month closed** (Phase 3) — the stepper fills with `--good`, plus a calm confirmation toast.
 
-Never: gradients on KPI cards, glow behind numbers, pixel font for data, animated backgrounds on
-daily screens.
+Never: glow, pixel fonts or pixel art, gradients on cards or text, glitch or other decorative
+animation, gradients behind numbers.
 
 ---
 
@@ -833,7 +860,7 @@ one decimal below (`▲ 2.4%`). Comparison basis must always be stated once per 
 - Animate `transform` and `opacity` only.
 - Page/tab switches: content cross-fade 200ms, no sliding pages on web; on mobile a 12px upward
   fade-in.
-- `prefers-reduced-motion: reduce` → durations to 0, shimmer off, glitch off, charts render without
+- `prefers-reduced-motion: reduce` → durations to 0, shimmer off, charts render without
   animation.
 
 ---
@@ -925,7 +952,7 @@ function applyChartTheme() {
 
 Record in `browser-dependencies.json` when added:
 
-- Google Fonts: Inter (400/500/600/700), Silkscreen (400/700) — one `<link>` with `display=swap`.
+- Google Fonts: Inter (400/500/600/700) — one `<link>` with `display=swap` (Silkscreen dropped in v1.1).
 - Lucide icons — **not** a runtime dependency; the needed SVGs are copied into an inline sprite
   (ISC licence notice in a comment).
 
@@ -968,7 +995,7 @@ Use before calling any UI change done.
 - [ ] Category colours/icons match §5.4
 - [ ] Deltas coloured by meaning, with arrow + sign
 - [ ] No emoji; icons from the sprite
-- [ ] Brand gradient / pixel font only in §13 places
+- [ ] No glow, pixel font or decorative gradient anywhere (§13)
 
 **Layout**
 - [ ] Checked at 375, 768, 1024 and 1440px widths

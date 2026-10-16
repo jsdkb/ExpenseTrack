@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>ExpenseTrack</title>
   <meta name="theme-color" content="#0A0A0F">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 7' shape-rendering='crispEdges'%3E%3Crect width='7' height='7' rx='1.4' fill='%235B5BF0'/%3E%3Cpath fill='%23fff' d='M1 1h5v1H1zM1 3h4v1H1zM1 5h5v1H1zM1 2h1v3H1z'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5.3' fill='%235B5BF0'/%3E%3Crect x='6' y='6.9' width='12' height='2.2' rx='1.1' fill='%23fff'/%3E%3Crect x='6' y='10.9' width='8.4' height='2.2' rx='1.1' fill='%23fff'/%3E%3Crect x='6' y='14.9' width='12' height='2.2' rx='1.1' fill='%23fff'/%3E%3C/svg%3E">
   <script>
     // Theme + hide-amounts set before first paint (per-device conveniences, not personal data — §17.5).
     (function(){
@@ -18,7 +18,7 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     /* ══════════════════════════════════════════════════════════════════
        DESIGN TOKENS — UX-GUIDELINE.md §5. Dark is the default; light
@@ -44,7 +44,10 @@
       --accent-soft: rgba(108,108,255,0.14);
       --on-accent: #FFFFFF;
       --grad-primary: linear-gradient(135deg,#3B82F6 0%,#7C5CFF 100%);
-      --grad-brand: radial-gradient(120% 120% at 50% 100%,#FF5A1F 0%,#C2410C 35%,#4C1D95 75%,#0A0A0F 100%);
+      --brand-panel: #0C0D14;      /* sign-in panel — stays dark in both themes (§13) */
+      --on-brand-1: #F4F4F7;
+      --on-brand-2: #B4B4C2;
+      --on-brand-3: #8A8A98;
 
       --good: #34D399;  --good-soft: rgba(52,211,153,0.14);
       --bad: #F87171;   --bad-soft: rgba(248,113,113,0.14);
@@ -71,7 +74,6 @@
       --ease-out: cubic-bezier(.2,.8,.2,1);
 
       --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      --font-brand: 'Silkscreen', 'Inter', monospace;
       color-scheme: dark;
     }
     :root[data-theme="light"] {
@@ -144,9 +146,9 @@
       display: flex; flex-direction: column; padding: 0 12px 12px;
     }
     .sb-brand { height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 8px; color: var(--text-1); }
-    .sb-brand .wordmark { font-size: 14px; }
-    .logomark { width: 20px; height: 20px; flex-shrink: 0; }
-    .wordmark { font-family: var(--font-brand); letter-spacing: 0.04em; text-transform: uppercase; }
+    .sb-brand .wordmark { font-size: 15px; }
+    .logomark { width: 22px; height: 22px; flex-shrink: 0; display: block; }
+    .wordmark { font-weight: 600; letter-spacing: -0.01em; }
     .sb-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
     .sb-group { font-size: 11px; line-height: 14px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
       color: var(--text-3); padding: 14px 12px 6px; }
@@ -220,16 +222,13 @@
     .kpi { display: flex; flex-direction: column; gap: 6px; position: relative; }
     .kpi-label { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 16px; font-weight: 500;
       letter-spacing: 0.02em; color: var(--text-3); }
-    .kpi-icon { width: 24px; height: 24px; border-radius: 7px; background: var(--surface-2); color: var(--text-2);
-      display: inline-flex; align-items: center; justify-content: center; }
-    .kpi-icon svg.i { width: 14px; height: 14px; }
     .kpi-value { font-size: 28px; line-height: 32px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .kpi-value .cur { font-size: 0.6em; color: var(--text-2); font-weight: 500; margin-right: 4px; letter-spacing: 0; }
     .kpi-sub { font-size: 13px; line-height: 18px; color: var(--text-2); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .kpi-sub .vs { color: var(--text-3); }
     .delta { font-weight: 600; white-space: nowrap; }
     .delta.good { color: var(--good); } .delta.bad { color: var(--bad); } .delta.neutral { color: var(--text-2); }
-    .compact { display: none; }
+    .m-compact { display: none; }
 
     /* ── Buttons — §8.3 ─────────────────────────────────────────────── */
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 14px;
@@ -402,10 +401,10 @@
     .rank-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rank-val { font-size: 14px; font-weight: 600; text-align: right; white-space: nowrap; }
     .rank-val small { font-size: 12px; color: var(--text-3); font-weight: 500; margin-left: 6px; }
-    .rank-bar { grid-column: 2 / 4; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+    .rank-bar { grid-column: 2 / 4; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
     .rank-bar > i { display: block; height: 100%; border-radius: 999px; }
-    .progress { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
-    .progress > i { display: block; height: 100%; border-radius: 999px; background: var(--grad-primary); transition: width 400ms var(--ease-out); }
+    .progress { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+    .progress > i { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width 400ms var(--ease-out); }
     .progress.over > i { background: var(--bad); }
     .stackbar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; gap: 2px; background: var(--surface-2); }
     .stackbar > i { display: block; height: 100%; }
@@ -503,34 +502,77 @@
     .empty .e-title { font-size: 14px; color: var(--text-2); }
     .card-error { display: flex; align-items: center; gap: 12px; color: var(--text-2); font-size: 14px; }
 
-    /* ── Brand moments — §13 ───────────────────────────────────────── */
-    .auth { position: fixed; inset: 0; z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 24px;
-      background: var(--bg); overflow: hidden; }
-    .auth-glow { position: absolute; left: -20%; right: -20%; bottom: -35%; height: 85%; background: var(--grad-brand); filter: blur(40px); opacity: 0.9; pointer-events: none; }
-    .auth-inner { position: relative; text-align: center; max-width: 560px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
-    .auth .wordmark { font-size: 64px; line-height: 1; color: #F4F4F7; }
-    .auth-tag { font-size: 16px; line-height: 24px; color: #C9C9D3; }
-    .auth .btn { height: 48px; padding: 0 22px; font-size: 15px; margin-top: 18px; background: #F4F4F7; color: #0E0E14; }
-    .auth .btn:hover { background: #fff; }
-    .auth-note { font-size: 13px; line-height: 18px; color: #A1A1AE; max-width: 420px; }
-    .auth-note summary { cursor: pointer; color: #C9C9D3; }
-    .auth-status { font-size: 13px; color: #FBBF24; min-height: 18px; }
-    .glitch { animation: glitch 300ms steps(2) 300ms 1; }
-    @keyframes glitch {
-      0% { transform: translateX(0); text-shadow: none; }
-      50% { transform: translateX(3px); text-shadow: -3px 0 #FF5A1F, 3px 0 #7C5CFF; }
-      100% { transform: translateX(0); text-shadow: none; }
-    }
+    /* ── Brand (v1.1, §13) — sign-in split screen, loader, empty state ── */
+    .auth { position: fixed; inset: 0; z-index: 4000; display: grid; grid-template-columns: 55fr 45fr;
+      background: var(--bg); overflow: auto; }
+    .auth-panel { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 40px;
+      padding: 40px 56px; background-color: var(--brand-panel); color: var(--on-brand-1);
+      background-image: linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 100% 40px, 40px 100%; border-right: 1px solid rgba(255,255,255,0.06); overflow: hidden; }
+    .auth-panel::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(120% 90% at 0% 0%, transparent 40%, var(--brand-panel) 100%); }
+    .auth-panel > * { position: relative; z-index: 1; }
+    .auth-brand { display: flex; align-items: center; gap: 10px; }
+    .auth-brand .wordmark { font-size: 18px; color: var(--on-brand-1); }
+    .auth-brand .logomark { width: 28px; height: 28px; }
+    .auth-head { font-size: 36px; line-height: 44px; font-weight: 600; letter-spacing: -0.02em; max-width: 520px; color: var(--on-brand-1); }
+    .auth-points { list-style: none; margin-top: 28px; display: flex; flex-direction: column; gap: 14px; color: var(--on-brand-2); font-size: 15px; line-height: 22px; }
+    .auth-points li { display: flex; gap: 12px; align-items: flex-start; }
+    .auth-points svg.i { width: 18px; height: 18px; color: #9A9AFF; margin-top: 2px; }
+    .auth-foot { font-size: 13px; color: var(--on-brand-3); }
+    .auth-side { display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
+    .auth-card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; animation: fade-in var(--dur-slow) var(--ease-out); }
+    .auth-title { font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: -0.01em; }
+    .auth-sub { color: var(--text-2); font-size: 14px; line-height: 20px; }
+    .auth-btn { height: 48px; width: 100%; margin-top: 14px; font-size: 15px; }
+    .auth-note { font-size: 13px; line-height: 18px; color: var(--text-2); margin-top: 6px; }
+    .auth-note summary { cursor: pointer; color: var(--text-1); }
+    .auth-status { font-size: 13px; color: var(--warn); min-height: 18px; }
+
     .brand-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-height: 60vh; text-align: center; }
-    .brand-loader .wordmark { font-size: 28px; color: var(--text-1); }
-    .loader-line { width: 240px; height: 3px; border-radius: 3px; background: var(--surface-2); overflow: hidden; position: relative; }
-    .loader-line > i { position: absolute; top: 0; bottom: 0; width: 40%; background: var(--grad-primary); border-radius: 3px; animation: indet 1.4s var(--ease-out) infinite; }
+    .brand-loader .lockup { display: flex; align-items: center; gap: 10px; }
+    .brand-loader .wordmark { font-size: 18px; color: var(--text-1); }
+    .brand-loader .logomark { width: 28px; height: 28px; }
+    .loader-line { width: 220px; height: 3px; border-radius: 3px; background: var(--surface-2); overflow: hidden; position: relative; }
+    .loader-line > i { position: absolute; top: 0; bottom: 0; width: 40%; background: var(--accent); border-radius: 3px; animation: indet 1.4s var(--ease-out) infinite; }
     @keyframes indet { from { left: -40%; } to { left: 100%; } }
     .loader-step { font-size: 13px; color: var(--text-2); min-height: 18px; }
-    .brand-empty { position: relative; overflow: hidden; text-align: center; padding: 48px 24px; }
-    .brand-empty .glow { position: absolute; left: 10%; right: 10%; bottom: -60%; height: 100%; background: var(--grad-brand); filter: blur(50px); opacity: 0.4; pointer-events: none; }
-    .brand-empty > * { position: relative; }
-    .pixel-art { width: 96px; height: 72px; image-rendering: pixelated; }
+    .empty-ring { width: 56px; height: 56px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-text);
+      display: inline-flex; align-items: center; justify-content: center; }
+
+    /* ── Overview v1.1: summary panel, statement strip, card status (§11.2) ── */
+    .eyebrow { font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+    .summary { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); padding: 0; }
+    .summary-l { padding: 24px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .summary-r { padding: 20px 20px 16px; min-width: 0; display: flex; flex-direction: column; }
+    .summary-r .card-head { margin-bottom: 12px; }
+    .summary .chart-box { height: 220px; flex: 1; }
+    .display { font-size: 40px; line-height: 44px; font-weight: 600; letter-spacing: -0.025em; font-variant-numeric: tabular-nums;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+    .display .cur, .strip-val .cur { font-size: 0.5em; color: var(--text-2); font-weight: 500; letter-spacing: 0; margin-right: 6px; vertical-align: 0.4em; }
+    .summary-line { font-size: 14px; line-height: 20px; color: var(--text-2); }
+    .summary-line b { color: var(--text-1); font-weight: 600; }
+    .summary-line .vs { color: var(--text-3); }
+    .pace { margin-top: 8px; }
+    .pace-meta { display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: var(--text-3); margin-top: 6px; }
+    .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+    .facts dd { font-size: 15px; line-height: 20px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .page-head.greet { margin-bottom: 16px; }
+    .mob-greet { font-size: 13px; color: var(--text-2); margin: 0 0 10px; }
+
+    .strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 0; overflow: hidden; }
+    .strip-cell { display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; text-align: left; border-left: 1px solid var(--border);
+      min-width: 0; transition: background var(--dur-fast) ease-out; }
+    .strip-cell:first-child { border-left: none; }
+    button.strip-cell:hover { background: var(--surface-2); }
+    .strip-val { font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; }
+    .strip-sub { font-size: 13px; line-height: 18px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
+
+    .cs-row { gap: 12px; }
+    .cs-amt { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .cs-total { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--border); font-size: 14px; }
+    .cs-total b { font-weight: 600; }
 
     .hide-sm { }
     .only-sm { display: none !important; }
@@ -553,6 +595,12 @@
       .grid { grid-template-columns: repeat(8, minmax(0,1fr)); gap: 16px; }
       .span-3 { grid-column: span 4; } .span-4, .span-5, .span-6, .span-7, .span-8, .span-12 { grid-column: span 8; }
       .settings-grid { grid-template-columns: 1fr; }
+      .auth { grid-template-columns: 1fr; }
+      .auth-panel { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06); padding: 32px 24px; }
+      .auth-foot { display: none; }
+      .auth-head { font-size: 28px; line-height: 34px; }
+      .summary { grid-template-columns: 1fr; }
+      .summary-l { border-right: none; border-bottom: 1px solid var(--border); }
       .subnav { display: none; }
     }
     @media (max-width: 767px) {
@@ -582,7 +630,7 @@
       .grid { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
       .span-3 { grid-column: span 2; } .span-4, .span-5, .span-6, .span-7, .span-8, .span-12 { grid-column: span 4; }
       .kpi-value { font-size: 22px; line-height: 28px; }
-      .kpi .full { display: none; } .kpi .compact { display: inline; }
+      .m-full { display: none; } .m-compact { display: inline; }
       .kpi-sub { font-size: 12px; line-height: 16px; }
       .btn { height: 44px; } .btn-sm { height: 36px; }
       .icon-btn { width: 44px; height: 44px; }
@@ -614,10 +662,17 @@
       .menu.as-sheet { position: static; max-width: none; max-height: none; border: none; box-shadow: none; padding: 0; animation: none; background: transparent; }
       .menu-item { min-height: 48px; font-size: 15px; }
       .toast-host { bottom: calc(var(--bottombar-h) + env(safe-area-inset-bottom) + 12px); }
-      .auth .wordmark { font-size: 32px; }
-      .auth-tag { font-size: 15px; }
-      .auth .btn { width: 100%; }
-      .auth-inner { width: 100%; }
+      .auth-panel { padding: 24px 16px 28px; gap: 24px; }
+      .auth-head { font-size: 24px; line-height: 30px; }
+      .auth-points { margin-top: 18px; gap: 10px; font-size: 14px; }
+      .auth-side { padding: 24px 16px 32px; align-items: flex-start; }
+      .summary-l, .summary-r { padding: 16px; }
+      .display { font-size: 32px; line-height: 36px; }
+      .summary .chart-box { height: 160px; }
+      .strip { grid-template-columns: 1fr; }
+      .strip-cell { border-left: none; border-top: 1px solid var(--border); padding: 14px 16px; }
+      .strip-cell:first-child { border-top: none; }
+      .strip-val { font-size: 22px; line-height: 28px; }
       .tx-day { top: var(--topbar-h); }
       .cc-tile { flex-basis: 150px; }
     }
@@ -626,7 +681,7 @@
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
-      .skel::after, .loader-line > i, .glitch, .dot.info, .spin { animation: none !important; }
+      .skel::after, .loader-line > i, .dot.info, .spin { animation: none !important; }
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"
@@ -694,19 +749,32 @@
   <symbol id="i-circle-ellipsis" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M17 12h.01"/><path d="M12 12h.01"/><path d="M7 12h.01"/></symbol>
 </svg>
 
-<!-- Sign-in — brand moment (§11.1, §13) -->
+<!-- Sign-in — split screen (§11.1, v1.1) -->
 <div id="authGate" class="auth" role="main">
-  <div class="auth-glow" aria-hidden="true"></div>
-  <div class="auth-inner">
-    <h1 class="wordmark glitch">ExpenseTrack</h1>
-    <p class="auth-tag">Your cards, spending and wealth — in one place.</p>
-    <button id="signInBtn" class="btn">Continue with Google</button>
-    <details class="auth-note">
-      <summary>Why these permissions?</summary>
-      <p style="margin-top:8px">Read-only access to the Gmail bank notifications, plus a private app file in your own Google Drive. Nothing is stored anywhere else. "Google hasn't verified this app" may appear on a first sign-in — that is expected for this personal app.</p>
-    </details>
-    <div id="authStatus" class="auth-status" role="status" aria-live="polite"></div>
-  </div>
+  <section class="auth-panel" aria-label="About ExpenseTrack">
+    <div class="auth-brand"><svg class="logomark" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5.3" fill="var(--accent)"/><rect x="6" y="6.9" width="12" height="2.2" rx="1.1" fill="#fff"/><rect x="6" y="10.9" width="8.4" height="2.2" rx="1.1" fill="#fff"/><rect x="6" y="14.9" width="12" height="2.2" rx="1.1" fill="#fff"/></svg><span class="wordmark">ExpenseTrack</span></div>
+    <div>
+      <h1 class="auth-head">Your spending, cards and wealth, in one place.</h1>
+      <ul class="auth-points">
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg><span>Read-only access to your bank notification emails in Gmail</span></li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg><span>Notes, rules and edits saved privately in your own Google Drive</span></li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-check"/></svg><span>No servers — everything runs in your browser</span></li>
+      </ul>
+    </div>
+    <p class="auth-foot">Private app · your data stays in your own Google account</p>
+  </section>
+  <section class="auth-side">
+    <div class="auth-card">
+      <h2 class="auth-title">Sign in</h2>
+      <p class="auth-sub">Use the Google account that receives your bank notification emails.</p>
+      <button id="signInBtn" class="btn btn-primary auth-btn">Continue with Google</button>
+      <details class="auth-note">
+        <summary>Why these permissions?</summary>
+        <p style="margin-top:8px">Read-only access to the Gmail bank notifications, plus a private app file in your own Google Drive. Nothing is stored anywhere else. “Google hasn’t verified this app” may appear on a first sign-in — that is expected for this personal app.</p>
+      </details>
+      <div id="authStatus" class="auth-status" role="status" aria-live="polite"></div>
+    </div>
+  </section>
 </div>
 
 <div class="app" id="app">
@@ -1453,11 +1521,11 @@ function catMeta(c){
 }
 function catColor(c){const m=catMeta(c);return themeName()==='light'?m.light:m.dark;}
 function hexA(hex,a){const h=String(hex).replace('#','');const n=parseInt(h.length===3?h.split('').map(x=>x+x).join(''):h,16);return`rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
-function catSquare(c,sm){const col=catColor(c);return`<span class="cat-square${sm?' sm':''}" style="background:${hexA(col,0.16)};color:${col}" aria-hidden="true">${ic(catMeta(c).icon)}</span>`;}
+function catSquare(c,sm){const col=catColor(c);return`<span class="cat-square${sm?' sm':''}" style="background:${hexA(col,0.13)};color:${col}" aria-hidden="true">${ic(catMeta(c).icon)}</span>`;}
 function catChip(c,onclick){
   const col=catColor(c),label=escH(c||'Uncategorised');
   const inner=`${ic(catMeta(c).icon,'',`color:${col}`)}<span style="overflow:hidden;text-overflow:ellipsis">${label}</span>`;
-  const style=`background:${hexA(col,0.16)}`;
+  const style=`background:${hexA(col,0.12)}`;
   return onclick?`<button class="cat-chip" style="${style}" onclick="${onclick}" aria-label="Category: ${label}. Change category">${inner}</button>`
     :`<span class="cat-chip" style="${style}">${inner}</span>`;
 }
@@ -1465,7 +1533,7 @@ function amt(n){return`<span class="amt">${fmtIDR(n)}</span>`;}
 function amtS(n){return`<span class="amt">${fmtIDRShort(n)}</span>`;}
 function kpiMoney(n){
   const c=fmtIDRShort(n).replace(/^Rp /,'');
-  return`<span class="amt"><span class="full"><span class="cur">Rp</span>${fmtNum(n)}</span><span class="compact"><span class="cur">Rp</span>${c}</span></span>`;
+  return`<span class="amt"><span class="m-full"><span class="cur">Rp</span>${fmtNum(n)}</span><span class="m-compact"><span class="cur">Rp</span>${c}</span></span>`;
 }
 // Colour the consequence, not the direction (§5.3). upIsGood: net worth/savings = true; spend = false.
 function deltaHTML(cur,prev,upIsGood,vsLabel){
@@ -1493,7 +1561,7 @@ function cardHead(icon,title,desc,tools){
 function kpiCard(o){
   const tag=o.onclick?'button':'div';
   return`<${tag} class="card kpi${o.onclick?' clickable':''} ${o.span||'span-3'}"${o.onclick?` onclick="${o.onclick}"`:''}${o.title?` title="${escH(o.title)}"`:''}>
-    <span class="kpi-label"><span class="kpi-icon">${ic(o.icon)}</span>${escH(o.label)}</span>
+    <span class="kpi-label">${escH(o.label)}</span>
     <span class="kpi-value">${o.value}</span>
     ${o.sub?`<span class="kpi-sub">${o.sub}</span>`:''}
     ${o.sub2?`<span class="kpi-sub">${o.sub2}</span>`:''}
@@ -2240,8 +2308,8 @@ function trendSeg(){
 function tableToggle(cardId){return`<button class="icon-btn sm" onclick="toggleChartTable('${cardId}',this)" aria-pressed="false" aria-label="View as table" title="View as table">${ic('table','s16')}</button>`;}
 function toggleChartTable(id,btn){const c=$(id);if(!c)return;const on=c.classList.toggle('show-table');btn.setAttribute('aria-pressed',String(on));btn.setAttribute('aria-label',on?'View as chart':'View as table');}
 function readout(id,label,val){const r=$(id);if(r)r.innerHTML=`${escH(label)} · <b class="amt">${amountsHidden()?'•••':fmtIDRShort(val)}</b>`;}
-function gradientLine(chart){const{ctx:c,chartArea:a}=chart;if(!a)return'#5B5BF0';const g=c.createLinearGradient(a.left,0,a.right,0);g.addColorStop(0,'#3B82F6');g.addColorStop(1,'#7C5CFF');return g;}
-function gradientFill(chart){const{ctx:c,chartArea:a}=chart;if(!a)return'transparent';const g=c.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,'rgba(124,92,255,0.32)');g.addColorStop(1,'rgba(59,130,246,0)');return g;}
+function gradientLine(){return cssVar('--accent');}
+function gradientFill(chart){const{ctx:c,chartArea:a}=chart;if(!a)return'transparent';const acc=cssVar('--accent');const g=c.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,hexA(acc,0.16));g.addColorStop(1,hexA(acc,0));return g;}
 function seriesTable(keys,vals){return`<table class="data"><thead><tr><th scope="col">Month</th><th scope="col" class="num">Spend</th></tr></thead><tbody>${keys.map((k,i)=>`<tr><td>${monthLabel(k)}</td><td class="num amt">${fmtIDR(vals[i])}</td></tr>`).join('')}</tbody></table>`;}
 function animOnce(){const a=!CHARTS_DRAWN_ONCE;return a?{}:{animation:false};}
 
@@ -2252,7 +2320,7 @@ function drawTrendChart(canvasId,readoutId,keys,vals){
   readout(readoutId,monthLabel(keys[last]),vals[last]);
   CHARTS[canvasId]=new Chart(el,{type:'line',plugins:[crosshairPlugin],
     data:{labels:keys.map(k=>monthLabel(k).replace(/ \d{4}$/,'')),datasets:[{data:vals,fill:true,
-      borderColor:c=>gradientLine(c.chart),backgroundColor:c=>gradientFill(c.chart),pointHoverBackgroundColor:'#7C5CFF',pointHoverBorderColor:cssVar('--surface-1'),pointHoverBorderWidth:2,pointHitRadius:16}]},
+      borderColor:c=>gradientLine(c.chart),backgroundColor:c=>gradientFill(c.chart),pointHoverBackgroundColor:cssVar('--accent'),pointHoverBorderColor:cssVar('--surface-1'),pointHoverBorderWidth:2,pointHitRadius:16}]},
     options:{responsive:true,maintainAspectRatio:false,...animOnce(),
       interaction:{mode:'index',intersect:false},
       onClick:(e,els)=>{if(els.length)setMonthRange(keys[els[0].index]);},
@@ -2473,36 +2541,76 @@ function avgPerMonth(){
   let keys=Object.keys(by).filter(k=>k!==cur);const full=keys.length>0;if(!full)keys=Object.keys(by);
   return{avg:keys.length?keys.reduce((s,k)=>s+by[k],0)/keys.length:0,n:keys.length,full};
 }
+function monogram(cls){return`<svg class="logomark${cls?' '+cls:''}" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5.3" fill="var(--accent)"/><rect x="6" y="6.9" width="12" height="2.2" rx="1.1" fill="#fff"/><rect x="6" y="10.9" width="8.4" height="2.2" rx="1.1" fill="#fff"/><rect x="6" y="14.9" width="12" height="2.2" rx="1.1" fill="#fff"/></svg>`;}
+function greeting(){const h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening';}
+function cardStatusHTML(cc){
+  const rows=cc.map(c=>`<button class="list-item cs-row" onclick="CCP_CARD='${escAttr(c.key)}';CARDS_SUB='current';setTab('cards')" aria-label="${escH(c.label)}: ${fmtIDR(c.balance)} owed. Open">
+      <span class="li-body"><span class="li-title" style="display:block">${escH(c.label)}</span>
+        <span class="li-sub" style="display:block">${c.lastPayDate?`Last paid ${fmtDay(c.lastPayDate)} · ${c.daysSince} day${c.daysSince===1?'':'s'} ago`:'<span class="warn">No payment logged yet</span>'} · ${c.since.length} charge${c.since.length===1?'':'s'}</span></span>
+      <span class="cs-amt amt">${fmtIDR(c.balance)}</span></button>`).join('');
+  const total=cc.reduce((s,c)=>s+c.balance,0);
+  return`<div class="list">${rows}</div><div class="cs-total"><span class="muted">Total owed</span><b class="amt">${fmtIDR(total)}</b></div>
+    <div style="margin-top:12px"><button class="link-btn" onclick="setTab('cards')">Open credit cards ${ic('chevron-right','s16','width:14px;height:14px;vertical-align:-2px')}</button></div>`;
+}
 function renderOverview(txns){
   if(!ALL_TRANSACTIONS.length)return renderBrandEmpty();
-  const idr=txns.filter(t=>t.amount>0),total=sumAmt(idr),pl=periodLabel();
+  const idr=txns.filter(t=>t.amount>0),total=sumAmt(idr),pl=periodLabel(),now=new Date();
   const pb=prevBounds(ACTIVE_RANGE);
-  const d1=pb?deltaHTML(total,sumAmt(txInBounds(pb.b).filter(t=>t.amount>0)),false,pb.label):`<span class="vs">${idr.length} transactions</span>`;
+  const delta=pb?deltaHTML(total,sumAmt(txInBounds(pb.b).filter(t=>t.amount>0)),false,pb.label):'';
+  // Days covered by the period (for the daily average) and month pace
+  const b=getRangeBounds(ACTIVE_RANGE);
+  let start=b?b[0]:null;if(!start){const ds=ALL_TRANSACTIONS.map(txDateOf).filter(d=>!isNaN(d.getTime()));start=ds.length?new Date(Math.min(...ds)):now;}
+  const end=b?(b[1]<now?b[1]:now):now;
+  const days=Math.max(1,Math.ceil((endOfDay(end)-startOfDay(start))/86400000));
   let pace='';
-  if(ACTIVE_RANGE==='month'){const now=new Date(),dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();if(now.getDate()>=2&&total)pace=`<span class="vs">On pace for <span class="amt">${fmtIDRShort(Math.round(total/now.getDate()*dim))}</span> this month</span>`;}
+  if(ACTIVE_RANGE==='month'){
+    const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate(),day=now.getDate();
+    const proj=day>=2&&total?Math.round(total/day*dim):null;
+    const monthEnd=new Date(now.getFullYear(),now.getMonth(),dim);
+    pace=`${proj?`<div class="summary-line">On pace for <b class="amt">${fmtIDRShort(proj)}</b> by ${fmtDay(monthEnd)}</div>`:''}
+      <div class="pace"><div class="progress" role="progressbar" aria-valuenow="${Math.round(day/dim*100)}" aria-valuemin="0" aria-valuemax="100" aria-label="Share of the month elapsed"><i style="width:${day/dim*100}%"></i></div>
+      <div class="pace-meta"><span>Day ${day} of ${dim}</span><span>${Math.round(day/dim*100)}% of the month</span></div></div>`;
+  }
+  const summary=`<section class="card summary span-12" id="ovTrendCard" aria-label="Spending summary">
+    <div class="summary-l">
+      <div class="eyebrow">Spent · ${escH(pl)}</div>
+      <div class="display"><span class="amt"><span class="cur">Rp</span>${fmtNum(total)}</span></div>
+      ${delta?`<div class="summary-line">${delta}</div>`:''}
+      ${pace}
+      <dl class="facts"><div><dt class="eyebrow">Daily average</dt><dd class="amt">${fmtIDRShort(Math.round(total/days))}</dd></div>
+        <div><dt class="eyebrow">Transactions</dt><dd>${idr.length}</dd></div></dl>
+    </div>
+    <div class="summary-r">
+      ${cardHead('','Spend trend','Monthly total',trendSeg()+tableToggle('ovTrendCard'))}
+      <div class="chart-readout" id="ovTrendReadout" aria-live="polite"></div>
+      <div class="chart-box"><canvas id="ovTrend" role="img" aria-label="${escH(trendSummary())}"></canvas></div>
+      <div class="chart-table" id="ovTrendTable"></div>
+    </div></section>`;
   const cc=CC_CARDS.map(c=>ccState(c.key)),ccTotal=cc.reduce((s,c)=>s+c.balance,0);
   const unpaid=cc.filter(c=>!c.lastPayDate&&c.all.length);
-  const ccSub=cc.map(c=>`${c.label.replace(' CC','')} <span class="amt">${fmtIDRShort(c.balance)}</span>`).join(' · ');
-  const lastPaid=cc.filter(c=>c.lastPayDate).sort((a,b)=>b.lastPayDate-a.lastPayDate)[0];
   const ap=avgPerMonth();
-  const cats=categoryTotals(idr),top=cats[0];
-  const kpis=[
-    kpiCard({icon:'wallet',label:`Spend · ${pl}`,value:kpiMoney(total),sub:d1,sub2:pace,onclick:"document.getElementById('txCard')?.scrollIntoView({behavior:'smooth'})",title:'Jump to transactions'}),
-    kpiCard({icon:'credit-card',label:'Credit cards owed',value:kpiMoney(ccTotal),sub:ccSub,sub2:unpaid.length?`<span class="warn">No payment logged for ${unpaid.map(c=>c.label).join(', ')}</span>`:lastPaid?`<span class="vs">Last payment ${relTime(lastPaid.lastPayDate)}</span>`:'',onclick:"setTab('cards')",title:'Open credit cards'}),
-    kpiCard({icon:'chart-column',label:'Average per month',value:kpiMoney(Math.round(ap.avg)),sub:`<span class="vs">${ap.full?`Last ${ap.n} full month${ap.n===1?'':'s'}`:'Includes this month so far'}</span>`,onclick:"setTab('spending')",title:'Open spending'}),
-    top?kpiCard({icon:'tag',label:'Biggest category',value:`<span style="display:flex;align-items:center;gap:8px;font-size:0.72em">${catSquare(top[0],true)}<span style="overflow:hidden;text-overflow:ellipsis">${escH(top[0])}</span></span>`,sub:`<span class="amt">${fmtIDRShort(top[1].total)}</span> <span class="vs">· ${fmtPct(total?top[1].total/total*100:0)} of spend</span>`,onclick:`toggleCategory('${escAttr(top[0])}')`,title:`Filter by ${top[0]}`})
-       :kpiCard({icon:'tag',label:'Biggest category',value:'<span class="faint">—</span>',sub:'<span class="vs">No spend in this period</span>'}),
-  ].join('');
-  return`${pageHead('Overview','Your spending at a glance',`${periodButton()}<button class="btn btn-primary" onclick="openAddModal()">${ic('plus')}Add</button>${hideBtn()}<button class="icon-btn" onclick="load(true)" aria-label="Sync now" title="Sync now">${ic('refresh-cw')}</button>`)}
+  const top=categoryTotals(idr)[0];
+  const strip=`<section class="card strip span-12" aria-label="Key figures">
+    <button class="strip-cell" onclick="setTab('cards')"><span class="eyebrow">Cards owed</span><span class="strip-val">${kpiMoney(ccTotal)}</span>
+      <span class="strip-sub">${unpaid.length?`<span class="warn">No payment logged for ${escH(unpaid.map(c=>c.label).join(', '))}</span>`:`Across ${cc.length} cards`}</span></button>
+    <button class="strip-cell" onclick="setTab('spending')"><span class="eyebrow">Average per month</span><span class="strip-val">${kpiMoney(Math.round(ap.avg))}</span>
+      <span class="strip-sub">${ap.full?`Last ${ap.n} full month${ap.n===1?'':'s'}`:'Includes this month so far'}</span></button>
+    ${top?`<button class="strip-cell" onclick="toggleCategory('${escAttr(top[0])}')" aria-label="Biggest category ${escH(top[0])}. Filter by it"><span class="eyebrow">Biggest category · ${escH(pl)}</span>
+      <span class="strip-val" style="font-size:18px">${catSquare(top[0],true)}<span style="overflow:hidden;text-overflow:ellipsis">${escH(top[0])}</span></span>
+      <span class="strip-sub"><span class="amt">${fmtIDRShort(top[1].total)}</span> · ${fmtPct(total?top[1].total/total*100:0)} of spend</span></button>`
+      :`<div class="strip-cell"><span class="eyebrow">Biggest category</span><span class="strip-val faint">—</span><span class="strip-sub">No spend in this period</span></div>`}
+  </section>`;
+  const sub=`${now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})} · ${escH(syncView().label)}`;
+  return`<div class="page-head greet"><div><h1 class="page-title">${greeting()}</h1><p class="page-desc">${sub}</p></div>
+      <div class="page-actions">${periodButton()}<button class="btn btn-primary" onclick="openAddModal()">${ic('plus')}Add</button>${hideBtn()}<button class="icon-btn" onclick="load(true)" aria-label="Sync now" title="Sync now">${ic('refresh-cw')}</button></div></div>
+    <p class="only-sm mob-greet">${greeting()} · ${now.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</p>
     ${filterRowHTML()}
-    <div class="grid">${kpis}</div>
+    <div class="grid">${summary}</div>
+    <div class="grid">${strip}</div>
     <div class="grid only-sm">${recurringMini()}</div>
     <div class="grid">
-      <section class="card span-8" id="ovTrendCard">${cardHead('trending-up','Spend trend',isMobile()?'Monthly total':'Monthly total · click a month to open it',trendSeg()+tableToggle('ovTrendCard'))}
-        <div class="chart-readout" id="ovTrendReadout" aria-live="polite"></div>
-        <div class="chart-box"><canvas id="ovTrend" role="img" aria-label="${escH(trendSummary())}"></canvas></div>
-        <div class="chart-table" id="ovTrendTable"></div></section>
-      <section class="card span-4">${cardHead('chart-pie','Where it went',escH(pl))}${rankedCategoriesHTML(idr,isMobile()?5:6)}</section>
+      <section class="card span-7">${cardHead('chart-pie','Where it went',escH(pl)+' · click a category to filter')}${rankedCategoriesHTML(idr,isMobile()?5:6)}</section>
+      <section class="card span-5">${cardHead('credit-card','Card status','What each card owes since its last payment')}${cardStatusHTML(cc)}</section>
     </div>
     <div class="grid">${transactionsCard()}</div>
     <div class="grid hide-sm">${recurringCard('span-12')}</div>`;
@@ -2523,10 +2631,10 @@ function renderOverviewCharts(){
   renderTxBody();
 }
 function renderBrandEmpty(){
-  return`<div class="card brand-empty" style="margin-top:12px"><div class="glow" aria-hidden="true"></div>
-    <svg class="pixel-art" viewBox="0 0 24 18" shape-rendering="crispEdges" aria-hidden="true"><rect x="1" y="3" width="16" height="11" fill="#5B5BF0"/><rect x="1" y="6" width="16" height="2" fill="#20202B"/><rect x="3" y="10" width="5" height="2" fill="#F4F4F7"/><rect x="15" y="9" width="7" height="7" fill="#FBBF24"/><rect x="16" y="10" width="5" height="5" fill="#F59E0B"/><rect x="18" y="11" width="1" height="3" fill="#FDE68A"/></svg>
-    <h2 class="wordmark" style="font-size:20px;margin:14px 0 6px">No transactions yet</h2>
-    <p class="muted" style="max-width:420px;margin:0 auto 18px">Run your first sync to read the bank notification emails in Gmail. Your data stays in your private Google Drive.</p>
+  return`<div class="card" style="text-align:center;padding:48px 24px;margin-top:12px">
+    <span class="empty-ring">${ic('inbox','s24')}</span>
+    <h2 class="card-title" style="font-size:18px;line-height:24px;margin:16px 0 6px">No transactions yet</h2>
+    <p class="muted" style="max-width:420px;margin:0 auto 20px">Run your first sync to read the bank notification emails in Gmail. Your data stays in your private Google Drive.</p>
     <button class="btn btn-primary" onclick="load(true)">${ic('refresh-cw')}Run first sync</button></div>`;
 }
 
@@ -2842,14 +2950,13 @@ function renderMore(){
    LOADING STATES — skeleton + brand loader (§12)
    ══════════════════════════════════════════════════════════════════ */
 function skeletonHTML(){
-  const k=`<div class="card span-3"><div class="skel" style="width:60%;height:14px"></div><div class="skel" style="width:80%;height:28px;margin-top:12px"></div><div class="skel" style="width:50%;height:12px;margin-top:10px"></div></div>`;
-  return`<div class="page-head"><div><div class="skel" style="width:160px;height:26px"></div><div class="skel" style="width:220px;height:14px;margin-top:8px"></div></div></div>
-    <div class="grid" aria-busy="true" aria-label="Loading">${k+k+k+k}</div>
-    <div class="grid"><div class="card span-8"><div class="skel" style="width:30%;height:16px"></div><div class="skel" style="height:220px;margin-top:16px"></div></div>
-      <div class="card span-4">${'<div class="skel" style="height:28px;margin-bottom:12px"></div>'.repeat(6)}</div></div>`;
+  const sk=(w,h,mt)=>`<div class="skel" style="width:${w};height:${h}px${mt?`;margin-top:${mt}px`:''}"></div>`;
+  return`<div class="page-head"><div>${sk('200px',26)}${sk('260px',14,8)}</div></div>
+    <div class="grid" aria-busy="true" aria-label="Loading"><div class="card summary span-12"><div class="summary-l">${sk('40%',12)}${sk('70%',40,10)}${sk('55%',14,12)}${sk('100%',6,20)}</div><div class="summary-r">${sk('30%',16)}${sk('100%',200,16)}</div></div></div>
+    <div class="grid"><div class="card strip span-12">${[1,2,3].map(()=>`<div class="strip-cell">${sk('50%',12)}${sk('70%',26,8)}${sk('40%',12,8)}</div>`).join('')}</div></div>`;
 }
 function brandLoaderHTML(){
-  return`<div class="brand-loader" role="status" aria-live="polite"><span class="wordmark">ExpenseTrack</span><div class="loader-line"><i></i></div><div class="loader-step" id="prog">Starting first sync…</div></div>`;
+  return`<div class="brand-loader" role="status" aria-live="polite"><div class="lockup">${monogram()}<span class="wordmark">ExpenseTrack</span></div><div class="loader-line"><i></i></div><div class="loader-step" id="prog">Starting first sync…</div></div>`;
 }
 
 /* ══════════════════════════════════════════════════════════════════
