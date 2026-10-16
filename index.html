@@ -3050,18 +3050,41 @@ function removePatternRule(i){
   rules.splice(i,1);savePatternRules(rules);
   toast('Rule removed',{action:'Undo',onAction:()=>{const x=[...(STATE.patternRules||[])];x.splice(i,0,prev);savePatternRules(x);}});
 }
+// Merges an imported rules file into the current rules. The file wins: a pattern rule with the
+// same text, or a date range with the same from/to, takes the file's category. New ones are
+// appended, and nothing is removed.
+function mergeImportedRules(curPatterns,curDates,data){
+  const incoming=(Array.isArray(data)?data:data.patternRules||[]).filter(r=>r&&r.match&&r.category)
+    .map(r=>r.whole?{match:String(r.match),category:String(r.category),whole:true}:{match:String(r.match),category:String(r.category)});
+  const patterns=(curPatterns||[]).map(r=>({...r}));let added=0,updated=0;
+  for(const r of incoming){
+    const ex=patterns.find(p=>String(p.match).toUpperCase()===r.match.toUpperCase());
+    if(!ex){patterns.push(r);added++;}
+    else if(ex.category!==r.category||!!ex.whole!==!!r.whole){ex.category=r.category;if(r.whole)ex.whole=true;else delete ex.whole;updated++;}
+  }
+  const dates=(curDates||[]).map(r=>({...r}));let datesAdded=0,datesUpdated=0;
+  const valid=d=>/^\d{4}-\d{2}-\d{2}$/.test(d);
+  for(const r of (Array.isArray(data)?[]:data.dateCategoryRules||[])){
+    if(!r||!valid(r.from)||!valid(r.to)||!r.category)continue;
+    const ex=dates.find(d=>d.from===r.from&&d.to===r.to);
+    if(!ex){dates.push({from:r.from,to:r.to,category:String(r.category)});datesAdded++;}
+    else if(ex.category!==r.category){ex.category=String(r.category);datesUpdated++;}
+  }
+  return{patterns,dates,added,updated,datesAdded,datesUpdated,found:incoming.length};
+}
 function importPatternRules(){
   const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';
   inp.onchange=async()=>{
     try{
-      const data=JSON.parse(await inp.files[0].text());
-      const incoming=(Array.isArray(data)?data:data.patternRules||[]).filter(r=>r&&r.match&&r.category)
-        .map(r=>r.whole?{match:String(r.match),category:String(r.category),whole:true}:{match:String(r.match),category:String(r.category)});
-      if(!incoming.length){toast('No rules found in that file');return;}
-      const have=new Set((STATE.patternRules||[]).map(r=>String(r.match).toUpperCase()));
-      const added=incoming.filter(r=>!have.has(r.match.toUpperCase()));
-      savePatternRules([...(STATE.patternRules||[]),...added]);
-      toast(`Imported ${added.length} rule${added.length===1?'':'s'}${incoming.length>added.length?` · ${incoming.length-added.length} already there`:''}`);
+      const res=mergeImportedRules(STATE.patternRules,STATE.dateCategoryRules,JSON.parse(await inp.files[0].text()));
+      const n=res.added+res.updated+res.datesAdded+res.datesUpdated;
+      if(!n){toast(res.found?'Everything in that file is already set':'No rules found in that file');return;}
+      STATE.dateCategoryRules=res.dates;savePatternRules(res.patterns);
+      const parts=[];
+      if(res.added)parts.push(`${res.added} rule${res.added===1?'':'s'} added`);
+      if(res.updated)parts.push(`${res.updated} updated`);
+      if(res.datesAdded+res.datesUpdated)parts.push(`${res.datesAdded+res.datesUpdated} date range${res.datesAdded+res.datesUpdated===1?'':'s'} set`);
+      toast('Imported: '+parts.join(' · '));
     }catch(e){toast('Couldn’t read that file: '+e.message);}
   };
   inp.click();
