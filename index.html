@@ -973,7 +973,7 @@ function defaultState(){
     txns: [], payments: [], manualTxns: [],
     catOverrides: {}, merchantCats: {}, txEdits: {}, splits: {}, notes: {},
     merchantAutoNotes: {}, manualFxRates: {}, hiddenIds: [], subDecisions: {},
-    dateCategoryRules: [], ccPosExcludedIds: [],
+    dateCategoryRules: [], patternRules: [], ccPosExcludedIds: [],
     wealth: null, wealthMeta: null, closeTicks: {}, declared: {}
   };
 }
@@ -1014,6 +1014,12 @@ function mergeStates(remote, local){
     merged[k] = { ...(remote[k]||{}), ...(local[k]||{}) };
   }
   merged.dateCategoryRules = (local.dateCategoryRules && local.dateCategoryRules.length) ? local.dateCategoryRules : (remote.dateCategoryRules||[]);
+  // Pattern rules are ordered (first match wins): keep this device's order, then add any rule
+  // only the other device has.
+  {
+    const lp = local.patternRules || [], seen = new Set(lp.map(r => String(r.match).toUpperCase()));
+    merged.patternRules = [...lp, ...(remote.patternRules||[]).filter(r => !seen.has(String(r.match).toUpperCase()))];
+  }
   // Wealth snapshot: keep whichever device holds the newer one.
   const lw = local.wealth, rw = remote.wealth;
   const localNewer = lw && (!rw || Date.parse(lw.generatedAt) > Date.parse(rw.generatedAt));
@@ -1213,22 +1219,28 @@ const CATEGORIES = {
   'Others':               { dark: '#6B7280', light: '#6B7280', icon: 'circle-ellipsis' },
 };
 
-// Order matters: the first match wins.
-// Trips (flights, out-of-town stays, meals while away) are Ad Hoc. A date-range rule covers the
-// trip itself; flights and bookings paid before the trip match here. A hotel outside any trip
-// range is treated as local hotel dining.
+// Private pattern rules from the Drive file come first, in the user's order; the generic rules
+// below only cover well-known national and global brands. Anything that reveals where a user
+// eats, worships or trains, or how they treat trips, belongs in a pattern rule, never here.
+function patternRuleMatches(r,m){
+  const p=String(r.match||'').toUpperCase().trim();
+  if(!p)return false;
+  if(!r.whole)return m.includes(p);
+  const esc=p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return new RegExp('(^|[^A-Z0-9])'+esc+'([^A-Z0-9]|$)').test(m);
+}
+// The first match wins.
 function categorize(merchant) {
   const m=(merchant||'').toUpperCase().replace(/&AMP;|&#39;/g,'');
-  if(/GMS/.test(m))return'Religion';
-  if(/\bAYO\b|METRO\s*CAFFE/.test(m))return'Sports';
-  // Top-ups count as spend in their own bucket; checked before SHOPEE and GOJEK/GRAB.
+  for(const r of (STATE.patternRules||[]))if(r&&r.category&&patternRuleMatches(r,m))return r.category;
+  // Top-ups count as spend in their own bucket; checked before SHOPEE and GOJEK.
   if(/GOPAY|\bOVO\b|SHOPEEPAY|\bDANA\b|LINKAJA|FLAZZ|E-?TOLL|E-?MONEY|BRIZZI|TAPCASH/.test(m))return'E-wallet';
-  if(/SINGAPORE\s*AIR|GARUDA|LION\s*AIR|BATIK\s*AIR|CITILINK|AIR\s*ASIA|AIRASIA|RESORT|VILLA|AGODA|TRAVELOKA|TIKET|BOOKING\.COM|HOTELS\.COM|AIRBNB/.test(m))return'Ad Hoc';
-  if(/UBER|GOJEK|GOCAR|GORIDE|BLUEBIRD|TAXI|UTOMO|PARKIR|PARKING|CENTREPARK|JASA\s*MARGA|\bTOL\b/.test(m))return'Transport';
-  if(/GRAB|COFFEE|CAFE|KOPI|RESTO|RESTAURANT|BEBEK|AYAM|SOTO|BAKSO|WARUNG|DEPOT|KWETIAU|STEAMBOAT|MA LA|CHASIO|XIAO XIANG|FUSIA|TAEYANG|OLD TOWN|LIME|SENIMAN|HARLAN|BREEZE|KARBS|TOBY|TGC|APENG|SANLONG|MCD|MCDONALD|HOTEL/.test(m))return'Food & Dining';
-  if(/SUPERINDO|INDOMARET|ALFAMART|HYPERMART|CARREFOUR|RANCH MARKET|LOTTE|HERO|GIANT|SINAR LUCKY/.test(m))return'Groceries';
-  if(/SHOPEE|TOKOPEDIA|LAZADA|BUKALAPAK|BLIBLI|NIKE|UNIQLO|ZARA|H&M|BATAS LANGIT|XDT\*/.test(m))return'Shopping';
-  if(/ANTHROPIC|CLAUDE|APPLE|IBOX|DIGIMAP|GOOGLE|NETFLIX|SPOTIFY|PAPER\.ID|ADOBE|MICROSOFT/.test(m))return'Tech & Subscriptions';
+  if(/SINGAPORE\s*AIR|GARUDA|LION\s*AIR|BATIK\s*AIR|CITILINK|AIR\s*ASIA|AIRASIA|HOTEL|RESORT|VILLA|AGODA|TRAVELOKA|TIKET|BOOKING\.COM|AIRBNB/.test(m))return'Travel';
+  if(/UBER|GOJEK|GOCAR|GORIDE|GRAB|BLUEBIRD|TAXI|PARKIR|PARKING|CENTREPARK|JASA\s*MARGA|\bTOL\b/.test(m))return'Transport';
+  if(/COFFEE|CAFE|KOPI|RESTO|RESTAURANT|BEBEK|AYAM|SOTO|BAKSO|WARUNG|DEPOT|KWETIAU|STEAMBOAT|MCD|MCDONALD/.test(m))return'Food & Dining';
+  if(/SUPERINDO|INDOMARET|ALFAMART|HYPERMART|CARREFOUR|RANCH MARKET|LOTTE|HERO|GIANT/.test(m))return'Groceries';
+  if(/SHOPEE|TOKOPEDIA|LAZADA|BUKALAPAK|BLIBLI|NIKE|UNIQLO|ZARA|H&M|XDT\*/.test(m))return'Shopping';
+  if(/ANTHROPIC|CLAUDE|APPLE|IBOX|DIGIMAP|GOOGLE|NETFLIX|SPOTIFY|ADOBE|MICROSOFT/.test(m))return'Tech & Subscriptions';
   if(/SPBU|PERTAMINA|SHELL|VIVO/.test(m))return'Fuel';
   if(/XL AXIATA|TELKOMSEL|INDOSAT|SMARTFREN|AXIS/.test(m))return'Telecom';
   return'Others';
@@ -2968,6 +2980,37 @@ function removeMerchantRule(m){
   delete mc[m];saveMerchantCats(mc);renderAll();
   toast('Rule removed — applies from the next reload',{action:'Undo',onAction:()=>{const x=getMerchantCats();x[m]=prev;saveMerchantCats(x);renderAll();}});
 }
+// Pattern rules: "merchant contains X → category", private to the Drive file. Changes re-run the
+// cached transactions through the rules right away.
+function savePatternRules(rules){ STATE.patternRules=rules; scheduleDriveSave(); if(loadCache())load(); else renderAll(); }
+function addPatternRule(){
+  const match=($('prMatch')?.value||'').trim(),category=$('prCat')?.value,whole=!!$('prWhole')?.checked;
+  if(!match||!category){toast('Type the text to match and pick a category');return;}
+  const rules=(STATE.patternRules||[]).filter(r=>String(r.match).toUpperCase()!==match.toUpperCase());
+  rules.unshift(whole?{match,category,whole:true}:{match,category});
+  savePatternRules(rules);toast(`Rule added: “${match}” → ${category}`);
+}
+function removePatternRule(i){
+  const rules=[...(STATE.patternRules||[])],prev=rules[i];if(!prev)return;
+  rules.splice(i,1);savePatternRules(rules);
+  toast('Rule removed',{action:'Undo',onAction:()=>{const x=[...(STATE.patternRules||[])];x.splice(i,0,prev);savePatternRules(x);}});
+}
+function importPatternRules(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';
+  inp.onchange=async()=>{
+    try{
+      const data=JSON.parse(await inp.files[0].text());
+      const incoming=(Array.isArray(data)?data:data.patternRules||[]).filter(r=>r&&r.match&&r.category)
+        .map(r=>r.whole?{match:String(r.match),category:String(r.category),whole:true}:{match:String(r.match),category:String(r.category)});
+      if(!incoming.length){toast('No rules found in that file');return;}
+      const have=new Set((STATE.patternRules||[]).map(r=>String(r.match).toUpperCase()));
+      const added=incoming.filter(r=>!have.has(r.match.toUpperCase()));
+      savePatternRules([...(STATE.patternRules||[]),...added]);
+      toast(`Imported ${added.length} rule${added.length===1?'':'s'}${incoming.length>added.length?` · ${incoming.length-added.length} already there`:''}`);
+    }catch(e){toast('Couldn’t read that file: '+e.message);}
+  };
+  inp.click();
+}
 function removeAutoNoteRule(p){
   const r=getMerchantAutoNotes();const prev=r[p];if(prev===undefined)return;
   delete r[p];saveMerchantAutoNotes(r);renderAll();
@@ -2977,6 +3020,8 @@ function renderSettings(){
   const mc=Object.entries(getMerchantCats()).sort((a,b)=>a[0].localeCompare(b[0]));
   const an=Object.entries(getMerchantAutoNotes());
   const dr=STATE.dateCategoryRules||[];
+  const pr=STATE.patternRules||[];
+  const prCats=[...new Set([...Object.keys(CATEGORIES),...Object.values(getMerchantCats()),...pr.map(r=>r.category)])];
   const theme=themeName(),hid=amountsHidden();
   return`${pageHead('Settings','Appearance, rules and your data')}
   <div class="settings-grid">
@@ -2992,6 +3037,17 @@ function renderSettings(){
         <h3 class="label" style="margin:4px 0 8px">Merchant → category (${mc.length})</h3>
         ${mc.length?`<div class="list" style="max-height:360px;overflow:auto">${mc.map(([m,c])=>`<div class="list-item"><div class="li-body"><div class="li-title">${escH(m)}</div></div>${catChip(c)}<button class="icon-btn sm danger" onclick="removeMerchantRule('${escAttr(m)}')" aria-label="Remove rule for ${escH(m)}" title="Remove rule">${ic('x','s16')}</button></div>`).join('')}</div>`
           :`<p class="help">None yet. Changing a transaction’s category with “Always use this” ticked adds one.</p>`}
+        <h3 class="label" style="margin:20px 0 8px">Merchant contains → category (${pr.length})</h3>
+        <p class="help" style="margin:0 0 8px">Checked top to bottom before the built-in rules; the first match wins.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+          <div class="field" style="flex:1 1 160px"><label class="label" for="prMatch">Merchant contains</label><input class="input" id="prMatch" placeholder="e.g. a restaurant name" autocomplete="off"></div>
+          <div class="field" style="flex:1 1 160px"><label class="label" for="prCat">Category</label><select class="input" id="prCat">${prCats.map(c=>`<option value="${escH(c)}">${escH(c)}</option>`).join('')}</select></div>
+          <label class="check" style="padding-bottom:10px"><input type="checkbox" id="prWhole"> Whole word</label>
+          <button class="btn btn-primary" onclick="addPatternRule()">${ic('plus')}Add</button>
+          <button class="btn btn-ghost" onclick="importPatternRules()">Import file…</button>
+        </div>
+        ${pr.length?`<div class="list" style="max-height:360px;overflow:auto">${pr.map((r,i)=>`<div class="list-item"><div class="li-body"><div class="li-title">${escH(r.match)}</div>${r.whole?'<div class="li-sub">Whole word</div>':''}</div>${catChip(r.category)}<button class="icon-btn sm danger" onclick="removePatternRule(${i})" aria-label="Remove rule for ${escH(r.match)}" title="Remove rule">${ic('x','s16')}</button></div>`).join('')}</div>`
+          :`<p class="help">None yet.</p>`}
         <h3 class="label" style="margin:20px 0 8px">Auto-notes (${an.length})</h3>
         ${an.length?`<div class="list">${an.map(([p,r])=>{const note=typeof r==='string'?r:r.note,am=typeof r==='object'&&r.amount?r.amount:null;return`<div class="list-item"><div class="li-body"><div class="li-title">${escH(p)}</div><div class="li-sub">“${escH(note)}”${am?` · only when the amount is <span class="amt">${fmtIDR(am)}</span>`:''}</div></div><button class="icon-btn sm danger" onclick="removeAutoNoteRule('${escAttr(p)}')" aria-label="Remove auto-note ${escH(p)}" title="Remove">${ic('x','s16')}</button></div>`;}).join('')}</div>`:`<p class="help">None.</p>`}
         <h3 class="label" style="margin:20px 0 8px">Date ranges → category (${dr.length})</h3>
@@ -3423,6 +3479,7 @@ async function load(isRefresh=false){
     if(cached&&cached.data&&cached.data.length){
       ALL_TRANSACTIONS=cached.data.map(t=>({...t}));
       applyManualFXRates(ALL_TRANSACTIONS);
+      applyAutoCategory(ALL_TRANSACTIONS);
       applyDateCategoryRules(ALL_TRANSACTIONS);
       applyMerchantCats(ALL_TRANSACTIONS);
       applyCatOverrides(ALL_TRANSACTIONS);
@@ -3434,7 +3491,6 @@ async function load(isRefresh=false){
       ALL_TRANSACTIONS_RAW=[...ALL_TRANSACTIONS];
       {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
       mergeManualTxns();
-      applyAutoCategory(ALL_TRANSACTIONS);
       ACTIVE_RANGE='month';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';
       DATA_READY=true;if(STATE.cachedAt)SYNC.lastSynced=new Date(STATE.cachedAt);
       renderAll();initMerchantAutoNotes();
@@ -3495,6 +3551,7 @@ async function load(isRefresh=false){
 
     ALL_TRANSACTIONS=combined.map(t=>({...t}));
     applyManualFXRates(ALL_TRANSACTIONS);
+    applyAutoCategory(ALL_TRANSACTIONS);
     applyDateCategoryRules(ALL_TRANSACTIONS);
     applyMerchantCats(ALL_TRANSACTIONS);
     applyCatOverrides(ALL_TRANSACTIONS);
@@ -3506,7 +3563,6 @@ async function load(isRefresh=false){
     ALL_TRANSACTIONS_RAW=[...ALL_TRANSACTIONS];
     {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
     mergeManualTxns();
-    applyAutoCategory(ALL_TRANSACTIONS);
     saveCache(ALL_TRANSACTIONS_RAW);
     if(!isRefresh){ACTIVE_RANGE='month';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';}
     DATA_READY=true;SYNC.gmail=false;SYNC.lastSynced=new Date();
