@@ -569,6 +569,9 @@
       font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; }
     .strip-sub { font-size: 13px; line-height: 18px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
 
+    table.data tr.group-row th { background: var(--surface-1); color: var(--text-2); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding-top: 16px; position: static; }
+    table.data tr.group-row td { border-top: 1px solid var(--border); background: var(--surface-1); }
+    code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 0.92em; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
     .cs-row { gap: 12px; }
     .cs-amt { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .cs-total { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--border); font-size: 14px; }
@@ -669,7 +672,7 @@
       .summary-l, .summary-r { padding: 16px; }
       .display { font-size: 32px; line-height: 36px; }
       .summary .chart-box { height: 160px; }
-      .strip { grid-template-columns: 1fr; }
+      .strip { grid-template-columns: 1fr !important; }
       .strip-cell { border-left: none; border-top: 1px solid var(--border); padding: 14px 16px; }
       .strip-cell:first-child { border-top: none; }
       .strip-val { font-size: 22px; line-height: 28px; }
@@ -732,6 +735,8 @@
   <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
   <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
   <symbol id="i-chart-column" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+  <symbol id="i-house" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-landmark" viewBox="0 0 24 24"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></symbol>
   <symbol id="i-circle-user" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></symbol>
   <symbol id="i-utensils" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></symbol>
   <symbol id="i-shopping-basket" viewBox="0 0 24 24"><path d="m15 11-1 9"/><path d="m19 11-4-7"/><path d="M2 11h20"/><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.7-7.4"/><path d="M4.5 15.5h15"/><path d="m5 11 4-7"/><path d="m9 11 1 9"/></symbol>
@@ -937,7 +942,8 @@ function defaultState(){
     txns: [], payments: [], manualTxns: [],
     catOverrides: {}, merchantCats: {}, txEdits: {}, splits: {}, notes: {},
     merchantAutoNotes: {}, manualFxRates: {}, hiddenIds: [], subDecisions: {},
-    dateCategoryRules: [], ccPosExcludedIds: []
+    dateCategoryRules: [], ccPosExcludedIds: [],
+    wealth: null, wealthMeta: null, closeTicks: {}, declared: {}
   };
 }
 
@@ -977,6 +983,15 @@ function mergeStates(remote, local){
     merged[k] = { ...(remote[k]||{}), ...(local[k]||{}) };
   }
   merged.dateCategoryRules = (local.dateCategoryRules && local.dateCategoryRules.length) ? local.dateCategoryRules : (remote.dateCategoryRules||[]);
+  // Wealth snapshot: keep whichever device holds the newer one.
+  const lw = local.wealth, rw = remote.wealth;
+  const localNewer = lw && (!rw || Date.parse(lw.generatedAt) > Date.parse(rw.generatedAt));
+  merged.wealth = localNewer ? lw : (rw || null);
+  merged.wealthMeta = localNewer ? (local.wealthMeta || null) : (remote.wealthMeta || null);
+  merged.declared = { ...(remote.declared||{}), ...(local.declared||{}) };
+  merged.closeTicks = {};
+  for (const m of new Set([...Object.keys(remote.closeTicks||{}), ...Object.keys(local.closeTicks||{})]))
+    merged.closeTicks[m] = { ...((remote.closeTicks||{})[m]||{}), ...((local.closeTicks||{})[m]||{}) };
   const wms = [remote.watermark, local.watermark].filter(Boolean).sort();
   merged.watermark = wms.length ? wms[wms.length-1] : null;
   merged.cachedAt = new Date().toISOString();
@@ -1761,7 +1776,13 @@ const SECTIONS=[
   {key:'spending',label:'Spending',icon:'chart-pie'},
   {key:'cards',label:'Credit cards',short:'Cards',icon:'credit-card'},
 ];
-const TAB_TITLES={overview:'Overview',spending:'Spending',cards:'Credit cards',settings:'Settings',more:'More'};
+// Wealth group (§3.2): Net worth always (it hosts the connect step); the rest once a snapshot exists.
+function wealthSections(){
+  const s=[{key:'networth',label:'Net worth',icon:'trending-up'}];
+  if(STATE.wealth){s.push({key:'accounts',label:'Accounts',icon:'landmark'});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check'});}
+  return s;
+}
+const TAB_TITLES={overview:'Overview',spending:'Spending',cards:'Credit cards',networth:'Net worth',accounts:'Accounts',close:'Month-end',settings:'Settings',more:'More'};
 function setTab(t){
   if(t===ACTIVE_TAB){window.scrollTo({top:0,behavior:'smooth'});return;}
   ACTIVE_TAB=t;SELECT_MODE=false;SELECTED.clear();TX_LIMIT=50;
@@ -1769,12 +1790,13 @@ function setTab(t){
 }
 function buildNav(){
   const sb=$('sbNav');
-  if(sb)sb.innerHTML=SECTIONS.map(s=>`<button class="sb-item" data-tab="${s.key}" onclick="setTab('${s.key}')" title="${s.label}"${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span class="lbl">${s.label}</span></button>`).join('');
+  const item=s=>`<button class="sb-item" data-tab="${s.key}" onclick="setTab('${s.key}')" title="${s.label}"${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span class="lbl">${s.label}</span></button>`;
+  if(sb)sb.innerHTML=SECTIONS.map(item).join('')+`<div class="sb-group" aria-hidden="true">Wealth</div>`+wealthSections().map(item).join('');
   document.querySelectorAll('.sb-foot .sb-item[data-tab]').forEach(b=>{if(b.dataset.tab===ACTIVE_TAB)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   const bn=$('bottomNav');
   if(bn){
-    const moreActive=ACTIVE_TAB==='more'||ACTIVE_TAB==='settings';
-    bn.innerHTML=SECTIONS.map(s=>`<button class="bn-item" onclick="setTab('${s.key}')"${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span>${s.short||s.label}</span></button>`).join('')
+    const moreActive=['more','settings','accounts','close'].includes(ACTIVE_TAB);
+    bn.innerHTML=[...SECTIONS,{key:'networth',label:'Net worth',icon:'trending-up'}].map(s=>`<button class="bn-item" onclick="setTab('${s.key}')"${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span>${s.short||s.label}</span></button>`).join('')
       +`<button class="bn-item" onclick="setTab('more')"${moreActive?' aria-current="page"':''}>${ic('ellipsis')}<span>More</span></button>`;
   }
 }
@@ -2590,7 +2612,9 @@ function renderOverview(txns){
   const unpaid=cc.filter(c=>!c.lastPayDate&&c.all.length);
   const ap=avgPerMonth();
   const top=categoryTotals(idr)[0];
-  const strip=`<section class="card strip span-12" aria-label="Key figures">
+  const nw=STATE.wealth?wTotals(wMonths().length-1,'book'):null;
+  const strip=`<section class="card strip span-12" aria-label="Key figures" style="${nw?'grid-template-columns:repeat(4,minmax(0,1fr))':''}">
+    ${nw?`<button class="strip-cell" onclick="setTab('networth')"><span class="eyebrow">Net worth</span><span class="strip-val">${kpiMoney(nw.net)}</span><span class="strip-sub">As of ${escH(asOfLabel())}</span></button>`:''}
     <button class="strip-cell" onclick="setTab('cards')"><span class="eyebrow">Cards owed</span><span class="strip-val">${kpiMoney(ccTotal)}</span>
       <span class="strip-sub">${unpaid.length?`<span class="warn">No payment logged for ${escH(unpaid.map(c=>c.label).join(', '))}</span>`:`Across ${cc.length} cards`}</span></button>
     <button class="strip-cell" onclick="setTab('spending')"><span class="eyebrow">Average per month</span><span class="strip-val">${kpiMoney(Math.round(ap.avg))}</span>
@@ -2924,6 +2948,8 @@ function renderSettings(){
       </section>
       <section class="card" id="set-data">${cardHead('refresh-cw','Data','Gmail is read-only; everything you change is saved to your private Google Drive app folder')}
         <div class="setting-row"><div><div class="li-title">Sync</div><div class="li-sub">${escH($('hmeta')?.textContent||'')}</div></div><button class="btn btn-secondary" onclick="load(true)">${ic('refresh-cw')}Sync now</button></div>
+        <div class="setting-row"><div><div class="li-title">Wealth snapshot</div><div class="li-sub">${STATE.wealth?escH(wealthSourceLine()):'Not connected yet'}${WEALTH_FOLDER?' · folder connected on this device':''}</div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${fsSupported()?(WEALTH_FOLDER?`<button class="btn btn-secondary" onclick="reconnectWealthFolder()">${ic('refresh-cw')}Check folder</button><button class="btn btn-ghost" onclick="disconnectWealthFolder()">Disconnect</button>`:`<button class="btn btn-secondary" onclick="connectWealthFolder()">${ic('download')}Connect folder</button>`):''}<button class="btn btn-ghost" onclick="importWealthFile()">Import file…</button></div></div>
         <div class="setting-row"><div><div class="li-title">Currencies</div><div class="li-sub">Exchange rates for foreign debit-card spend</div></div><button class="btn btn-ghost" onclick="CARDS_SUB='fx';setTab('cards')">Open rates${ic('chevron-right','s16')}</button></div>
         <div class="setting-row"><div><div class="li-title">Export</div><div class="li-sub">All transactions as a CSV file that opens in Excel</div></div><button class="btn btn-secondary" onclick="exportToExcel()">${ic('download')}Export</button></div>
         <div class="setting-row"><div><div class="li-title">Account</div><div class="li-sub">${escH(USER_EMAIL||'Signed in')}</div></div><button class="btn btn-danger" onclick="signOut()">${ic('log-out')}Sign out</button></div>
@@ -2937,6 +2963,7 @@ function renderSettings(){
 function renderMore(){
   const theme=themeName();
   return`<div class="card" style="padding-top:6px;padding-bottom:6px"><div class="list">
+    ${wealthSections().filter(s=>s.key!=='networth').map(s=>`<button class="list-item" onclick="setTab('${s.key}')">${ic(s.icon)}<span class="li-body"><span class="li-title">${s.label}</span></span>${ic('chevron-right','s16')}</button>`).join('')}
     <button class="list-item" onclick="setTab('settings')">${ic('settings')}<span class="li-body"><span class="li-title">Settings</span><span class="li-sub" style="display:block">Theme, rules, data</span></span>${ic('chevron-right','s16')}</button>
     <div class="list-item">${ic(theme==='dark'?'moon':'sun')}<span class="li-body"><span class="li-title">Dark theme</span></span><button class="switch" role="switch" aria-checked="${theme==='dark'}" aria-label="Dark theme" onclick="setTheme('${theme==='dark'?'light':'dark'}')"></button></div>
     <div class="list-item">${ic('eye-off')}<span class="li-body"><span class="li-title">Hide amounts</span></span><button class="switch" role="switch" aria-checked="${amountsHidden()}" aria-label="Hide amounts" onclick="toggleHideAmounts()"></button></div>
@@ -2969,6 +2996,9 @@ function renderAll(){
   closeMenus();destroyCharts();
   if(ACTIVE_TAB==='settings'){root.innerHTML=renderSettings();return;}
   if(ACTIVE_TAB==='more'){root.innerHTML=renderMore();return;}
+  if(ACTIVE_TAB==='networth'){root.innerHTML=renderNetWorth();requestAnimationFrame(()=>{renderNetWorthCharts();CHARTS_DRAWN_ONCE=true;});return;}
+  if(ACTIVE_TAB==='accounts'){root.innerHTML=renderAccounts();requestAnimationFrame(()=>{drawAccountChart();CHARTS_DRAWN_ONCE=true;});return;}
+  if(ACTIVE_TAB==='close'&&typeof renderClose==='function'){root.innerHTML=renderClose();return;}
   if(!DATA_READY){if(!$('prog'))root.innerHTML=skeletonHTML();return;}
   const txns=getFiltered();
   if(ACTIVE_TAB==='spending')root.innerHTML=renderSpending(txns);
@@ -2980,6 +3010,241 @@ function renderAll(){
     CHARTS_DRAWN_ONCE=true;
     maybeSwipeHint();
   });
+}
+/* ══════════════════════════════════════════════════════════════════
+   WEALTH — Phases 2–4 (docs/superpowers/specs/2026-10-16-wealth-phases-2-4-design.md).
+   A monthly snapshot (schema et-wealth/1) built on the user's PC from their accounting book is
+   imported into the private Drive file. The app never edits balances and never writes to the
+   books. No personal figure is ever part of this code.
+   ══════════════════════════════════════════════════════════════════ */
+let NW_VIEW='book', NW_RANGE=12, ACC_FILTER='active', ACC_SEL=null, CLOSE_SEL=null;
+const WEALTH_SCHEMA='et-wealth/1';
+function W(){return STATE.wealth||null;}
+function wAccounts(){const w=W();return w?w.accounts:[];}
+function wAcc(id){return wAccounts().find(a=>a.id===id);}
+function wMonths(){const w=W();return w?w.months:[];}
+function wGroup(id){const w=W();return(w&&w.groups.find(g=>g.id===id))||{id,label:id,side:'asset'};}
+// Value of one account in one month: book balance, or the market value when the Market view is on
+// and the close recorded one for that month.
+function wValue(acc,mi,view){
+  const m=wMonths()[mi];if(!m)return 0;
+  const book=m.balances[acc.id]||0;
+  if((view||NW_VIEW)==='market'&&acc.side==='asset'){const mk=(W().market||{})[m.month];if(mk&&mk[acc.id]!=null)return mk[acc.id];}
+  return book;
+}
+function wTotals(mi,view){
+  let assets=0,liab=0;const groups={};
+  for(const a of wAccounts()){const v=wValue(a,mi,view);if(!v)continue;groups[a.group]=(groups[a.group]||0)+v;if(a.side==='asset')assets+=v;else liab+=v;}
+  return{assets,liab,net:assets-liab,groups};
+}
+function hasMarket(mi){const m=wMonths()[mi];return!!(m&&W().market&&W().market[m.month]&&Object.keys(W().market[m.month]).length);}
+function wMonthLabel(k,long){return monthLabel(k,long);}
+function asOfLabel(){const w=W();if(!w)return'';const[y,m]=w.source.asOf.split('-').map(Number);return fmtDayLong(new Date(y,m,0));}
+
+/* ── Import: file picker, or a folder granted once (desktop Chromium) ── */
+function validWealth(s){return s&&s.schema===WEALTH_SCHEMA&&Array.isArray(s.months)&&s.months.length&&Array.isArray(s.accounts)&&s.source&&s.source.asOf;}
+function applyWealth(snap,from,quiet){
+  if(!validWealth(snap)){toast('That file is not an ExpenseTrack wealth snapshot');return false;}
+  const cur=W();
+  if(cur&&Date.parse(cur.generatedAt)>=Date.parse(snap.generatedAt)){if(!quiet)toast('Wealth data is already up to date');return false;}
+  STATE.wealth=snap;STATE.wealthMeta={importedAt:new Date().toISOString(),from};
+  scheduleDriveSave();renderAll();
+  toast(`Wealth data updated · as of ${asOfLabel()}`);
+  return true;
+}
+function importWealthFile(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';
+  inp.onchange=async()=>{const f=inp.files&&inp.files[0];if(!f)return;
+    try{applyWealth(JSON.parse(await f.text()),'file');}catch(e){toast('Couldn’t read that file: '+(e.message||e));}};
+  inp.click();
+}
+function fsSupported(){return typeof window.showDirectoryPicker==='function';}
+function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open('expensetrack',1);r.onupgradeneeded=()=>r.result.createObjectStore('handles');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbReq(mode,fn){const db=await idbOpen();return new Promise((res,rej)=>{const st=db.transaction('handles',mode).objectStore('handles');const q=fn(st);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}
+async function readWealthFromHandle(h,quiet){
+  const fh=await h.getFileHandle('wealth-snapshot.json');const f=await fh.getFile();
+  return applyWealth(JSON.parse(await f.text()),'folder',quiet);
+}
+async function connectWealthFolder(){
+  if(!fsSupported()){toast('Folder access needs Chrome or Edge on a computer — use Import instead');return;}
+  try{
+    const h=await window.showDirectoryPicker({id:'et-wealth',mode:'read'});
+    await idbReq('readwrite',st=>st.put(h,'wealth'));
+    hideBanner('wealth');
+    try{await readWealthFromHandle(h,false);}catch(e){toast('Folder connected, but no wealth-snapshot.json was found in it');}
+    renderAll();
+  }catch(e){if(e&&e.name!=='AbortError')toast('Couldn’t connect the folder: '+(e.message||e));}
+}
+async function reconnectWealthFolder(){
+  try{const h=await idbReq('readonly',st=>st.get('wealth'));if(!h)return connectWealthFolder();
+    if(await h.requestPermission({mode:'read'})==='granted'){hideBanner('wealth');await readWealthFromHandle(h,false);}
+  }catch(e){toast('Couldn’t read the folder: '+(e.message||e));}
+}
+async function disconnectWealthFolder(){try{await idbReq('readwrite',st=>st.delete('wealth'));}catch(_){}WEALTH_FOLDER=false;renderAll();toast('Snapshot folder disconnected on this device');}
+let WEALTH_FOLDER=false;
+// Runs after sign-in on every load: reads the newest snapshot when the folder permission is still
+// granted; otherwise offers a one-click reconnect (browsers need a click to re-grant).
+async function autoImportWealth(){
+  if(!fsSupported())return;
+  try{
+    const h=await idbReq('readonly',st=>st.get('wealth'));if(!h)return;
+    WEALTH_FOLDER=true;
+    const p=await h.queryPermission({mode:'read'});
+    if(p==='granted')await readWealthFromHandle(h,true);
+    else showBanner('wealth','info','refresh-cw','Check your snapshot folder for newer wealth data?','Check now',reconnectWealthFolder);
+  }catch(_){}
+}
+function wealthSourceLine(){
+  const w=W(),m=STATE.wealthMeta||{};
+  return`From your accounting book, as of ${asOfLabel()}${m.importedAt?` · imported ${fmtDateTime(m.importedAt)}`:''}`;
+}
+function wealthEmptyHTML(){
+  return`${pageHead('Net worth','Assets, liabilities and how they change')}
+    <div class="card" style="text-align:center;padding:48px 24px">
+      <span class="empty-ring">${ic('trending-up','s24')}</span>
+      <h2 class="card-title" style="font-size:18px;line-height:24px;margin:16px 0 6px">Connect your wealth snapshot</h2>
+      <p class="muted" style="max-width:480px;margin:0 auto 20px">Your net worth comes from a monthly snapshot of your accounting book, built on your computer. Connect its folder once on this computer and the app picks up each new snapshot by itself. Other devices get it through your Drive.</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        ${fsSupported()?`<button class="btn btn-primary" onclick="connectWealthFolder()">${ic('download')}Connect snapshot folder</button>`:''}
+        <button class="btn ${fsSupported()?'btn-secondary':'btn-primary'}" onclick="importWealthFile()">Import snapshot file…</button>
+      </div>
+      <p class="help" style="margin-top:14px">Folder: <code>accurate-desktop-db\\exports\\&lt;book&gt;\\wealth</code> on your computer</p>
+    </div>`;
+}
+
+/* ── Net Worth (§11.5) ── */
+function nwRangeSeg(){const o=[[12,'12 mo'],[24,'24 mo'],[0,'All']];return`<div class="seg sm" role="group" aria-label="Range">${o.map(([v,l])=>`<button aria-pressed="${NW_RANGE===v}" onclick="NW_RANGE=${v};renderAll()">${l}</button>`).join('')}</div>`;}
+function nwViewSeg(){return`<div class="seg" role="group" aria-label="Valuation"><button aria-pressed="${NW_VIEW==='book'}" onclick="NW_VIEW='book';renderAll()" title="Book value (cost) from your accounting book">Book</button><button aria-pressed="${NW_VIEW==='market'}" onclick="NW_VIEW='market';renderAll()" title="Market value where a close recorded one">Market</button></div>`;}
+const GROUP_ICON={cash:'wallet',deposits:'landmark',stocks:'trending-up',business:'chart-column',property:'house',receivables:'receipt',other_assets:'circle-ellipsis',loans:'arrow-left-right',cards:'credit-card',other_liabilities:'circle-ellipsis'};
+function groupBarsHTML(t){
+  const w=W(),rows=w.groups.map(g=>({g,v:t.groups[g.id]||0})).filter(r=>Math.abs(r.v)>=1);
+  const max=Math.max(1,...rows.map(r=>Math.abs(r.v)));
+  const sect=side=>rows.filter(r=>r.g.side===side).sort((a,b)=>b.v-a.v).map(r=>`<button class="rank-row" onclick="ACC_FILTER='active';ACC_SEL=null;setTab('accounts')" aria-label="${escH(r.g.label)}: ${fmtIDR(r.v)}">
+      <span class="cat-square sm" style="background:${side==='asset'?'var(--accent-soft)':'var(--bad-soft)'};color:${side==='asset'?'var(--accent-text)':'var(--bad)'}">${ic(GROUP_ICON[r.g.id]||(side==='asset'?'wallet':'receipt'))}</span>
+      <span class="rank-name">${escH(r.g.label)}</span><span class="rank-val"><span class="amt">${fmtIDRShort(r.v)}</span></span>
+      <span class="rank-bar"><i style="width:${Math.max(2,Math.abs(r.v)/max*100)}%;background:${side==='asset'?'var(--accent)':'var(--bad)'}"></i></span></button>`).join('');
+  return`<div class="eyebrow" style="margin-bottom:6px">Assets · <span class="amt">${fmtIDRShort(t.assets)}</span></div><div class="rank-list">${sect('asset')}</div>
+    <div class="eyebrow" style="margin:16px 0 6px">Liabilities · <span class="amt">${fmtIDRShort(t.liab)}</span></div><div class="rank-list">${sect('liability')||'<p class="help">None</p>'}</div>`;
+}
+function changesHTML(li){
+  if(li<1)return emptyHTML('trending-up','One month of history so far');
+  const ch=wAccounts().map(a=>({a,d:wValue(a,li)-wValue(a,li-1)})).filter(x=>Math.abs(x.d)>=1).sort((x,y)=>Math.abs(y.d)-Math.abs(x.d)).slice(0,6);
+  if(!ch.length)return emptyHTML('square-check','No changes since last month');
+  return`<div class="list">${ch.map(({a,d})=>{const good=a.side==='asset'?d>0:d<0;return`<div class="list-item">
+      <span class="li-body"><span class="li-title" style="display:block">${escH(a.name)}</span><span class="li-sub" style="display:block">${escH(wGroup(a.group).label)}</span></span>
+      <span class="delta ${good?'good':'bad'} amt">${d>0?'▲ +':'▼ −'}${fmtIDRShort(Math.abs(d)).replace('Rp ','Rp ')}</span></div>`;}).join('')}</div>`;
+}
+function cardTieHTML(li){
+  const books=wAccounts().filter(a=>a.group==='cards').reduce((s,a)=>s+wValue(a,li,'book'),0);
+  const app=CC_CARDS.map(c=>ccState(c.key)).reduce((s,c)=>s+c.balance,0);
+  return`<div class="setting-row" style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px"><div><div class="li-title">Credit cards: books vs app</div>
+    <div class="li-sub">Books ${asOfLabel()}: <span class="amt">${fmtIDR(books)}</span> · App today (Maybank + OCBC CC): <span class="amt">${fmtIDR(app)}</span></div></div>
+    <span class="badge">${books&&Math.abs(app-books)<1?'Matches':'Compare at month-end'}</span></div>`;
+}
+function allocationHTML(t){
+  const w=W(),rows=w.groups.filter(g=>g.side==='asset').map(g=>({g,v:t.groups[g.id]||0})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v);
+  if(!rows.length||t.assets<=0)return'';
+  const cols=['#5B5BF0','#22D3EE','#34D399','#F59E0B','#EC4899','#94A3B8','#A3E635'];
+  return`<section class="card span-12">${cardHead('chart-pie','Allocation',`Asset mix · ${NW_VIEW==='market'?'market':'book'} value`)}
+    <div class="stackbar" role="img" aria-label="${escH(rows.map(r=>`${r.g.label} ${fmtPct(r.v/t.assets*100)}`).join(', '))}">${rows.map((r,i)=>`<i style="width:${r.v/t.assets*100}%;background:${cols[i%cols.length]}"></i>`).join('')}</div>
+    <div class="legend">${rows.map((r,i)=>`<span class="legend-item"><i style="background:${cols[i%cols.length]}"></i>${escH(r.g.label)} · <span class="amt">${fmtIDRShort(r.v)}</span> · ${fmtPct(r.v/t.assets*100)}</span>`).join('')}</div></section>`;
+}
+function renderNetWorth(){
+  if(!W())return wealthEmptyHTML();
+  const ms=wMonths(),li=ms.length-1,t=wTotals(li),pt=li>0?wTotals(li-1):null;
+  const marketMissing=NW_VIEW==='market'&&!hasMarket(li);
+  const delta=pt?deltaHTML(t.net,pt.net,true,'vs '+wMonthLabel(ms[li-1].month)):'';
+  return`${pageHead('Net worth',wealthSourceLine(),`${nwViewSeg()}${hideBtn()}`)}
+    <div class="only-sm" style="margin-bottom:12px">${nwViewSeg()}</div>
+    ${marketMissing?`<div class="banner info" style="border-radius:var(--radius-sm);margin-bottom:12px;padding:10px 14px">${ic('info')}<span class="msg">No market values recorded for ${wMonthLabel(ms[li].month,true)} yet — showing book values. Give them to Claude at the next month-end close.</span></div>`:''}
+    <div class="grid"><section class="card summary span-12" id="nwCard" aria-label="Net worth summary">
+      <div class="summary-l">
+        <div class="eyebrow">Net worth · ${wMonthLabel(ms[li].month,true)}</div>
+        <div class="display"><span class="amt"><span class="cur">Rp</span>${fmtNum(t.net)}</span></div>
+        ${delta?`<div class="summary-line">${delta}</div>`:''}
+        <dl class="facts"><div><dt class="eyebrow">Assets</dt><dd class="amt">${fmtIDRShort(t.assets)}</dd></div><div><dt class="eyebrow">Liabilities</dt><dd class="amt">${fmtIDRShort(t.liab)}</dd></div></dl>
+      </div>
+      <div class="summary-r">${cardHead('','Net worth over time','Month-end, '+(NW_VIEW==='market'?'market where recorded':'book value'),nwRangeSeg()+tableToggle('nwCard'))}
+        <div class="chart-readout" id="nwReadout" aria-live="polite"></div>
+        <div class="chart-box"><canvas id="nwChart" role="img" aria-label="Net worth by month"></canvas></div><div class="chart-table" id="nwTable"></div></div>
+    </section></div>
+    <div class="grid">
+      <section class="card span-7">${cardHead('wallet','Assets and liabilities','By group · click to see the accounts')}${groupBarsHTML(t)}${cardTieHTML(li)}</section>
+      <section class="card span-5">${cardHead('trending-up','What changed',pt?`Since ${wMonthLabel(ms[li-1].month,true)}`:'')}${changesHTML(li)}</section>
+    </div>
+    <div class="grid">${allocationHTML(t)}</div>`;
+}
+function renderNetWorthCharts(){
+  const el=$('nwChart');if(!el||!W())return;
+  const ms=wMonths(),from=NW_RANGE?Math.max(0,ms.length-NW_RANGE):0;
+  const keys=ms.slice(from).map(m=>m.month),vals=keys.map((_,i)=>wTotals(from+i).net);
+  const mobile=isMobile(),acc=cssVar('--accent'),last=vals.length-1;
+  readout('nwReadout',monthLabel(keys[last]),vals[last]);
+  CHARTS.nwChart=new Chart(el,{type:'line',plugins:[crosshairPlugin],
+    data:{labels:keys.map(k=>monthLabel(k).replace(/ (\d{2})(\d{2})$/,' ’$2')),datasets:[{data:vals,fill:true,borderColor:acc,backgroundColor:c=>gradientFill(c.chart),pointHoverBackgroundColor:acc,pointHoverBorderColor:cssVar('--surface-1'),pointHoverBorderWidth:2,pointHitRadius:16}]},
+    options:{responsive:true,maintainAspectRatio:false,...animOnce(),interaction:{mode:'index',intersect:false},
+      onHover:(e,els)=>{if(els.length)readout('nwReadout',monthLabel(keys[els[0].index]),vals[els[0].index]);},
+      plugins:{tooltip:{enabled:!mobile,displayColors:false,callbacks:{title:it=>monthLabel(keys[it[0].dataIndex],true),label:c=>moneyTip(c.parsed.y)}}},
+      scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:mobile?5:12,maxRotation:0}},y:{border:{display:false},ticks:{maxTicksLimit:5,callback:moneyTick}}}}});
+  const tb=$('nwTable');if(tb)tb.innerHTML=`<table class="data"><thead><tr><th scope="col">Month</th><th scope="col" class="num">Net worth</th></tr></thead><tbody>${keys.map((k,i)=>`<tr><td>${monthLabel(k)}</td><td class="num amt">${fmtIDR(vals[i])}</td></tr>`).join('')}</tbody></table>`;
+}
+
+/* ── Accounts (§11.6) ── */
+function toggleDeclared(id,ev){if(ev)ev.stopPropagation();const d=STATE.declared||(STATE.declared={});d[id]=!d[id];scheduleDriveSave();renderAll();}
+function accountRowsHTML(li){
+  const w=W(),declared=STATE.declared||{};
+  const acc=wAccounts().filter(a=>ACC_FILTER==='all'||(ACC_FILTER==='active'&&a.active)||(ACC_FILTER==='undeclared'&&a.active&&!declared[a.id]));
+  return w.groups.map(g=>{
+    const list=acc.filter(a=>a.group===g.id);if(!list.length)return'';
+    const sub=list.reduce((s,a)=>s+wValue(a,li),0);
+    return`<tr class="group-row"><th scope="rowgroup" colspan="3">${escH(g.label)}</th><td class="num amt" style="font-weight:600">${fmtIDR(sub)}</td></tr>`+
+      list.map(a=>{const v=wValue(a,li),book=wValue(a,li,'book'),mk=v!==book;
+        return`<tr class="clickable${ACC_SEL===a.id?' selected':''}" onclick="selectAccount('${escAttr(a.id)}')" tabindex="0" onkeydown="if(event.key==='Enter')selectAccount('${escAttr(a.id)}')">
+          <td class="sel-col"><input type="checkbox" ${declared[a.id]?'checked':''} onclick="toggleDeclared('${escAttr(a.id)}',event)" aria-label="Declared in tax return: ${escH(a.name)}" title="Declared in tax return"></td>
+          <td class="merchant"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${a.ccy!=='IDR'?`<span class="badge">${escH(a.ccy)}</span>`:''}${!a.active?'<span class="badge">Inactive</span>':''}${mk?`<span>Book <span class="amt">${fmtIDRShort(book)}</span></span>`:''}</div></td>
+          <td class="muted">${escH(a.id)}</td>
+          <td class="amount num">${amt(v)}</td></tr>`;}).join('');
+  }).join('');
+}
+function accountDetailHTML(id,li){
+  const a=wAcc(id);if(!a)return emptyHTML('landmark','Select an account to see its history');
+  const ms=wMonths(),v=wValue(a,li),pv=li>0?wValue(a,li-1):null,good=pv!=null&&(a.side==='asset'?v>=pv:v<=pv);
+  const rows=ms.slice(-12).reverse().map((m,i)=>{const idx=ms.length-1-i;return`<tr><td>${monthLabel(m.month)}</td><td class="num amt">${fmtIDR(wValue(a,idx))}</td></tr>`;}).join('');
+  return`<div class="eyebrow">${escH(wGroup(a.group).label)} · ${a.side==='asset'?'asset':'liability'}${a.ccy!=='IDR'?' · '+escH(a.ccy)+' account (shown in Rp)':''}</div>
+    <div style="font-weight:600;font-size:16px;margin-top:6px;overflow-wrap:anywhere">${escH(a.name)}</div>
+    <div class="display" style="font-size:28px;line-height:34px"><span class="amt"><span class="cur">Rp</span>${fmtNum(v)}</span></div>
+    ${pv!=null?`<div class="summary-line">${deltaHTML(v,pv,a.side==='asset','vs '+monthLabel(ms[li-1].month))}</div>`:''}
+    <div class="chart-box" style="height:160px;margin:14px 0"><canvas id="accChart" role="img" aria-label="Balance history of ${escH(a.name)}"></canvas></div>
+    <div class="table-wrap" style="max-height:260px"><table class="data"><thead><tr><th scope="col">Month-end</th><th scope="col" class="num">Balance</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <label class="check" style="margin-top:14px"><input type="checkbox" ${(STATE.declared||{})[a.id]?'checked':''} onchange="toggleDeclared('${escAttr(a.id)}')"> Declared in tax return (SPT)</label>`;
+}
+function selectAccount(id){
+  ACC_SEL=id;
+  if(isMobile()){const li=wMonths().length-1;openSheet({title:'Account',body:accountDetailHTML(id,li)});requestAnimationFrame(drawAccountChart);return;}
+  renderAll();
+}
+function drawAccountChart(){
+  const el=$('accChart'),a=wAcc(ACC_SEL);if(!el||!a)return;
+  if(CHARTS.accChart){try{CHARTS.accChart.destroy();}catch(_){}}
+  const ms=wMonths().slice(-24),off=wMonths().length-ms.length,vals=ms.map((_,i)=>wValue(a,off+i)),acc=cssVar('--accent');
+  CHARTS.accChart=new Chart(el,{type:'line',data:{labels:ms.map(m=>monthLabel(m.month).replace(/ \d{4}$/,'')),datasets:[{data:vals,fill:true,borderColor:acc,backgroundColor:c=>gradientFill(c.chart),pointHitRadius:12}]},
+    options:{responsive:true,maintainAspectRatio:false,...animOnce(),plugins:{tooltip:{displayColors:false,callbacks:{title:it=>monthLabel(ms[it[0].dataIndex].month,true),label:c=>moneyTip(c.parsed.y)}}},
+      scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:6,maxRotation:0}},y:{border:{display:false},ticks:{maxTicksLimit:4,callback:moneyTick}}}}});
+}
+function renderAccounts(){
+  if(!W())return wealthEmptyHTML();
+  const li=wMonths().length-1,t=wTotals(li),declared=STATE.declared||{};
+  const nAct=wAccounts().filter(a=>a.active).length,nUndecl=wAccounts().filter(a=>a.active&&!declared[a.id]).length;
+  if(!ACC_SEL||!wAcc(ACC_SEL))ACC_SEL=null;
+  const seg=`<div class="seg" role="group" aria-label="Show accounts"><button aria-pressed="${ACC_FILTER==='active'}" onclick="ACC_FILTER='active';renderAll()">Active (${nAct})</button><button aria-pressed="${ACC_FILTER==='undeclared'}" onclick="ACC_FILTER='undeclared';renderAll()">Not declared (${nUndecl})</button><button aria-pressed="${ACC_FILTER==='all'}" onclick="ACC_FILTER='all';renderAll()">All</button></div>`;
+  return`${pageHead('Accounts',wealthSourceLine(),`${nwViewSeg()}${hideBtn()}`)}
+    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">${seg}<span class="only-sm">${nwViewSeg()}</span></div>
+    <div class="grid">
+      <section class="card flush span-7">${cardHead('landmark','All accounts',`Net worth <span class="amt">${fmtIDR(t.net)}</span> · tick = declared in your tax return`)}
+        <div class="table-wrap"><table class="data acc-table"><thead><tr><th class="sel-col" scope="col"><span class="sr-only">Declared</span>${ic('square-check','s16')}</th><th scope="col">Account</th><th scope="col">Code</th><th scope="col" class="num">${NW_VIEW==='market'?'Value':'Balance'}</th></tr></thead>
+        <tbody>${accountRowsHTML(li)||`<tr><td colspan="4">${emptyHTML('square-check','Every active account is marked as declared')}</td></tr>`}</tbody></table></div></section>
+      <section class="card span-5 hide-sm" id="accDetail">${cardHead('chart-column','Account detail','')}${accountDetailHTML(ACC_SEL,li)}</section>
+    </div>`;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -3116,6 +3381,7 @@ async function onSignedIn(){
   }catch(e){}
   await bootFromDrive();
   load();
+  autoImportWealth();
 }
 
 /* ══════════════════════════════════════════════════════════════════

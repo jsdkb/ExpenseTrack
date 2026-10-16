@@ -98,8 +98,8 @@ anywhere, and a home screen organised like a financial statement rather than a r
 | **Overview** (home) | KPI row, spend trend, category breakdown, transactions list, subscriptions to review | Overview tab | Phase 1 |
 | **Spending** | Trend analysis, categories, top merchants, top transfers, recurring charges, bank split | Reporting tab | Phase 1 |
 | **Credit Cards** | Per-card position, estimated billing, paid-through history, current-balance transactions; sub-tab **Foreign currency** | CC Position + Foreign Currency tabs | Phase 1 |
-| **Net Worth** | Net worth over time, assets vs liabilities, change drivers | — | Phase 2 |
-| **Accounts** | All accounts grouped by type, balances, last updated | — | Phase 2 |
+| **Net Worth** | Net worth over time, Book/Market toggle, assets vs liabilities by group, what changed, card tie-out, allocation | Monthly snapshot of the accounting book | Phase 2 (shipped 2026-10-16) |
+| **Accounts** | All accounts grouped with subtotals, balance history, "declared in tax return" flag | Same snapshot | Phase 2 (shipped 2026-10-16) |
 | **Month-end Close** | Guided close: enter positions → review diff → journal list → re-check → done | — | Phase 3 |
 | **Settings** | Appearance (theme), categories & rules, auto-note rules, date-category rules, FX rates, data (sync, export, sign out), about | Scattered controls today | Phase 1 |
 
@@ -723,25 +723,39 @@ Credit Cards                       [Card: All ▾]  [This cycle ▾]
   then the foreign transactions table with original amount + converted `Rp` amount. This is the
   one place amounts show `IDR`/`USD` codes instead of `Rp`.
 
-### 11.5 Net Worth (Phase 2 — blueprint for later)
+### 11.5 Net Worth (Phase 2 — shipped)
 
-Question: *"Am I getting wealthier?"*
+Question: *"Am I getting wealthier?"* Data: the monthly `et-wealth/1` snapshot of the accounting
+book (spec: `docs/superpowers/specs/2026-10-16-wealth-phases-2-4-design.md`), read-only.
 
-- Hero: net worth in `display` style, change vs last month (coloured by meaning), period
-  dropdown (6 mo / 12 mo / All).
-- Area chart of net worth over time (full width).
-- Assets vs liabilities: two KPI cards + diverging bars by group (Cash, Investments, Property,
-  Receivables vs Credit cards, Loans).
-- "What changed this month" list: top 5 movements with amounts.
-- Mobile: hero + chart above the fold; the rest stacks.
+- Page header: title + the source line ("From your accounting book, as of 31 Aug 2026 · imported …").
+  Right: **Book | Market** segmented control (Market uses month-end market values recorded at a
+  close; where none exist the page says so in an `--info` note and shows book values).
+- Summary panel (same pattern as Overview §11.2): eyebrow "Net worth · August 2026", `display`
+  figure, change vs the previous month coloured by meaning (up = `--good`), and Assets /
+  Liabilities facts; right column: the net-worth area chart with a 12 mo / 24 mo / All control.
+- "Assets and liabilities": groups as ranked bars — assets in `--accent`, liabilities in `--bad`,
+  one Lucide icon per group (wallet, landmark, trending-up, chart-column, house, receipt;
+  arrow-left-right for loans, credit-card for cards). The card ends with the **credit-card
+  tie-out**: the book's card account vs the app's Maybank + OCBC CC balances.
+- "What changed": the six largest account movements vs the previous month, ▲/▼ with sign,
+  coloured by meaning for that side.
+- "Allocation": the asset mix as one stacked bar plus a legend with amount and share.
+- Before any snapshot: an empty state with **Connect snapshot folder** (desktop Chromium) and
+  **Import snapshot file…**.
 
-### 11.6 Accounts (Phase 2)
+### 11.6 Accounts (Phase 2 — shipped)
 
-- Grouped list (Cash & bank · Investments · Property · Credit cards · Loans), each group with a
-  subtotal; each account row: name, institution badge, balance, "updated 3 d ago" (`--warn` when
-  older than the last month-end).
-- Web: list left (5 cols) + selected account detail right (7 cols, balance history chart).
-- Mobile: list → tap → detail page.
+- Filter control: Active · Not declared · All.
+- Web: a table (7 cols) grouped by account group with a subtotal row per group — checkbox
+  "declared in tax return", name (masked number, currency badge, "Inactive" badge, book value
+  when Market view differs), code, balance. The detail panel (5 cols) shows the selected account:
+  balance, change vs previous month, a 24-month line chart, the last 12 month-ends and the
+  declared checkbox.
+- Mobile: the same table; tapping a row opens the detail as a bottom sheet.
+- Navigation: sidebar group "Wealth" (Net worth always; Accounts and Month-end once a snapshot
+  exists). Mobile bottom bar: Overview · Spending · Cards · Net worth · More (Accounts and
+  Month-end under More).
 
 ### 11.7 Month-end Close (Phase 3)
 
