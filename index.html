@@ -592,6 +592,7 @@
     .entry.posted { opacity: 0.6; }
     .entry-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
     .entry-tools { display: flex; align-items: center; gap: 10px; }
+    .cf-facts { grid-template-columns: repeat(4, minmax(0,1fr)); margin: 0 0 16px; padding: 0 0 16px; border-top: none; border-bottom: 1px solid var(--border); }
     .cs-row { gap: 12px; }
     .cs-amt { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .cs-total { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--border); font-size: 14px; }
@@ -697,6 +698,7 @@
       table.data td.num, table.data th.num { white-space: nowrap; }
       .entry { padding: 10px; }
       .entry .table-wrap { margin: 0 -10px; }
+      .cf-facts { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .stepper { grid-template-columns: 1fr; gap: 0; }
       .step { display: grid; grid-template-columns: 28px 1fr; column-gap: 12px; row-gap: 0; padding: 6px 0 10px; }
       .step::before { top: 38px; left: 13px; right: auto; width: 2px; height: calc(100% - 30px); }
@@ -2772,6 +2774,7 @@ function renderSpending(txns){
         <div class="chart-box"><canvas id="spStack" role="img" aria-label="Spend per month split by top five categories"></canvas></div><div class="legend" id="spStackLegend"></div><div class="chart-table" id="spStackTable"></div></section>
     </div>
     ${showPace?`<div class="grid">${paceCard()}</div>`:''}
+    ${STATE.wealth?`<div class="grid">${cashFlowCardHTML()}</div>`:''}
     <div class="grid">
       <section class="card span-6">${cardHead('chart-pie','Where it went',escH(pl)+' · click a category to filter')}${rankedCategoriesHTML(idr,isMobile()?8:0)}</section>
       <section class="card span-6">${cardHead('credit-card','Split by bank',escH(pl))}${bankBar}</section>
@@ -2790,6 +2793,7 @@ function renderSpendingCharts(){
   drawMonthlyBars('spMonthly','spMonthlyReadout',s.keys,s.vals);
   const tb=$('spMonthlyTable');if(tb)tb.innerHTML=seriesTable(s.keys,s.vals);
   drawCategoryStack('spStack','spStackLegend',base,s.keys);
+  if(STATE.wealth)drawCashFlow();
   const st=$('spStackTable');
   if(st&&CHARTS.spStack){const ds=CHARTS.spStack.data.datasets;st.innerHTML=`<table class="data"><thead><tr><th scope="col">Month</th>${ds.map(d=>`<th scope="col" class="num">${escH(d.label)}</th>`).join('')}</tr></thead><tbody>${s.keys.map((k,i)=>`<tr><td>${monthLabel(k)}</td>${ds.map(d=>`<td class="num amt">${fmtIDRShort(d.data[i])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;}
 }
@@ -3351,6 +3355,42 @@ function renderClose(){
     <div class="grid"><section class="card span-12">${cardHead('receipt','Journal entries to post',c.entries.length?'Post these in Accurate yourself, then tick them. The app never writes to your books.':'')}
       ${entries||emptyHTML('square-check','No entries for this close')}</section></div>
     <div class="grid"><section class="card span-12">${cardHead('refresh-cw','Re-check','')}<p class="summary-line">${recheck}</p></section></div>`;
+}
+/* ── Cash flow (Phase 4): income and expense from the book's P&L, with the spend the app sees in
+   Gmail alongside for reference. ── */
+function cashFlowRows(){
+  const w=W();if(!w||!Array.isArray(w.pnl)||!w.pnl.length)return[];
+  const app={};for(const t of ALL_TRANSACTIONS){if(!(t.amount>0))continue;const k=monthKeyOf(txDateOf(t));app[k]=(app[k]||0)+t.amount;}
+  return w.pnl.slice(-12).map(r=>({month:r.month,income:r.income||0,expense:r.expense||0,app:app[r.month]||0,net:(r.income||0)-(r.expense||0)}));
+}
+function cashFlowCardHTML(){
+  const rows=cashFlowRows();if(!rows.length)return'';
+  const last=rows[rows.length-1],inc=rows.reduce((s,r)=>s+r.income,0),exp=rows.reduce((s,r)=>s+r.expense,0);
+  const rate=inc?(inc-exp)/inc*100:null,lastRate=last.income?last.net/last.income*100:null;
+  const fact=(l,v,cls)=>`<div><dt class="eyebrow">${l}</dt><dd class="${cls||''}">${v}</dd></div>`;
+  return`<section class="card span-12" id="cfCard">${cardHead('arrow-left-right','Cash flow',`From your accounting book · last ${rows.length} months · Gmail card spend shown for reference`,tableToggle('cfCard'))}
+    <dl class="facts cf-facts">
+      ${fact(`Income · ${monthLabel(last.month)}`,`<span class="amt">${fmtIDRShort(last.income)}</span>`)}
+      ${fact(`Expense · ${monthLabel(last.month)}`,`<span class="amt">${fmtIDRShort(last.expense)}</span>`)}
+      ${fact(`Saved · ${monthLabel(last.month)}`,`<span class="amt ${last.net>=0?'good':'bad'}">${last.net<0?'−':''}${fmtIDRShort(Math.abs(last.net))}</span>${lastRate!=null?` <span class="faint" style="font-weight:500">${fmtPct(lastRate)}</span>`:''}`)}
+      ${fact(`Savings rate · ${rows.length} mo`,rate!=null?`<span class="${rate>=0?'good':'bad'}">${rate<0?'−':''}${fmtPct(Math.abs(rate))}</span>`:'—')}
+    </dl>
+    <div class="chart-box"><canvas id="cfChart" role="img" aria-label="Monthly income and expense from the book"></canvas></div>
+    <div class="legend"><span class="legend-item"><i style="background:var(--good)"></i>Income</span><span class="legend-item"><i style="background:var(--bad)"></i>Expense (book)</span><span class="legend-item"><i style="background:var(--text-3)"></i>Card spend seen in Gmail</span></div>
+    <div class="chart-table"><table class="data"><thead><tr><th scope="col">Month</th><th scope="col" class="num">Income</th><th scope="col" class="num">Expense</th><th scope="col" class="num">Saved</th><th scope="col" class="num">Gmail spend</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${monthLabel(r.month)}</td><td class="num amt">${fmtIDR(r.income)}</td><td class="num amt">${fmtIDR(r.expense)}</td><td class="num amt">${fmtIDR(r.net)}</td><td class="num amt">${fmtIDR(r.app)}</td></tr>`).join('')}</tbody></table></div>
+  </section>`;
+}
+function drawCashFlow(){
+  const el=$('cfChart'),rows=cashFlowRows();if(!el||!rows.length)return;
+  const mobile=isMobile(),th=mobile?10:18;
+  CHARTS.cfChart=new Chart(el,{data:{labels:rows.map(r=>monthLabel(r.month).replace(/ \d{4}$/,'')),datasets:[
+      {type:'bar',label:'Income',data:rows.map(r=>r.income),backgroundColor:cssVar('--good'),maxBarThickness:th},
+      {type:'bar',label:'Expense (book)',data:rows.map(r=>r.expense),backgroundColor:cssVar('--bad'),maxBarThickness:th},
+      {type:'line',label:'Card spend seen in Gmail',data:rows.map(r=>r.app),borderColor:cssVar('--text-3'),borderDash:[4,4],borderWidth:1.5,pointRadius:0,tension:0.3}]},
+    options:{responsive:true,maintainAspectRatio:false,...animOnce(),interaction:{mode:'index',intersect:false},
+      plugins:{tooltip:{callbacks:{title:it=>monthLabel(rows[it[0].dataIndex].month,true),label:c=>` ${c.dataset.label}: ${moneyTip(c.parsed.y)}`}}},
+      scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:mobile?6:12,maxRotation:0}},y:{beginAtZero:true,border:{display:false},ticks:{maxTicksLimit:5,callback:moneyTick}}}}});
 }
 
 /* ══════════════════════════════════════════════════════════════════

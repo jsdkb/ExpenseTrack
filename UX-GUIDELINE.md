@@ -697,6 +697,10 @@ Question it answers: *"What is driving my spend, and is anything unusual?"*
   (100% bar).
 - **Mobile:** same order, single column; Top merchants/transfers become a segmented control
   (Merchants | Transfers) in one card to save scroll.
+- **Cash flow (Phase 4, shown once a wealth snapshot exists):** income vs expense per month from
+  the book's P&L (bars in `--good` / `--bad`), with the card spend the app sees in Gmail as a
+  dashed `--text-3` reference line; four facts above the chart (last month's income, expense,
+  saved + rate, and the 12-month savings rate; 2×2 on mobile) and a table view.
 - **Drill-down:** clicking a category (bar, chip or legend) filters the whole page to it and shows a
   removable filter chip under the header ("Food & Dining ✕"). Same pattern for merchant.
 
