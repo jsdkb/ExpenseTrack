@@ -1,6 +1,6 @@
 # Wealth tracker — Phases 2–4 design
 
-**Date:** 2026-10-16 · **Status:** approved via upfront questions (user, 2026-10-16) · **Repo is
+**Date:** 2026-10-16 · **Status:** approved via upfront questions (user, 2026-10-16); implemented — Phases 2–4 live (`49c6e70`, `4c90bfd`, `5edf7a5`) · **Repo is
 public:** this spec contains no personal data; every figure below is a placeholder.
 
 ## Goal
