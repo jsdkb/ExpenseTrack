@@ -970,6 +970,7 @@ async function driveGetRevision(fileId){
 
 const DATA_FILE_NAME = 'cc-tracker-data.json';
 const STATE_MIRROR_KEY = 'cc_tracker_state_v1';
+const CAT_LOG_MAX = 1000; // newest manual category changes kept in the Drive file
 
 function defaultState(){
   return {
@@ -977,7 +978,7 @@ function defaultState(){
     txns: [], payments: [], manualTxns: [],
     catOverrides: {}, merchantCats: {}, txEdits: {}, splits: {}, notes: {},
     merchantAutoNotes: {}, manualFxRates: {}, hiddenIds: [], subDecisions: {},
-    dateCategoryRules: [], patternRules: [], ccPosExcludedIds: [],
+    dateCategoryRules: [], patternRules: [], catChangeLog: [], dismissedSuggestions: [], ccPosExcludedIds: [],
     wealth: null, wealthMeta: null, closeTicks: {}, declared: {}
   };
 }
@@ -1039,6 +1040,8 @@ function mergeStates(remote, local){
     const lp = local.patternRules || [], seen = new Set(lp.map(r => String(r.match).toUpperCase()));
     merged.patternRules = [...lp, ...(remote.patternRules||[]).filter(r => !seen.has(String(r.match).toUpperCase()))];
   }
+  merged.catChangeLog = unionById(remote.catChangeLog, local.catChangeLog).sort((a,b) => String(a.at).localeCompare(String(b.at))).slice(-CAT_LOG_MAX);
+  merged.dismissedSuggestions = [...new Set([...(remote.dismissedSuggestions||[]), ...(local.dismissedSuggestions||[])])];
   // Wealth snapshot: keep whichever device holds the newer one.
   const lw = local.wealth, rw = remote.wealth;
   const localNewer = lw && (!rw || Date.parse(lw.generatedAt) > Date.parse(rw.generatedAt));
@@ -3060,6 +3063,46 @@ function importPatternRules(){
   };
   inp.click();
 }
+// Suggested rules: merchants the user has moved to the same category at least twice, which no
+// rule yet gives that category. Only each transaction's latest change counts.
+function categorySuggestions(){
+  const latest=new Map();
+  for(const e of (STATE.catChangeLog||[]))if(e&&e.tx&&(!latest.has(e.tx)||String(e.at)>=String(latest.get(e.tx).at)))latest.set(e.tx,e);
+  const groups=new Map();
+  for(const e of latest.values()){
+    const m=(e.m||e.raw||'').trim();if(!m)continue;
+    const key=m.toUpperCase()+'|'+e.to;
+    if(!groups.has(key))groups.set(key,{key,merchant:m,to:e.to,raws:[],count:0});
+    const g=groups.get(key);g.count++;if(e.raw)g.raws.push(e.raw.toUpperCase());
+  }
+  const mc=getMerchantCats(),dismissed=new Set(STATE.dismissedSuggestions||[]);
+  return[...groups.values()].filter(g=>g.count>=2&&!dismissed.has(g.key)&&mc[g.merchant]!==g.to&&!g.raws.every(r=>categorize(r)===g.to))
+    .map(g=>({...g,match:commonMatchText(g.raws)||g.merchant.toUpperCase()}))
+    .sort((a,b)=>b.count-a.count);
+}
+// The longest shared start of the raw merchant names, cut back to a whole word.
+function commonMatchText(raws){
+  if(!raws.length)return'';
+  let p=raws[0];for(const r of raws)while(p&&!r.startsWith(p))p=p.slice(0,-1);
+  if(raws.some(r=>r.length>p.length&&/[A-Z0-9]/.test(r[p.length]||'')))p=p.replace(/\S*$/,'');
+  p=p.trim();return p.length>=3?p:'';
+}
+function useSuggestion(i){
+  const s=categorySuggestions()[i];if(!s)return;
+  const inp=$('prMatch'),sel=$('prCat');if(!inp||!sel)return;
+  inp.value=s.match;sel.value=s.to;inp.focus();inp.select();
+  toast('Check the text, then press Add');
+}
+function dismissSuggestion(i){
+  const s=categorySuggestions()[i];if(!s)return;
+  STATE.dismissedSuggestions=[...(STATE.dismissedSuggestions||[]),s.key];scheduleDriveSave();renderAll();
+  toast('Suggestion dismissed',{action:'Undo',onAction:()=>{STATE.dismissedSuggestions=(STATE.dismissedSuggestions||[]).filter(k=>k!==s.key);scheduleDriveSave();renderAll();}});
+}
+function exportCatChangeLog(){
+  const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),catChangeLog:STATE.catChangeLog||[]},null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`category-changes-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
 function removeAutoNoteRule(p){
   const r=getMerchantAutoNotes();const prev=r[p];if(prev===undefined)return;
   delete r[p];saveMerchantAutoNotes(r);renderAll();
@@ -3070,6 +3113,7 @@ function renderSettings(){
   const an=Object.entries(getMerchantAutoNotes());
   const dr=STATE.dateCategoryRules||[];
   const pr=STATE.patternRules||[];
+  const sug=categorySuggestions(),logN=(STATE.catChangeLog||[]).length;
   const prCats=[...new Set([...Object.keys(CATEGORIES),...Object.values(getMerchantCats()),...pr.map(r=>r.category)])];
   const theme=themeName(),hid=amountsHidden();
   return`${pageHead('Settings','Appearance, rules and your data')}
@@ -3086,6 +3130,10 @@ function renderSettings(){
         <h3 class="label" style="margin:4px 0 8px">Merchant → category (${mc.length})</h3>
         ${mc.length?`<div class="list" style="max-height:360px;overflow:auto">${mc.map(([m,c])=>`<div class="list-item"><div class="li-body"><div class="li-title">${escH(m)}</div></div>${catChip(c)}<button class="icon-btn sm danger" onclick="removeMerchantRule('${escAttr(m)}')" aria-label="Remove rule for ${escH(m)}" title="Remove rule">${ic('x','s16')}</button></div>`).join('')}</div>`
           :`<p class="help">None yet. Changing a transaction’s category with “Always use this” ticked adds one.</p>`}
+        <h3 class="label" style="margin:20px 0 8px">Suggested from your changes (${sug.length})</h3>
+        ${sug.length?`<div class="list">${sug.map((s,i)=>`<div class="list-item"><div class="li-body"><div class="li-title">${escH(s.match)}</div><div class="li-sub">You moved ${s.count} transactions from ${escH(s.merchant)} here</div></div>${catChip(s.to)}<button class="btn btn-secondary btn-sm" onclick="useSuggestion(${i})">Use</button><button class="icon-btn sm" onclick="dismissSuggestion(${i})" aria-label="Dismiss suggestion for ${escH(s.match)}" title="Dismiss">${ic('x','s16')}</button></div>`).join('')}</div>`
+          :`<p class="help">None right now. When you move the same merchant to the same category twice and no rule covers it, it shows up here.</p>`}
+        <div class="setting-row"><div><div class="li-title">Category change log</div><div class="li-sub">${logN} change${logN===1?'':'s'} recorded, kept privately in Drive</div></div><button class="btn btn-ghost" onclick="exportCatChangeLog()"${logN?'':' disabled'}>${ic('download')}Export</button></div>
         <h3 class="label" style="margin:20px 0 8px">Merchant contains → category (${pr.length})</h3>
         <p class="help" style="margin:0 0 8px">Checked top to bottom before the built-in rules; the first match wins.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
