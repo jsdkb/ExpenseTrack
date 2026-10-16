@@ -488,8 +488,9 @@ Always visible: sidebar footer (web), a dot in the top app bar (mobile; tap open
 | Syncing | spinning `refresh-cw`, `--accent-text` | "Syncing Gmail… 120 new" |
 | Saving to Drive | pulsing `--info` dot | "Saving…" |
 | Conflict merged | `--info` dot + toast | "Merged changes from another device" |
-| Failed | `--bad` dot + banner | "Sync failed — Retry" |
-| Needs sign-in | `--warn` dot + banner | "Session expired — Sign in again" |
+| Failed | `--bad` dot + banner | "Sync failed — Retry"; the banner names the likely cause in plain words, and the status sheet adds the raw Drive error under "Details" |
+| Needs sign-in | `--warn` dot + banner | "Session expired — Sign in again". Any Sync/Retry button asks for the sign-in first, then finishes the sync |
+| Restored | `--info` dot + toast | "Restored changes that hadn't reached Google Drive" (edits from an earlier visit whose save never landed, merged on sign-in) |
 
 ---
 

@@ -880,7 +880,7 @@ function initAuth(){
           showBanner('auth','warn','triangle-alert','Session expired — sign in again to sync and save changes.','Sign in again',reauth);
           renderSyncUI();
         } else {
-          REAUTHING = false;
+          REAUTHING = false; AFTER_REAUTH = null;
           $('authStatus').textContent = 'Sign-in failed: ' + resp.error;
           if (!wasGated) toast('Sign-in failed: ' + resp.error);
         }
@@ -888,7 +888,11 @@ function initAuth(){
       }
       accessToken = resp.access_token;
       scheduleSilentRefresh(resp.expires_in);
-      if (REAUTHING){ REAUTHING = false; hideBanner('auth'); renderSyncUI(); scheduleDriveSave(); toast('Signed in again'); return; }
+      if (REAUTHING){
+        REAUTHING = false; hideBanner('auth'); renderSyncUI(); scheduleDriveSave(); toast('Signed in again');
+        const next = AFTER_REAUTH; AFTER_REAUTH = null; if (next) next();
+        return;
+      }
       if (!wasSilent || wasGated) onSignedIn();
     }
   });
@@ -986,6 +990,21 @@ let saveTimer = null;
 function loadStateMirror(){ try{ return JSON.parse(localStorage.getItem(STATE_MIRROR_KEY) || 'null'); }catch(_){ return null; } }
 function saveStateMirror(state){ try{ localStorage.setItem(STATE_MIRROR_KEY, JSON.stringify(state)); }catch(_){} }
 
+// The mirror is marked "unsaved" from the moment of an edit until Drive confirms the save, so a
+// failed save or a tab closed too early can be folded back in on the next sign-in. The marker
+// records which Google account made the edits, so they never merge into another account's data.
+const UNSAVED_KEY = 'cc_tracker_unsaved_v1';
+let editSeq = 0;
+function markUnsaved(){ try{ localStorage.setItem(UNSAVED_KEY, JSON.stringify({ owner: USER_EMAIL, at: new Date().toISOString() })); }catch(_){} }
+function clearUnsaved(){ try{ localStorage.removeItem(UNSAVED_KEY); }catch(_){} }
+function readUnsavedMirror(){
+  try{
+    const mark = JSON.parse(localStorage.getItem(UNSAVED_KEY) || 'null');
+    const state = mark && loadStateMirror();
+    return state ? { owner: mark.owner || '', state } : null;
+  }catch(_){ return null; }
+}
+
 
 async function driveLoadState(){
   const file = await driveFindFileByName(DATA_FILE_NAME);
@@ -1035,8 +1054,9 @@ function mergeStates(remote, local){
   return merged;
 }
 
-async function driveSaveState(state, allowRetry){
+async function driveSaveState(state, allowRetry, seq){
   if (allowRetry === undefined) allowRetry = true;
+  if (seq === undefined) seq = editSeq;
   setSyncBadge('syncing', 'Saving to Drive…');
   try{
     if (driveFileId){
@@ -1045,7 +1065,7 @@ async function driveSaveState(state, allowRetry){
         if (!allowRetry) throw new Error('conflict persisted after merge retry');
         setSyncBadge('syncing', 'Another device changed the data — merging…');
         const remote = await driveLoadState();
-        return driveSaveState(mergeStates(remote, state), false);
+        return driveSaveState(mergeStates(remote, state), false, seq);
       }
     }
     const saved = await driveUploadJson(driveFileId, DATA_FILE_NAME, state);
@@ -1053,23 +1073,35 @@ async function driveSaveState(state, allowRetry){
     driveRevisionId = saved.headRevisionId;
     STATE = state;
     saveStateMirror(state);
+    if (seq === editSeq) clearUnsaved(); // an edit made during the save keeps the marker for its own save
     setSyncBadge('synced', 'Synced ' + new Date().toLocaleTimeString());
   }catch(e){
+    // A 401 means the sign-in token is dead. Dropping it makes every Retry/Sync button ask for a
+    // sign-in first instead of failing the same way again.
+    if (/\b401\b/.test(e.message || '')) accessToken = null;
     setSyncBadge('error', 'Sync failed: ' + (e.message || e));
   }
 }
 
 function scheduleDriveSave(){
+  editSeq++;
   saveStateMirror(STATE);
+  markUnsaved();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => driveSaveState(STATE), 1500);
 }
 
-async function bootFromDrive(){
+// `local` is this device's copy if it holds edits Drive never confirmed (see readUnsavedMirror).
+async function bootFromDrive(local){
   setSyncBadge('syncing', 'Loading from Drive…');
   try{
     const remote = await driveLoadState();
-    if (remote){
+    if (local){
+      STATE = remote ? mergeStates(remote, local) : { ...defaultState(), ...local };
+      setSyncBadge('syncing', 'Saving restored changes…');
+      scheduleDriveSave();
+      toast('Restored changes that hadn’t reached Google Drive');
+    } else if (remote){
       STATE = remote;
       saveStateMirror(STATE);
       setSyncBadge('synced', 'Loaded from Drive.');
@@ -1803,29 +1835,41 @@ function setSyncBadge(kind,msg){
     hideBanner('drive');
     if(wasMerge)toast('Merged changes from another device');
   }
-  if(kind==='error')showBanner('drive','bad','triangle-alert','Couldn’t save to Google Drive — your changes are kept on this device.','Retry',()=>driveSaveState(STATE));
+  if(kind==='error')showBanner('drive','bad','triangle-alert','Couldn’t save to Google Drive. '+driveErrorHint(SYNC.driveMsg)+' Your changes are kept on this device.',
+    accessToken?'Retry':'Sign in again',()=>sessionExpired()?reauth():driveSaveState(STATE)); // reauth() saves once signed in
   renderSyncUI();
 }
 function syncView(){
   if(SYNC.gmail)return{icon:ic('refresh-cw','s16 spin'),dot:'info',label:SYNC.gmailMsg||'Syncing Gmail…'};
   if(SYNC.drive==='syncing')return{icon:'<span class="dot info"></span>',dot:'info',label:/loading/i.test(SYNC.driveMsg)?'Loading…':'Saving…'};
-  if(SYNC.drive==='error')return{icon:'<span class="dot bad"></span>',dot:'bad',label:'Sync failed — Retry'};
   if(DATA_READY&&!accessToken)return{icon:'<span class="dot warn"></span>',dot:'warn',label:'Sign in to sync'};
+  if(SYNC.drive==='error')return{icon:'<span class="dot bad"></span>',dot:'bad',label:'Sync failed — Retry'};
   if(SYNC.lastSynced)return{icon:'<span class="dot good"></span>',dot:'good',label:'Synced · '+relTime(SYNC.lastSynced)};
   return{icon:'<span class="dot"></span>',dot:'',label:'Not synced'};
 }
 function renderSyncUI(){
   const v=syncView();
-  const pill=$('refBtn');if(pill){pill.innerHTML=`${v.icon}<span class="lbl">${escH(v.label)}</span>`;pill.title=v.label+' — click to sync now';pill.setAttribute('aria-label',v.label+'. Sync now');}
+  const pill=$('refBtn');if(pill){pill.innerHTML=`${v.icon}<span class="lbl">${escH(v.label)}</span>`;pill.title=SYNC.drive==='error'?driveErrorHint(SYNC.driveMsg)+' ('+SYNC.driveMsg+')':v.label+' — click to sync now';pill.setAttribute('aria-label',v.label+'. Sync now');}
   const d=$('topSyncDot');if(d)d.className='dot '+v.dot;
   const tb=$('topSync');if(tb)tb.setAttribute('aria-label','Sync status: '+v.label);
 }
 setInterval(renderSyncUI,30000);
+// Plain-language reading of a Drive error, shown above the raw message in the sync sheet.
+function driveErrorHint(msg){
+  if(/\b401\b/.test(msg))return'Your Google sign-in expired. Sign in again and it saves automatically.';
+  if(/\b403\b/.test(msg))return'Google refused access to Drive. Sign out and sign in again, and allow Drive access.';
+  if(/\b(429|5\d\d)\b/.test(msg))return'Google Drive is busy or down right now. Retry in a few minutes.';
+  if(/failed to fetch|network/i.test(msg))return'Couldn’t reach Google Drive. Check your connection, then retry.';
+  if(/conflict/i.test(msg))return'Another device kept saving at the same moment. Retry to merge again.';
+  return'Google Drive returned an error. Retry; if it keeps failing, share the details below.';
+}
 function openSyncSheet(){
   const v=syncView();
+  const err=SYNC.drive==='error'?`<div class="help err" style="margin-top:12px">${ic('triangle-alert','s16')}<span>${escH(driveErrorHint(SYNC.driveMsg))}</span></div>
+      <div class="help" style="margin-top:4px;overflow-wrap:anywhere">Details: ${escH(SYNC.driveMsg)}</div>`:'';
   const s=openSheet({title:'Sync',body:`<div class="list">
       <div class="list-item">${v.icon}<div class="li-body"><div class="li-title">${escH(v.label)}</div><div class="li-sub">${escH($('hmeta')?.textContent||'')}</div></div></div>
-    </div>`,foot:`<button class="btn btn-primary" id="sheetSyncNow">${ic('refresh-cw')}Sync now</button>`});
+    </div>${err}`,foot:`<button class="btn btn-primary" id="sheetSyncNow">${ic('refresh-cw')}Sync now</button>`});
   s.sheet.querySelector('#sheetSyncNow').onclick=()=>{s.close(true);load(true);};
 }
 
@@ -2020,16 +2064,21 @@ function updateMFXRate(cur, val){
 function setCategories(ids,newCat,remember){
   const prevOv={...getCatOverrides()},prevMc={...getMerchantCats()},prevCats=[];
   const ov=getCatOverrides(),mc=getMerchantCats();let mcChanged=false;
+  const logged=[],at=new Date().toISOString();
   for(const id of ids){
     ov[id]=newCat;
     const txs=[...new Set([ALL_TRANSACTIONS.find(t=>t.id===id),ALL_TRANSACTIONS_RAW.find(t=>t.id===id)].filter(Boolean))];
+    if(txs[0]&&txs[0].category!==newCat)logged.push({id:`${id}@${at}`,tx:id,m:txs[0].merchantClean||'',raw:txs[0].merchantRaw||'',from:txs[0].category||'',to:newCat,at,rule:!!remember});
     for(const tx of txs){prevCats.push([tx,tx.category]);tx.category=newCat;}
     if(remember&&txs[0]){const m=txs[0].merchantClean||txs[0].merchantRaw||'';if(m){mc[m]=newCat;mcChanged=true;}}
   }
+  if(logged.length)STATE.catChangeLog=[...(STATE.catChangeLog||[]),...logged].slice(-CAT_LOG_MAX);
   saveCatOverrides(ov);if(mcChanged)saveMerchantCats(mc);
   renderAll();
   toast(ids.length>1?`Category set for ${ids.length} transactions`:'Category updated',{action:'Undo',onAction:()=>{
-    STATE.catOverrides=prevOv;STATE.merchantCats=prevMc;scheduleDriveSave();
+    STATE.catOverrides=prevOv;STATE.merchantCats=prevMc;
+    const undone=new Set(logged.map(e=>e.id));STATE.catChangeLog=(STATE.catChangeLog||[]).filter(e=>!undone.has(e.id));
+    scheduleDriveSave();
     for(const[tx,c]of prevCats)tx.category=c;renderAll();
   }});
 }
@@ -3472,6 +3521,8 @@ function drawCashFlow(){
    replaces the old cache-only migration function
    ══════════════════════════════════════════════════════════════════ */
 async function load(isRefresh=false){
+  // Every Sync / Retry button lands here; with a dead token, sign in first, then sync.
+  if(isRefresh&&sessionExpired()){reauth(()=>load(true));return;}
   const btn=document.getElementById('refBtn'),meta=document.getElementById('hmeta');
   if(btn)btn.disabled=true;
   const cached=loadCache();
@@ -3573,8 +3624,11 @@ async function load(isRefresh=false){
     meta.textContent=`Synced ${new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})} · ${mb} Maybank + ${oc} OCBC + ${occ} OCBC CC + ${bca} BCA`;
   }catch(e){
     SYNC.gmail=false;
+    const expired=/\b401\b/.test(e.message||'');
+    if(expired)accessToken=null;
     if(isInc&&DATA_READY){
-      showBanner('gmail','bad','triangle-alert','Couldn’t reach Gmail — showing your last synced data. Check your connection and retry.','Retry',()=>load(true));
+      if(expired)showBanner('gmail','warn','triangle-alert','Your Google sign-in expired — showing your last synced data. Sign in again to sync.','Sign in again',()=>load(true));
+      else showBanner('gmail','bad','triangle-alert','Couldn’t reach Gmail — showing your last synced data. Check your connection and retry.','Retry',()=>load(true));
     } else {
       document.getElementById('root').innerHTML=`<div class="card" style="max-width:560px;margin:40px auto"><div class="card-error">${ic('triangle-alert','s24')}<div style="flex:1"><div style="font-weight:600;color:var(--text-1)">Couldn’t load your transactions</div><div class="help">${escH(e.message||String(e))}</div></div><button class="btn btn-secondary" onclick="load(true)">Retry</button></div></div>`;
     }
@@ -3585,6 +3639,7 @@ async function load(isRefresh=false){
 }
 
 async function onSignedIn(){
+  const pending=readUnsavedMirror(); // read before anything below can rewrite the mirror
   document.body.classList.remove('gated');
   $('authGate').style.display='none';
   $('refBtn').disabled=false;
@@ -3601,7 +3656,8 @@ async function onSignedIn(){
       $('avatar').textContent=d.emailAddress.charAt(0).toUpperCase();
     }
   }catch(e){}
-  await bootFromDrive();
+  const unsaved=pending&&(!pending.owner||!USER_EMAIL||pending.owner===USER_EMAIL)?pending.state:null;
+  await bootFromDrive(unsaved);
   load();
   autoImportWealth();
 }
@@ -3784,8 +3840,11 @@ function signOut(){
 }
 
 // Re-auth from the banner keeps the data on screen and just renews the token (§12).
-let REAUTHING=false;
-function reauth(){REAUTHING=true;isSilentAttempt=false;tokenClient.requestAccessToken({prompt:''});}
+// `after` runs once the new token arrives (e.g. finish the sync the user just asked for).
+let REAUTHING=false,AFTER_REAUTH=null;
+function reauth(after){REAUTHING=true;AFTER_REAUTH=typeof after==='function'?after:null;isSilentAttempt=false;tokenClient.requestAccessToken({prompt:''});}
+// Data is on screen but the sign-in token is gone (expired, or Google rejected it with a 401).
+function sessionExpired(){return DATA_READY&&!accessToken;}
 
 applyChartTheme();
 buildNav();
