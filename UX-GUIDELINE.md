@@ -100,7 +100,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 | **Credit Cards** | Per-card position, estimated billing, paid-through history, current-balance transactions; sub-tab **Foreign currency** | CC Position + Foreign Currency tabs | Phase 1 |
 | **Net Worth** | Net worth over time, Book/Market toggle, assets vs liabilities by group, what changed, card tie-out, allocation | Monthly snapshot of the accounting book | Phase 2 (shipped 2026-10-16) |
 | **Accounts** | All accounts grouped with subtotals, balance history, "declared in tax return" flag | Same snapshot | Phase 2 (shipped 2026-10-16) |
-| **Month-end Close** | Guided close: enter positions → review diff → journal list → re-check → done | — | Phase 3 |
+| **Month-end Close** | Close status: positions vs books → journal entries → re-check → closed (the close runs in chat with Claude) | Snapshot `closes` | Phase 3 (shipped 2026-10-16) |
 | **Settings** | Appearance (theme), categories & rules, auto-note rules, date-category rules, FX rates, data (sync, export, sign out), about | Scattered controls today | Phase 1 |
 
 **Rule: sections appear in navigation only once their phase ships.** No "coming soon" tabs.
@@ -757,20 +757,27 @@ book (spec: `docs/superpowers/specs/2026-10-16-wealth-phases-2-4-design.md`), re
   exists). Mobile bottom bar: Overview · Spending · Cards · Net worth · More (Accounts and
   Month-end under More).
 
-### 11.7 Month-end Close (Phase 3)
+### 11.7 Month-end Close (Phase 3 — shipped)
 
-Question: *"Is this month closed and reconciled?"*
+Question: *"Is this month closed and reconciled?"* The close itself happens **in chat with
+Claude**, which reads the books on the user's computer (procedure: `WORKFLOW.md` › Month-end
+close). The page shows where each close stands; the app never writes to the books.
 
-Stepper (§8.10) across the top: **1 Enter positions → 2 Review differences → 3 Journal entries →
-4 Re-check → 5 Closed**.
-
-- Step 1: form list of accounts with "balance at month end" inputs, pre-filled where known.
-- Step 2: diff table — app value vs books value vs difference, rows with a difference highlighted
-  `--warn`.
-- Step 3: generated journal-entry list to post manually (copy button per entry; the app never
-  writes to the books).
-- Step 4: re-check result — all green → "Close month" primary button.
-- Closed months show a lock badge in the month picker.
+- Header: title + "the close itself happens in chat with Claude"; a segmented picker when there is
+  more than one close.
+- Status card: close label, "Books through …", status badge (Open · Needs entries · Closed with a
+  `lock` icon) and the stepper (§8.10): **1 Positions → 2 Differences → 3 Journal entries →
+  4 Re-check → 5 Closed**, each with a one-line hint ("1 to resolve", "1 of 2 posted"). Done =
+  `--good` check, current = `--accent` ring, a step needing attention = `--warn`.
+- Positions vs books: Books · Your figure · Difference; rows with a difference get a `--warn-soft`
+  background, matches say "Match" in `--good`.
+- Journal entries: one bordered block per entry (id badge, memo, **Copy** — tab-separated text for
+  pasting — and a **Posted in Accurate** checkbox saved to Drive), lines table with a total row and
+  an "Unbalanced" badge if debits ≠ credits. Posted entries fade to 60%.
+- Re-check: one sentence — waiting for the book to reach the month, or differences left, or "Books
+  match every position".
+- Mobile: the stepper turns vertical; tables scroll inside their card with amounts kept on one
+  line.
 
 ### 11.8 Settings
 

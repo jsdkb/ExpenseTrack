@@ -332,7 +332,7 @@
     table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
     table.data th { position: sticky; top: 0; background: var(--surface-2); color: var(--text-3); font-size: 12px; line-height: 16px;
       font-weight: 500; letter-spacing: 0.02em; text-align: left; padding: 10px 16px; white-space: nowrap; }
-    table.data th.num, table.data td.num { text-align: right; }
+    table.data th.num, table.data td.num { text-align: right; white-space: nowrap; }
     table.data td { padding: 0 16px; height: 44px; border-top: 1px solid var(--border); vertical-align: middle; }
     table.data tbody tr { transition: background var(--dur-fast) ease-out; }
     table.data tbody tr:hover { background: var(--surface-2); }
@@ -572,6 +572,26 @@
     table.data tr.group-row th { background: var(--surface-1); color: var(--text-2); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding-top: 16px; position: static; }
     table.data tr.group-row td { border-top: 1px solid var(--border); background: var(--surface-1); }
     code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 0.92em; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
+    /* Stepper (§8.10) + journal entries (§11.7) */
+    .stepper { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px; }
+    .step { position: relative; display: flex; flex-direction: column; gap: 4px; padding-top: 6px; min-width: 0; }
+    .step::before { content: ''; position: absolute; top: 19px; left: 34px; right: -2px; height: 2px; background: var(--border-strong); }
+    .step:last-child::before { display: none; }
+    .step.done::before { background: var(--good); }
+    .step-dot { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;
+      background: var(--surface-2); color: var(--text-3); border: 2px solid var(--border-strong); position: relative; z-index: 1; flex-shrink: 0; }
+    .step.done .step-dot { background: var(--good); border-color: var(--good); color: #fff; }
+    .step.current .step-dot { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); }
+    .step.warn .step-dot { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+    .step-label { font-size: 13px; font-weight: 600; margin-top: 6px; }
+    .step:not(.done):not(.current) .step-label { color: var(--text-2); }
+    .step-hint { font-size: 12px; line-height: 16px; color: var(--text-3); overflow-wrap: anywhere; }
+    tr.diff-row td { background: var(--warn-soft); }
+    .entry { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-top: 12px; }
+    .entry:first-of-type { margin-top: 0; }
+    .entry.posted { opacity: 0.6; }
+    .entry-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+    .entry-tools { display: flex; align-items: center; gap: 10px; }
     .cs-row { gap: 12px; }
     .cs-amt { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .cs-total { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--border); font-size: 14px; }
@@ -673,6 +693,15 @@
       .display { font-size: 32px; line-height: 36px; }
       .summary .chart-box { height: 160px; }
       .strip { grid-template-columns: 1fr !important; }
+      table.data th, table.data td { padding-left: 10px; padding-right: 10px; }
+      table.data td.num, table.data th.num { white-space: nowrap; }
+      .entry { padding: 10px; }
+      .entry .table-wrap { margin: 0 -10px; }
+      .stepper { grid-template-columns: 1fr; gap: 0; }
+      .step { display: grid; grid-template-columns: 28px 1fr; column-gap: 12px; row-gap: 0; padding: 6px 0 10px; }
+      .step::before { top: 38px; left: 13px; right: auto; width: 2px; height: calc(100% - 30px); }
+      .step-dot { grid-row: span 2; }
+      .step-label { margin-top: 4px; }
       .strip-cell { border-left: none; border-top: 1px solid var(--border); padding: 14px 16px; }
       .strip-cell:first-child { border-top: none; }
       .strip-val { font-size: 22px; line-height: 28px; }
@@ -3245,6 +3274,83 @@ function renderAccounts(){
         <tbody>${accountRowsHTML(li)||`<tr><td colspan="4">${emptyHTML('square-check','Every active account is marked as declared')}</td></tr>`}</tbody></table></div></section>
       <section class="card span-5 hide-sm" id="accDetail">${cardHead('chart-column','Account detail','')}${accountDetailHTML(ACC_SEL,li)}</section>
     </div>`;
+}
+/* ── Month-end close (§11.7, Phase 3). The close itself happens in chat with Claude, which
+   reads the books on the user's computer; this page shows where each close stands. The only
+   thing the app records is which entries the user has ticked as posted (Drive). ── */
+function wCloses(){const w=W();return w&&Array.isArray(w.closes)?[...w.closes].sort((a,b)=>b.month.localeCompare(a.month)):[];}
+function entryPosted(c,e){const t=(STATE.closeTicks||{})[c.month]||{};return t[e.id]!==undefined?!!t[e.id]:e.status==='posted';}
+function toggleEntryPosted(month,id){
+  const c=wCloses().find(x=>x.month===month),e=c&&c.entries.find(x=>x.id===id);if(!e)return;
+  const t=STATE.closeTicks||(STATE.closeTicks={});const m=t[month]||(t[month]={});
+  m[id]=!entryPosted(c,e);scheduleDriveSave();renderAll();
+  toast(m[id]?`Entry ${id} marked as posted`:`Entry ${id} marked as not posted`);
+}
+function closeSteps(c){
+  const hasPos=!!(c.positions&&c.positions.length),openDiffs=(c.positions||[]).filter(r=>Math.abs(r.diff)>=1).length;
+  const allPosted=c.entries.length>0&&c.entries.every(e=>entryPosted(c,e));
+  const rechecked=!!c.recheck&&c.recheck.openDiffs===0;
+  const s=[
+    {label:'Positions',done:hasPos,hint:hasPos?`${c.positions.length} accounts given`:'Give Claude your month-end balances'},
+    {label:'Differences',done:hasPos,warn:hasPos&&openDiffs>0,hint:hasPos?(openDiffs?`${openDiffs} to resolve`:'None'):'After positions'},
+    {label:'Journal entries',done:c.entries.length?allPosted:hasPos&&!openDiffs,hint:c.entries.length?`${c.entries.filter(e=>entryPosted(c,e)).length} of ${c.entries.length} posted`:'None needed yet'},
+    {label:'Re-check',done:rechecked,hint:c.recheck?(c.recheck.openDiffs?`${c.recheck.openDiffs} differences left`:'Books match'):`When books reach ${c.label}`},
+    {label:'Closed',done:c.status==='closed',hint:c.status==='closed'?'Locked':''},
+  ];
+  let cur=s.findIndex(x=>!x.done);if(cur<0)cur=s.length;
+  return{steps:s,cur};
+}
+function stepperHTML(c){
+  const{steps,cur}=closeSteps(c);
+  return`<ol class="stepper" aria-label="Close progress">${steps.map((s,i)=>`<li class="step${s.done?' done':''}${i===cur?' current':''}${s.warn?' warn':''}"${i===cur?' aria-current="step"':''}>
+      <span class="step-dot">${s.done?ic('check','s16'):i+1}</span><span class="step-label">${s.label}</span><span class="step-hint">${escH(s.hint)}</span></li>`).join('')}</ol>`;
+}
+function closeStatusBadge(c){
+  return c.status==='closed'?`<span class="badge good">${ic('lock','s16','width:11px;height:11px;margin-right:4px')}Closed</span>`
+    :c.status==='needs-entries'?'<span class="badge warn">Needs entries</span>':'<span class="badge">Open</span>';
+}
+function entryText(e){
+  return`${e.id} — ${e.memo}\n`+e.lines.map(l=>`${l.account}\t${l.name||(wAcc(l.account)||{}).name||''}\t${l.debit?fmtNum(l.debit):''}\t${l.credit?fmtNum(l.credit):''}`).join('\n');
+}
+function copyEntry(month,id){
+  const c=wCloses().find(x=>x.month===month),e=c&&c.entries.find(x=>x.id===id);if(!e)return;
+  const done=()=>toast(`Entry ${id} copied`);
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(entryText(e)).then(done,()=>toast('Copy failed — select the rows instead'));
+  else toast('Copy is not available in this browser');
+}
+function renderClose(){
+  if(!W())return wealthEmptyHTML();
+  const list=wCloses();
+  if(!list.length)return`${pageHead('Month-end','Close each month against your books')}<div class="card">${emptyHTML('calendar-check','No month-end close yet. At the end of the month, give Claude your positions in chat and it will appear here.')}</div>`;
+  if(!CLOSE_SEL||!list.some(c=>c.month===CLOSE_SEL))CLOSE_SEL=list[0].month;
+  const c=list.find(x=>x.month===CLOSE_SEL);
+  const picker=list.length>1?`<div class="seg" role="group" aria-label="Close">${list.map(x=>`<button aria-pressed="${x.month===CLOSE_SEL}" onclick="CLOSE_SEL='${escAttr(x.month)}';renderAll()">${escH(x.label)}</button>`).join('')}</div>`:'';
+  const name=id=>{const a=wAcc(id);return a?a.name:id;};
+  const posRows=(c.positions||[]).map(r=>`<tr class="${Math.abs(r.diff)>=1?'diff-row':''}"><td class="merchant"><div class="merchant-name">${escH(name(r.account))}</div><div class="merchant-sub">${escH(r.account)}</div></td>
+      <td class="num amt">${fmtIDR(r.books)}</td><td class="num amt">${fmtIDR(r.actual)}</td><td class="num amt">${Math.abs(r.diff)>=1?`<span class="warn">${r.diff>0?'+':'−'}${fmtIDR(Math.abs(r.diff))}</span>`:'<span class="good">Match</span>'}</td></tr>`).join('');
+  const entries=c.entries.map(e=>{const posted=entryPosted(c,e),td=e.lines.reduce((s,l)=>s+l.debit,0),tc=e.lines.reduce((s,l)=>s+l.credit,0);
+    return`<div class="entry${posted?' posted':''}">
+      <div class="entry-head"><div class="li-title"><span class="badge accent" style="margin-right:8px">${escH(e.id)}</span>${escH(e.memo)}</div>
+        <div class="entry-tools"><button class="btn btn-ghost btn-sm" onclick="copyEntry('${escAttr(c.month)}','${escAttr(e.id)}')">${ic('download','s16')}Copy</button>
+          <label class="check"><input type="checkbox" ${posted?'checked':''} onchange="toggleEntryPosted('${escAttr(c.month)}','${escAttr(e.id)}')"> Posted in Accurate</label></div></div>
+      <div class="table-wrap"><table class="data"><thead><tr><th scope="col">Account</th><th scope="col" class="num">Debit</th><th scope="col" class="num">Credit</th></tr></thead>
+        <tbody>${e.lines.map(l=>`<tr><td><span class="muted">${escH(l.account)}</span> ${escH(l.name||name(l.account))}</td><td class="num amt">${l.debit?fmtIDR(l.debit):''}</td><td class="num amt">${l.credit?fmtIDR(l.credit):''}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td style="font-weight:600">Total${td!==tc?' <span class="badge bad">Unbalanced</span>':''}</td><td class="num amt" style="font-weight:600">${fmtIDR(td)}</td><td class="num amt" style="font-weight:600">${fmtIDR(tc)}</td></tr></tfoot></table></div></div>`;}).join('');
+  const recheck=c.recheck?(c.recheck.openDiffs?`<span class="warn">${c.recheck.openDiffs} difference${c.recheck.openDiffs===1?'':'s'} left</span> after the books reached ${monthLabel(c.recheck.asOf,true)}.`
+      :`<span class="good">Books match every position</span> (books through ${monthLabel(c.recheck.asOf,true)}).`)
+    :`Runs once the books are posted through ${escH(c.label)}. Books are currently through ${escH(asOfLabel())}.`;
+  return`${pageHead('Month-end','Close each month against your books — the close itself happens in chat with Claude',picker)}
+    ${picker?`<div class="only-sm" style="margin-bottom:12px">${picker}</div>`:''}
+    <div class="grid"><section class="card span-12">${cardHead('calendar-check',escH(c.label),`Books through ${escH(asOfLabel())}`,closeStatusBadge(c))}${stepperHTML(c)}
+      ${c.note?`<p class="help" style="margin-top:14px">${escH(c.note)}</p>`:''}</section></div>
+    <div class="grid">
+      <section class="card flush span-12">${cardHead('table','Positions vs books',c.positions&&c.positions.length?'Your month-end figures compared with the book':'')}
+        ${posRows?`<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Account</th><th scope="col" class="num">Books</th><th scope="col" class="num">Your figure</th><th scope="col" class="num">Difference</th></tr></thead><tbody>${posRows}</tbody></table></div>`
+          :`<div style="padding:0 var(--card-pad) var(--card-pad)">${emptyHTML('inbox','No positions yet. At month-end, tell Claude your balances (and market values) in chat.')}</div>`}
+      </section></div>
+    <div class="grid"><section class="card span-12">${cardHead('receipt','Journal entries to post',c.entries.length?'Post these in Accurate yourself, then tick them. The app never writes to your books.':'')}
+      ${entries||emptyHTML('square-check','No entries for this close')}</section></div>
+    <div class="grid"><section class="card span-12">${cardHead('refresh-cw','Re-check','')}<p class="summary-line">${recheck}</p></section></div>`;
 }
 
 /* ══════════════════════════════════════════════════════════════════
