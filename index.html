@@ -1208,22 +1208,29 @@ const CATEGORIES = {
   'Religion':             { dark: '#C084FC', light: '#9333EA', icon: 'heart-handshake' },
   'Foreign':              { dark: '#F59E0B', light: '#D97706', icon: 'globe' },
   'Ad Hoc':               { dark: '#E879F9', light: '#C026D3', icon: 'pin' },
+  'E-wallet':             { dark: '#D6A06B', light: '#9A5B2E', icon: 'wallet' },
   'Transfer':             { dark: '#94A3B8', light: '#64748B', icon: 'arrow-left-right' },
   'Others':               { dark: '#6B7280', light: '#6B7280', icon: 'circle-ellipsis' },
 };
 
+// Order matters: the first match wins.
+// Trips (flights, out-of-town stays, meals while away) are Ad Hoc. A date-range rule covers the
+// trip itself; flights and bookings paid before the trip match here. A hotel outside any trip
+// range is treated as local hotel dining.
 function categorize(merchant) {
   const m=(merchant||'').toUpperCase().replace(/&AMP;|&#39;/g,'');
   if(/GMS/.test(m))return'Religion';
   if(/\bAYO\b|METRO\s*CAFFE/.test(m))return'Sports';
-  if(/UBER|GOJEK|GOCAR|GORIDE|BLUEBIRD|TAXI|UTOMO|SINGAPORE\s*AIR|SINGAPOREAIR/.test(m))return'Transport';
-  if(/GRAB|COFFEE|CAFE|KOPI|RESTO|RESTAURANT|BEBEK|AYAM|SOTO|BAKSO|WARUNG|DEPOT|KWETIAU|STEAMBOAT|MA LA|CHASIO|XIAO XIANG|FUSIA|TAEYANG|OLD TOWN|LIME|SENIMAN|HARLAN|BREEZE|KARBS|TOBY|TGC|APENG|SANLONG|MCD|MCDONALD/.test(m))return'Food & Dining';
+  // Top-ups count as spend in their own bucket; checked before SHOPEE and GOJEK/GRAB.
+  if(/GOPAY|\bOVO\b|SHOPEEPAY|\bDANA\b|LINKAJA|FLAZZ|E-?TOLL|E-?MONEY|BRIZZI|TAPCASH/.test(m))return'E-wallet';
+  if(/SINGAPORE\s*AIR|GARUDA|LION\s*AIR|BATIK\s*AIR|CITILINK|AIR\s*ASIA|AIRASIA|RESORT|VILLA|AGODA|TRAVELOKA|TIKET|BOOKING\.COM|HOTELS\.COM|AIRBNB/.test(m))return'Ad Hoc';
+  if(/UBER|GOJEK|GOCAR|GORIDE|BLUEBIRD|TAXI|UTOMO|PARKIR|PARKING|CENTREPARK|JASA\s*MARGA|\bTOL\b/.test(m))return'Transport';
+  if(/GRAB|COFFEE|CAFE|KOPI|RESTO|RESTAURANT|BEBEK|AYAM|SOTO|BAKSO|WARUNG|DEPOT|KWETIAU|STEAMBOAT|MA LA|CHASIO|XIAO XIANG|FUSIA|TAEYANG|OLD TOWN|LIME|SENIMAN|HARLAN|BREEZE|KARBS|TOBY|TGC|APENG|SANLONG|MCD|MCDONALD|HOTEL/.test(m))return'Food & Dining';
   if(/SUPERINDO|INDOMARET|ALFAMART|HYPERMART|CARREFOUR|RANCH MARKET|LOTTE|HERO|GIANT|SINAR LUCKY/.test(m))return'Groceries';
   if(/SHOPEE|TOKOPEDIA|LAZADA|BUKALAPAK|BLIBLI|NIKE|UNIQLO|ZARA|H&M|BATAS LANGIT|XDT\*/.test(m))return'Shopping';
-  if(/ANTHROPIC|CLAUDE|APPLE|GOOGLE|NETFLIX|SPOTIFY|PAPER\.ID|ADOBE|MICROSOFT/.test(m))return'Tech & Subscriptions';
+  if(/ANTHROPIC|CLAUDE|APPLE|IBOX|DIGIMAP|GOOGLE|NETFLIX|SPOTIFY|PAPER\.ID|ADOBE|MICROSOFT/.test(m))return'Tech & Subscriptions';
   if(/SPBU|PERTAMINA|SHELL|VIVO/.test(m))return'Fuel';
   if(/XL AXIATA|TELKOMSEL|INDOSAT|SMARTFREN|AXIS/.test(m))return'Telecom';
-  if(/SINGAPOREAIR|GARUDA|LION AIR|BATIK|CITILINK|HOTEL|RESORT|VILLA|AGODA|TRAVELOKA|TIKET/.test(m))return'Travel';
   return'Others';
 }
 
@@ -1251,7 +1258,7 @@ function parseTxFromBody(html,msgDate) {
     if(!amountOrig||amountOrig<0.01)continue;
     const idrM=txt.match(/(?:IDR|Rp)\s*([\d,]+)/i);
     const amount=idrM?parseInt(idrM[1].replace(/,/g,''),10):0;
-    return{merchantRaw,merchantClean,category:categorize(merchantRaw),amount:amount||0,amountOrig,currency:cur,amountStr:`${cur} ${amountOrig}`,status:statusM?statusM[0]:'Approved',txDate,type:'transaction'};
+    return{merchantRaw,merchantClean,category:'Foreign',amount:amount||0,amountOrig,currency:cur,amountStr:`${cur} ${amountOrig}`,status:statusM?statusM[0]:'Approved',txDate,type:'transaction'};
   }
   return null;
 }
@@ -1484,6 +1491,17 @@ function applyManualFXRates(txns){
       const rate=rates[t.currency];
       if(rate){t.fxRate=rate;t.amount=Math.round(t.amountOrig*rate);}
     }
+  }
+}
+// Cached transactions keep the category from the day they were synced, so re-run the current
+// rules on every load. Manual entries, parser-set Transfers and the OCBC debit card (always
+// Foreign) are left alone; any other non-IDR charge is Foreign. The user's own rules and
+// overrides are applied after this.
+function applyAutoCategory(txns){
+  for(const t of txns){
+    if(t.type!=='transaction'||t.manual||t.bank==='OCBC')continue;
+    if(t.currency&&t.currency!=='IDR')t.category='Foreign';
+    else if(t.category!=='Transfer')t.category=categorize(t.merchantRaw);
   }
 }
 function applyDateCategoryRules(txns){
@@ -3416,6 +3434,7 @@ async function load(isRefresh=false){
       ALL_TRANSACTIONS_RAW=[...ALL_TRANSACTIONS];
       {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
       mergeManualTxns();
+      applyAutoCategory(ALL_TRANSACTIONS);
       ACTIVE_RANGE='month';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';
       DATA_READY=true;if(STATE.cachedAt)SYNC.lastSynced=new Date(STATE.cachedAt);
       renderAll();initMerchantAutoNotes();
@@ -3487,6 +3506,7 @@ async function load(isRefresh=false){
     ALL_TRANSACTIONS_RAW=[...ALL_TRANSACTIONS];
     {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
     mergeManualTxns();
+    applyAutoCategory(ALL_TRANSACTIONS);
     saveCache(ALL_TRANSACTIONS_RAW);
     if(!isRefresh){ACTIVE_RANGE='month';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';}
     DATA_READY=true;SYNC.gmail=false;SYNC.lastSynced=new Date();

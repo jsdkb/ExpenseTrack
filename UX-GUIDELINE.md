@@ -263,6 +263,7 @@ muted `CATEGORIES` colours with a vivid set tuned for the dark UI.
 | Religion | `#C084FC` | `#9333EA` | `heart-handshake` |
 | Foreign | `#F59E0B` | `#D97706` | `globe` |
 | Ad Hoc | `#E879F9` | `#C026D3` | `pin` |
+| E-wallet | `#D6A06B` | `#9A5B2E` | `wallet` |
 | Transfer | `#94A3B8` | `#64748B` | `arrow-left-right` |
 | Others | `#6B7280` | `#6B7280` | `circle-ellipsis` |
 
