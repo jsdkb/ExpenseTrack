@@ -1,2 +1,4 @@
 # Personal data that must never reach the public repo
 private/
+statements/
+*.pdf
