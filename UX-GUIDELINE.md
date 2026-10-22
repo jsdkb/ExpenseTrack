@@ -101,6 +101,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 | **Net Worth** | Net worth over time, Book/Market toggle, assets vs liabilities by group, what changed, card tie-out, allocation | Monthly snapshot of the accounting book | Phase 2 (shipped 2026-10-16) |
 | **Accounts** | All accounts grouped with subtotals, balance history, "declared in tax return" flag | Same snapshot | Phase 2 (shipped 2026-10-16) |
 | **Month-end Close** | Close status: positions vs books → journal entries → re-check → closed (the close runs in chat with Claude) | Snapshot `closes` | Phase 3 (shipped 2026-10-16) |
+| **Cash Movements** | Money in vs out per month, where it came from / went, accounts with statement tie-out, re-taggable transactions | `cash-movements.json` (`et-cash/1`) from the local bank-statement pipeline | Shipped 2026-10-22 |
 | **Settings** | Appearance (theme), categories & rules, auto-note rules, date-category rules, FX rates, data (sync, export, sign out), about | Scattered controls today | Phase 1 |
 
 **Rule: sections appear in navigation only once their phase ships.** No "coming soon" tabs.
@@ -116,6 +117,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 │ ▭ Credit Cards       │
 │ ─ WEALTH ─────────── │  ← group label, appears when Phase 2 ships
 │ ◇ Net Worth          │
+│ ⇄ Cash Movements     │  ← once a cash-movements file is imported
 │ ▤ Accounts           │
 │ ✓ Month-end Close    │
 │                      │
@@ -148,7 +150,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 
 - **Phase 1 tabs:** Overview · Spending · Cards · More. **Phase 2+:** Overview · Spending · Cards ·
   Net Worth · More. Never more than 5.
-- **More** opens a full page list: Accounts, Month-end Close, Settings, Export, Sign out.
+- **More** opens a full page list: Cash Movements, Accounts, Month-end Close, Settings, Export, Sign out.
 - Active tab: accent icon + label, a 32×4px accent pill above the icon. Inactive: text-3.
 - Tapping the active tab again scrolls its page to top.
 - The bar hides on scroll-down and returns on scroll-up only inside long lists; elsewhere it is fixed.
@@ -785,7 +787,67 @@ close). The page shows where each close stands; the app never writes to the book
 - Mobile: the stepper turns vertical; tables scroll inside their card with amounts kept on one
   line.
 
-### 11.8 Settings
+### 11.8 Cash Movements (shipped 2026-10-22)
+
+Question: *"Where did my money come from and where did it go?"*
+
+**Data.** The `et-cash/1` file is built on the user's computer from bank and card statements by the
+`Bank Statements` pipeline:
+- Each statement is checked against its own printed totals.
+- Every transaction is classed into a type in one of four groups: **Money in**, **Money out**,
+  **Investments** (RDN) or **Internal moves** (card payments, transfers between own accounts).
+- The file is imported from the same snapshot folder as the wealth data, or by Import file, and kept
+  in the Drive file.
+- The app never edits amounts. The only thing the user saves is a type change: per transaction, or
+  per payer/payee as a rule.
+
+**Header.** Title plus the source line ("From your bank and card statements, as of … · imported …").
+On the right, a month stepper (‹ Month YYYY ›), which moves below the header on mobile, and the
+hide-amounts button. If a statement for the month doesn't tie, an `--info` note appears above the
+summary.
+
+**Summary panel** (pattern §11.2):
+- Eyebrow "Net · Month"; `display` net in `--good`/`--bad` with its sign; one line explaining that
+  internal moves are left out.
+- Four facts: Money in and Money out, each with ▲/▼ vs the previous month coloured by consequence
+  (§5.3), plus Internal moves and Into investments.
+- Right column: a 12-month in/out bar chart with a net line, a "View as table" toggle, and an HTML
+  legend. Clicking a month selects it.
+
+**"Where it came from" / "Where it went"** (span-6 each):
+- Ranked bars per type; money in uses `--good`, money out uses `--bad`.
+- The **Spending** row expands into the app's own categories (§5.4 colours), using `categorize()` and
+  the private rules.
+- Refunds are taken off the outflow and noted under the list.
+- "Largest payers" lists named senders of transfers only.
+- Clicking any row filters the transaction list to that type.
+
+**Accounts and cards.** A list of every account and card with activity or a statement in the month:
+- In / Out for the month;
+- Closing balance, or "Owed" / "In credit" for a card, with the statement date;
+- a **Ties** (`--good`) or **Doesn't tie** (`--bad`) badge.
+
+Foreign-currency pockets show in their own currency and are never added to Rupiah totals.
+
+**Transactions:**
+- Controls: a segmented filter (All · Money in · Money out · Internal · Investments) that scrolls
+  sideways on narrow screens, plus an account select and search. A removable type chip appears after
+  a ranked-row click.
+- Rows are grouped by day. The day total is the net of non-internal moves and is hidden when zero.
+- Rows use their own `.cm-row` class (never `.tx-row`, whose swipe handlers belong to Spending): type
+  icon, payer or description, then type · account · ↔ the matched leg · "changed by you".
+- Amounts: `+Rp` in `--good`; `−Rp`; internal moves muted.
+- 50 rows, then "Show more".
+- Tapping a row opens the **Transaction type** sheet:
+  - amount, date, account, full description and the matched leg;
+  - a radio list grouped by the four groups, with the automatic type marked;
+  - "Apply to all N transactions from …" when the payer recurs;
+  - **Back to automatic** and **Save**;
+  - a toast with Undo confirms the change.
+
+**Empty state** (before any file): Connect snapshot folder · Import file….
+
+### 11.9 Settings
 
 Sections as a left sub-nav (web) / grouped list (mobile):
 

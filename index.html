@@ -378,6 +378,28 @@
     .tx-title { font-size: 15px; line-height: 22px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tx-sub { font-size: 13px; line-height: 18px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tx-note { font-size: 12px; line-height: 16px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Cash movements rows — own classes, so the Spending swipe/tap handlers (.tx-row) never see them ── */
+    .cm-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 10px var(--card-pad); text-align: left;
+      border-top: 1px solid var(--border); background: var(--surface-1); cursor: pointer; }
+    .tx-day + .cm-row { border-top: none; }
+    .cm-row:hover { background: var(--surface-2); }
+    .cm-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .cm-body { flex: 1; min-width: 0; }
+    .cm-amt { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .cm-amt.in { color: var(--good); }
+    .cm-amt.internal { color: var(--text-3); font-weight: 500; }
+    .cm-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 0 var(--card-pad) 12px; }
+    .cm-tools .input { height: 36px; width: auto; }
+    .cm-tools .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+    .cm-tools .seg::-webkit-scrollbar { display: none; }
+    .cm-type { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; border-radius: var(--radius-sm); cursor: pointer; }
+    .cm-type:hover { background: var(--surface-2); }
+    .cm-type input { accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+    .cm-month { display: inline-flex; align-items: center; gap: 4px; }
+    .cm-month .lbl { min-width: 128px; text-align: center; font-weight: 600; font-size: 14px; }
+    .rank-row.sub { grid-template-columns: 28px minmax(0,1fr) auto; padding-left: 40px; width: calc(100% + 16px); }
+    .rank-row.sub .rank-name { font-weight: 400; color: var(--text-2); }
     .tx-amt { font-size: 15px; font-weight: 600; white-space: nowrap; text-align: right; }
     .tx-amt.credit { color: var(--good); }
     .tx-check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border-strong); flex-shrink: 0; display: none; align-items: center; justify-content: center; }
@@ -751,6 +773,7 @@
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
   <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
   <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
   <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></symbol>
   <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></symbol>
@@ -979,7 +1002,8 @@ function defaultState(){
     catOverrides: {}, merchantCats: {}, txEdits: {}, splits: {}, notes: {},
     merchantAutoNotes: {}, manualFxRates: {}, hiddenIds: [], subDecisions: {},
     dateCategoryRules: [], patternRules: [], catChangeLog: [], dismissedSuggestions: [], ccPosExcludedIds: [],
-    wealth: null, wealthMeta: null, closeTicks: {}, declared: {}
+    wealth: null, wealthMeta: null, closeTicks: {}, declared: {},
+    cash: null, cashMeta: null, cashTypeOverrides: {}, cashPayerRules: {}
   };
 }
 
@@ -1047,6 +1071,14 @@ function mergeStates(remote, local){
   const localNewer = lw && (!rw || Date.parse(lw.generatedAt) > Date.parse(rw.generatedAt));
   merged.wealth = localNewer ? lw : (rw || null);
   merged.wealthMeta = localNewer ? (local.wealthMeta || null) : (remote.wealthMeta || null);
+  // Cash movements: same rule as the wealth snapshot. Re-tags merge per key; a reset is stored as
+  // null (not deleted) so it wins over the other device's older value.
+  const lc = local.cash, rc = remote.cash;
+  const localCashNewer = lc && (!rc || Date.parse(lc.generatedAt) > Date.parse(rc.generatedAt));
+  merged.cash = localCashNewer ? lc : (rc || null);
+  merged.cashMeta = localCashNewer ? (local.cashMeta || null) : (remote.cashMeta || null);
+  merged.cashTypeOverrides = { ...(remote.cashTypeOverrides||{}), ...(local.cashTypeOverrides||{}) };
+  merged.cashPayerRules = { ...(remote.cashPayerRules||{}), ...(local.cashPayerRules||{}) };
   merged.declared = { ...(remote.declared||{}), ...(local.declared||{}) };
   merged.closeTicks = {};
   for (const m of new Set([...Object.keys(remote.closeTicks||{}), ...Object.keys(local.closeTicks||{})]))
@@ -1890,10 +1922,11 @@ const SECTIONS=[
 // Wealth group (§3.2): Net worth always (it hosts the connect step); the rest once a snapshot exists.
 function wealthSections(){
   const s=[{key:'networth',label:'Net worth',icon:'trending-up'}];
+  if(STATE.cash)s.push({key:'cash',label:'Cash movements',icon:'arrow-left-right'});
   if(STATE.wealth){s.push({key:'accounts',label:'Accounts',icon:'landmark'});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check'});}
   return s;
 }
-const TAB_TITLES={overview:'Overview',spending:'Spending',cards:'Credit cards',networth:'Net worth',accounts:'Accounts',close:'Month-end',settings:'Settings',more:'More'};
+const TAB_TITLES={overview:'Overview',spending:'Spending',cards:'Credit cards',networth:'Net worth',cash:'Cash movements',accounts:'Accounts',close:'Month-end',settings:'Settings',more:'More'};
 function setTab(t){
   if(t===ACTIVE_TAB){window.scrollTo({top:0,behavior:'smooth'});return;}
   ACTIVE_TAB=t;SELECT_MODE=false;SELECTED.clear();TX_LIMIT=50;
@@ -1906,7 +1939,7 @@ function buildNav(){
   document.querySelectorAll('.sb-foot .sb-item[data-tab]').forEach(b=>{if(b.dataset.tab===ACTIVE_TAB)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   const bn=$('bottomNav');
   if(bn){
-    const moreActive=['more','settings','accounts','close'].includes(ACTIVE_TAB);
+    const moreActive=['more','settings','accounts','close','cash'].includes(ACTIVE_TAB);
     bn.innerHTML=[...SECTIONS,{key:'networth',label:'Net worth',icon:'trending-up'}].map(s=>`<button class="bn-item" onclick="setTab('${s.key}')"${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span>${s.short||s.label}</span></button>`).join('')
       +`<button class="bn-item" onclick="setTab('more')"${moreActive?' aria-current="page"':''}>${ic('ellipsis')}<span>More</span></button>`;
   }
@@ -3180,6 +3213,8 @@ function renderSettings(){
         <div class="setting-row"><div><div class="li-title">Sync</div><div class="li-sub">${escH($('hmeta')?.textContent||'')}</div></div><button class="btn btn-secondary" onclick="load(true)">${ic('refresh-cw')}Sync now</button></div>
         <div class="setting-row"><div><div class="li-title">Wealth snapshot</div><div class="li-sub">${STATE.wealth?escH(wealthSourceLine()):'Not connected yet'}${WEALTH_FOLDER?' · folder connected on this device':''}</div></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${fsSupported()?(WEALTH_FOLDER?`<button class="btn btn-secondary" onclick="reconnectWealthFolder()">${ic('refresh-cw')}Check folder</button><button class="btn btn-ghost" onclick="disconnectWealthFolder()">Disconnect</button>`:`<button class="btn btn-secondary" onclick="connectWealthFolder()">${ic('download')}Connect folder</button>`):''}<button class="btn btn-ghost" onclick="importWealthFile()">Import file…</button></div></div>
+        <div class="setting-row"><div><div class="li-title">Cash movements</div><div class="li-sub">${CM()?escH(cashSourceLine()):'Not imported yet'}${cashRuleCount()?` · ${cashRuleCount()} type change${cashRuleCount()===1?'':'s'} you made`:''}</div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${CM()?`<button class="btn btn-secondary" onclick="setTab('cash')">Open${ic('chevron-right','s16')}</button>`:''}<button class="btn btn-ghost" onclick="importWealthFile()">Import file…</button></div></div>
         <div class="setting-row"><div><div class="li-title">Currencies</div><div class="li-sub">Exchange rates for foreign debit-card spend</div></div><button class="btn btn-ghost" onclick="CARDS_SUB='fx';setTab('cards')">Open rates${ic('chevron-right','s16')}</button></div>
         <div class="setting-row"><div><div class="li-title">Export</div><div class="li-sub">All transactions as a CSV file that opens in Excel</div></div><button class="btn btn-secondary" onclick="exportToExcel()">${ic('download')}Export</button></div>
         <div class="setting-row"><div><div class="li-title">Account</div><div class="li-sub">${escH(USER_EMAIL||'Signed in')}</div></div><button class="btn btn-danger" onclick="signOut()">${ic('log-out')}Sign out</button></div>
@@ -3229,6 +3264,7 @@ function renderAll(){
   if(ACTIVE_TAB==='networth'){root.innerHTML=renderNetWorth();requestAnimationFrame(()=>{renderNetWorthCharts();CHARTS_DRAWN_ONCE=true;});return;}
   if(ACTIVE_TAB==='accounts'){root.innerHTML=renderAccounts();requestAnimationFrame(()=>{drawAccountChart();CHARTS_DRAWN_ONCE=true;});return;}
   if(ACTIVE_TAB==='close'&&typeof renderClose==='function'){root.innerHTML=renderClose();return;}
+  if(ACTIVE_TAB==='cash'){root.innerHTML=renderCash();requestAnimationFrame(()=>{drawCash();CHARTS_DRAWN_ONCE=true;});return;}
   if(!DATA_READY){if(!$('prog'))root.innerHTML=skeletonHTML();return;}
   const txns=getFiltered();
   if(ACTIVE_TAB==='spending')root.innerHTML=renderSpending(txns);
@@ -3285,7 +3321,7 @@ function applyWealth(snap,from,quiet){
 function importWealthFile(){
   const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';
   inp.onchange=async()=>{const f=inp.files&&inp.files[0];if(!f)return;
-    try{applyWealth(JSON.parse(await f.text()),'file');}catch(e){toast('Couldn’t read that file: '+(e.message||e));}};
+    try{const d=JSON.parse(await f.text());if(d&&d.schema===CASH_SCHEMA)applyCash(d,'file');else applyWealth(d,'file');}catch(e){toast('Couldn’t read that file: '+(e.message||e));}};
   inp.click();
 }
 function fsSupported(){return typeof window.showDirectoryPicker==='function';}
@@ -3295,6 +3331,12 @@ async function readWealthFromHandle(h,quiet){
   const fh=await h.getFileHandle('wealth-snapshot.json');const f=await fh.getFile();
   return applyWealth(JSON.parse(await f.text()),'folder',quiet);
 }
+// The same folder can also hold cash-movements.json (bank-statement pipeline). It is optional: a
+// missing file is silent, and a problem with it never blocks the wealth snapshot.
+async function readCashFromHandle(h,quiet){
+  let f;try{f=await(await h.getFileHandle('cash-movements.json')).getFile();}catch(_){return false;}
+  try{return applyCash(JSON.parse(await f.text()),'folder',quiet);}catch(e){if(!quiet)toast('Couldn’t read cash-movements.json: '+(e.message||e));return false;}
+}
 async function connectWealthFolder(){
   if(!fsSupported()){toast('Folder access needs Chrome or Edge on a computer — use Import instead');return;}
   try{
@@ -3302,12 +3344,15 @@ async function connectWealthFolder(){
     await idbReq('readwrite',st=>st.put(h,'wealth'));
     hideBanner('wealth');
     try{await readWealthFromHandle(h,false);}catch(e){toast('Folder connected, but no wealth-snapshot.json was found in it');}
+    await readCashFromHandle(h,false);
     renderAll();
   }catch(e){if(e&&e.name!=='AbortError')toast('Couldn’t connect the folder: '+(e.message||e));}
 }
 async function reconnectWealthFolder(){
   try{const h=await idbReq('readonly',st=>st.get('wealth'));if(!h)return connectWealthFolder();
-    if(await h.requestPermission({mode:'read'})==='granted'){hideBanner('wealth');await readWealthFromHandle(h,false);}
+    if(await h.requestPermission({mode:'read'})==='granted'){hideBanner('wealth');
+      try{await readWealthFromHandle(h,false);}catch(e){toast('No wealth-snapshot.json in the folder');}
+      await readCashFromHandle(h,false);}
   }catch(e){toast('Couldn’t read the folder: '+(e.message||e));}
 }
 async function disconnectWealthFolder(){try{await idbReq('readwrite',st=>st.delete('wealth'));}catch(_){}WEALTH_FOLDER=false;renderAll();toast('Snapshot folder disconnected on this device');}
@@ -3320,7 +3365,7 @@ async function autoImportWealth(){
     const h=await idbReq('readonly',st=>st.get('wealth'));if(!h)return;
     WEALTH_FOLDER=true;
     const p=await h.queryPermission({mode:'read'});
-    if(p==='granted')await readWealthFromHandle(h,true);
+    if(p==='granted'){try{await readWealthFromHandle(h,true);}catch(_){}await readCashFromHandle(h,true);}
     else showBanner('wealth','info','refresh-cw','Check your snapshot folder for newer wealth data?','Check now',reconnectWealthFolder);
   }catch(_){}
 }
@@ -3589,6 +3634,296 @@ function drawCashFlow(){
       plugins:{tooltip:{callbacks:{title:it=>monthLabel(rows[it[0].dataIndex].month,true),label:c=>` ${c.dataset.label}: ${moneyTip(c.parsed.y)}`}}},
       scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:mobile?6:12,maxRotation:0}},y:{beginAtZero:true,border:{display:false},ticks:{maxTicksLimit:5,callback:moneyTick}}}}});
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   CASH MOVEMENTS — money in, money out and internal moves from the user's bank and card
+   statements (schema et-cash/1). The file is built on the user's computer by a local pipeline that
+   reads each statement and ties it to the statement's own totals; it is imported like the wealth
+   snapshot and kept in the private Drive file. The app only re-tags a transaction's type (saved to
+   Drive) and never edits amounts. No personal data is part of this code.
+   ══════════════════════════════════════════════════════════════════ */
+const CASH_SCHEMA='et-cash/1';
+let CM_MONTH=null,CM_FILTER='all',CM_TYPE=null,CM_ACC='all',CM_SEARCH='',CM_LIMIT=50;
+// g = group: in (income), out (outflow; refunds offset it), invest (shares via the RDN account),
+// internal (card payments and moves between own accounts — never income or spend).
+const CASH_TYPES={
+  'income-business':{g:'in',label:'Business income',icon:'chart-column'},
+  'income-transfer':{g:'in',label:'Transfers from people',icon:'arrow-left-right'},
+  'interest':{g:'in',label:'Interest',icon:'landmark'},
+  'cashback':{g:'in',label:'Cashback',icon:'receipt'},
+  'ewallet-in':{g:'in',label:'From e-wallets',icon:'smartphone'},
+  'other-in':{g:'in',label:'Other money in',icon:'circle-ellipsis'},
+  'spend':{g:'out',label:'Spending',icon:'shopping-bag'},
+  'transfer-out':{g:'out',label:'Transfers to people',icon:'arrow-left-right'},
+  'ewallet':{g:'out',label:'E-wallet top-ups',icon:'smartphone'},
+  'cash':{g:'out',label:'Cash withdrawals',icon:'wallet'},
+  'fee':{g:'out',label:'Bank and card fees',icon:'receipt'},
+  'tax':{g:'out',label:'Tax',icon:'landmark'},
+  'card-interest':{g:'out',label:'Card interest',icon:'credit-card'},
+  'other-out':{g:'out',label:'Other money out',icon:'circle-ellipsis'},
+  'refund':{g:'out',label:'Refunds',icon:'receipt'},
+  'investment-out':{g:'invest',label:'Into investments',icon:'trending-up'},
+  'investment-in':{g:'invest',label:'Out of investments',icon:'trending-up'},
+  'card-payment':{g:'internal',label:'Card payments',icon:'credit-card'},
+  'own-transfer':{g:'internal',label:'Between my accounts',icon:'arrow-left-right'},
+};
+const CASH_GROUP={
+  in:{label:'Money in',color:'var(--good)',soft:'var(--good-soft)'},
+  out:{label:'Money out',color:'var(--bad)',soft:'var(--bad-soft)'},
+  invest:{label:'Investments',color:'var(--accent-text)',soft:'var(--accent-soft)'},
+  internal:{label:'Internal moves',color:'var(--text-3)',soft:'var(--surface-2)'},
+};
+function CM(){return STATE.cash||null;}
+function cashMeta(type){return CASH_TYPES[type]||{g:'out',label:type,icon:'circle-ellipsis'};}
+function cashPayerKey(t){return String(t.counterparty||t.desc||'').toUpperCase().replace(/\s+/g,' ').trim().slice(0,60);}
+// A type you set on the row wins, then a payer rule, then the pipeline's own classification.
+function cashType(t){const o=(STATE.cashTypeOverrides||{})[t.id];if(o)return o;return(STATE.cashPayerRules||{})[cashPayerKey(t)]||t.type;}
+function cashRuleCount(){return[STATE.cashTypeOverrides,STATE.cashPayerRules].reduce((n,o)=>n+Object.values(o||{}).filter(Boolean).length,0);}
+function cashTxns(){const c=CM();return c?c.txns:[];}
+function cashTx(id){return cashTxns().find(t=>t.id===id);}
+function cashAcc(id){const c=CM();return(c&&c.accounts.find(a=>a.id===id))||{id,label:id,kind:'account',currency:'IDR'};}
+function cashMonths(){return[...new Set(cashTxns().filter(t=>t.currency==='IDR').map(t=>t.date.slice(0,7)))].sort();}
+function cashMonthTxns(m){return cashTxns().filter(t=>t.date.slice(0,7)===m);}
+// Rupiah totals for one month. Foreign-currency pockets are listed but never added to Rupiah.
+function cashTotals(m){
+  const r={in:0,out:0,invest:0,internal:0,byType:{}};
+  for(const t of cashMonthTxns(m)){
+    if(t.currency!=='IDR')continue;
+    const ty=cashType(t),g=cashMeta(ty).g,a=t.amount;
+    r.byType[ty]=(r.byType[ty]||0)+a;
+    if(g==='in')r.in+=a;else if(g==='out')r.out-=a;else if(g==='invest')r.invest-=a;
+    else if(a<0||!t.match)r.internal+=Math.abs(a);   // count each matched internal move once
+  }
+  r.net=r.in-r.out;return r;
+}
+function cashMoney(n,ccy){return!ccy||ccy==='IDR'?fmtIDR(Math.abs(n)):`${ccy} ${Math.abs(n).toLocaleString('en-GB',{maximumFractionDigits:2})}`;}
+
+/* ── Import (same folder and file picker as the wealth snapshot) ── */
+function validCash(s){return s&&s.schema===CASH_SCHEMA&&Array.isArray(s.txns)&&Array.isArray(s.accounts)&&Array.isArray(s.statements);}
+function applyCash(d,from,quiet){
+  if(!validCash(d)){if(!quiet)toast('That file is not an ExpenseTrack cash-movements file');return false;}
+  const cur=CM();
+  if(cur&&Date.parse(cur.generatedAt)>=Date.parse(d.generatedAt)){if(!quiet)toast('Cash movements are already up to date');return false;}
+  const cut=(s,n)=>String(s||'').slice(0,n);
+  // Only the fields this page uses, with descriptions trimmed, to keep the synced Drive file small.
+  STATE.cash={schema:d.schema,generatedAt:d.generatedAt,asOf:d.asOf||null,
+    accounts:d.accounts.map(a=>({id:a.id,label:a.label,kind:a.kind,currency:a.currency||'IDR'})),
+    statements:d.statements.map(s=>({account:s.account,date:s.date,opening:s.opening,closing:s.closing,tieOk:!!s.tieOk})),
+    txns:d.txns.map(t=>({id:t.id,account:t.account,currency:t.currency||'IDR',date:t.date,amount:t.amount,type:t.type,
+      desc:cut(t.desc,120),counterparty:cut(t.counterparty,60),match:t.match||null}))};
+  STATE.cashMeta={importedAt:new Date().toISOString(),from};
+  scheduleDriveSave();renderAll();
+  toast(`Cash movements updated · as of ${cashAsOfLabel()}`);
+  return true;
+}
+function cashAsOfLabel(){const c=CM();return c&&c.asOf?fmtDayLong(new Date(c.asOf+'T00:00:00')):'';}
+function cashSourceLine(){const m=STATE.cashMeta||{};return`From your bank and card statements, as of ${cashAsOfLabel()}${m.importedAt?` · imported ${fmtDateTime(m.importedAt)}`:''}`;}
+function cashEmptyHTML(){
+  return`${pageHead('Cash movements','Money in, money out and moves between your own accounts')}
+    <div class="card" style="text-align:center;padding:48px 24px">
+      <span class="empty-ring">${ic('arrow-left-right','s24')}</span>
+      <h2 class="card-title" style="font-size:18px;line-height:24px;margin:16px 0 6px">Connect your cash movements</h2>
+      <p class="muted" style="max-width:480px;margin:0 auto 20px">Cash movements come from your bank and card statements, read on your computer. They arrive through the same snapshot folder as your net worth, so once the folder is connected new statements show up by themselves.</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        ${fsSupported()?`<button class="btn btn-primary" onclick="connectWealthFolder()">${ic('download')}Connect snapshot folder</button>`:''}
+        <button class="btn ${fsSupported()?'btn-secondary':'btn-primary'}" onclick="importWealthFile()">Import file…</button>
+      </div>
+    </div>`;
+}
+
+/* ── Page ── */
+function cashMonthNav(months){
+  const i=months.indexOf(CM_MONTH);
+  return`<div class="cm-month" role="group" aria-label="Month">
+    <button class="icon-btn sm" onclick="cashStep(-1)" aria-label="Previous month"${i<=0?' disabled':''}>${ic('chevron-left','s16')}</button>
+    <span class="lbl">${monthLabel(CM_MONTH,true)}</span>
+    <button class="icon-btn sm" onclick="cashStep(1)" aria-label="Next month"${i>=months.length-1?' disabled':''}>${ic('chevron-right','s16')}</button></div>`;
+}
+function cashStep(d){const ms=cashMonths(),i=ms.indexOf(CM_MONTH)+d;if(i>=0&&i<ms.length){CM_MONTH=ms[i];CM_TYPE=null;CM_LIMIT=50;renderAll();}}
+function cashRankRow(o){
+  const G=CASH_GROUP[o.g];
+  return`<button class="rank-row${o.sub?' sub':''}" onclick="${o.onclick}" aria-label="${escH(o.label)}: ${fmtIDR(Math.abs(o.v))}">
+    ${o.square||`<span class="cat-square sm" style="background:${G.soft};color:${G.color}" aria-hidden="true">${ic(o.icon)}</span>`}
+    <span class="rank-name">${escH(o.label)}</span><span class="rank-val"><span class="amt">${fmtIDRShort(Math.abs(o.v))}</span></span>
+    <span class="rank-bar"><i style="width:${Math.max(2,Math.abs(o.v)/o.max*100)}%;background:${o.color||G.color}"></i></span></button>`;
+}
+function cashSourcesHTML(t,txs){
+  const rows=Object.entries(t.byType).filter(([ty,v])=>cashMeta(ty).g==='in'&&Math.abs(v)>=1).sort((a,b)=>b[1]-a[1]);
+  if(!rows.length)return emptyHTML('inbox','No money came in this month');
+  const max=Math.max(1,...rows.map(r=>Math.abs(r[1])));
+  const payers={};
+  // Payers are named senders of transfers only (interest and cashback have no payer).
+  for(const x of txs){if(x.currency!=='IDR'||x.amount<=0||!x.counterparty||!['income-business','income-transfer','ewallet-in','other-in'].includes(cashType(x)))continue;payers[x.counterparty]=(payers[x.counterparty]||0)+x.amount;}
+  const top=Object.entries(payers).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  return`<div class="rank-list">${rows.map(([ty,v])=>cashRankRow({g:'in',icon:cashMeta(ty).icon,label:cashMeta(ty).label,v,max,onclick:`cashFilterTo('in','${ty}')`})).join('')}</div>
+    ${top.length?`<div class="eyebrow" style="margin:16px 0 2px">Largest payers</div><div class="list">${top.map(([k,v])=>`<div class="list-item"><span class="li-body"><span class="li-title" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH(k)}</span></span><span class="amt" style="font-weight:600;white-space:nowrap">${fmtIDRShort(v)}</span></div>`).join('')}</div>`:''}`;
+}
+function cashSinksHTML(t,txs){
+  const rows=Object.entries(t.byType).filter(([ty,v])=>cashMeta(ty).g==='out'&&ty!=='refund'&&Math.abs(v)>=1).sort((a,b)=>a[1]-b[1]);
+  if(!rows.length)return emptyHTML('inbox','No money went out this month');
+  const max=Math.max(1,...rows.map(r=>Math.abs(r[1])));
+  // Spending split by the app's own categories (built-in patterns plus your private rules).
+  const cats={};
+  for(const x of txs){if(x.currency!=='IDR'||cashType(x)!=='spend')continue;const c=categorize(x.counterparty||x.desc);cats[c]=(cats[c]||0)-x.amount;}
+  const catRows=Object.entries(cats).filter(([,v])=>Math.abs(v)>=1).sort((a,b)=>b[1]-a[1]);
+  const shown=catRows.slice(0,6),rest=catRows.slice(6).reduce((s,[,v])=>s+v,0);
+  const sub=()=>shown.map(([c,v])=>cashRankRow({g:'out',sub:true,square:catSquare(c,true),color:catColor(c),label:c,v,max,onclick:`cashFilterTo('out','spend')`})).join('')
+    +(rest>=1?cashRankRow({g:'out',sub:true,square:catSquare('Others',true),color:catColor('Others'),label:'Other categories',v:rest,max,onclick:`cashFilterTo('out','spend')`}):'');
+  const refund=t.byType.refund||0;
+  return`<div class="rank-list">${rows.map(([ty,v])=>cashRankRow({g:'out',icon:cashMeta(ty).icon,label:cashMeta(ty).label,v,max,onclick:`cashFilterTo('out','${ty}')`})+(ty==='spend'?sub():'')).join('')}</div>
+    ${refund>=1?`<p class="help" style="margin-top:10px">Refunds of <span class="amt">${fmtIDRShort(refund)}</span> are taken off the total.</p>`:''}`;
+}
+function cashAccountsHTML(txs){
+  const c=CM(),ids=new Set(txs.map(t=>t.account));
+  for(const s of c.statements)if((s.date||'').slice(0,7)===CM_MONTH)ids.add(s.account);
+  const accs=[...ids].map(cashAcc).sort((a,b)=>(a.kind===b.kind?0:a.kind==='account'?-1:1)||a.label.localeCompare(b.label));
+  if(!accs.length)return emptyHTML('landmark','No statements for this month');
+  return`<div class="list">${accs.map(a=>{
+    const mine=txs.filter(t=>t.account===a.id),inn=mine.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0),out=mine.filter(t=>t.amount<0).reduce((s,t)=>s-t.amount,0);
+    const st=c.statements.filter(s=>s.account===a.id&&(s.date||'').slice(0,7)===CM_MONTH).sort((x,y)=>String(y.date).localeCompare(String(x.date)))[0];
+    const bal=st&&st.closing!=null?(a.kind==='card'?(st.closing<0?`In credit <span class="amt">${cashMoney(st.closing,a.currency)}</span>`:`Owed <span class="amt">${cashMoney(st.closing,a.currency)}</span>`)
+      :`Closing <span class="amt">${st.closing<0?'−':''}${cashMoney(st.closing,a.currency)}</span>`):'';
+    return`<div class="list-item"><span class="li-body"><span class="li-title" style="display:block">${escH(a.label)}${a.currency!=='IDR'?' <span class="badge">'+escH(a.currency)+'</span>':''}</span>
+      <span class="li-sub" style="display:block">In <span class="amt">${cashMoney(inn,a.currency)}</span> · Out <span class="amt">${cashMoney(out,a.currency)}</span>${bal?` · ${bal}${st.date?` (${fmtDay(new Date(st.date+'T00:00:00'))})`:''}`:''}</span></span>
+      ${st?(st.tieOk?`<span class="badge good" title="The statement's lines add up to its own printed totals">Ties</span>`:`<span class="badge bad" title="The lines read from this statement don't add up to its printed totals">Doesn’t tie</span>`):''}</div>`;}).join('')}</div>`;
+}
+function cashFilteredTxns(){
+  const q=CM_SEARCH.trim().toLowerCase();
+  return cashMonthTxns(CM_MONTH).filter(t=>{
+    const ty=cashType(t);
+    if(CM_FILTER!=='all'&&cashMeta(ty).g!==CM_FILTER)return false;
+    if(CM_TYPE&&ty!==CM_TYPE)return false;
+    if(CM_ACC!=='all'&&t.account!==CM_ACC)return false;
+    return!q||[t.desc,t.counterparty,cashMeta(ty).label,cashAcc(t.account).label].some(v=>String(v||'').toLowerCase().includes(q));
+  }).sort((a,b)=>b.date.localeCompare(a.date)||Math.abs(b.amount)-Math.abs(a.amount));
+}
+function cashTxBodyHTML(){
+  const all=cashFilteredTxns(),list=all.slice(0,CM_LIMIT),filtered=CM_FILTER!=='all'||CM_TYPE||CM_ACC!=='all'||CM_SEARCH;
+  if(!all.length)return`<div style="padding:0 var(--card-pad) var(--card-pad)">${emptyHTML(filtered?'search':'inbox',filtered?'No transactions match these filters':'No transactions this month',filtered?'Clear filters':null,'cashClearFilters()')}</div>`;
+  const dayNet={};for(const t of all){if(t.currency!=='IDR'||cashMeta(cashType(t)).g==='internal')continue;dayNet[t.date]=(dayNet[t.date]||0)+t.amount;}
+  let html='',last=null;
+  for(const t of list){
+    if(t.date!==last){const n=dayNet[t.date]||0;html+=`<div class="tx-day"><span>${fmtDayHeader(t.date)}</span>${n?`<span class="amt">${n>0?'+':'−'}${fmtIDR(Math.abs(n))}</span>`:''}</div>`;last=t.date;}
+    const ty=cashType(t),m=cashMeta(ty),G=CASH_GROUP[m.g],a=cashAcc(t.account),other=t.match?cashTx(t.match):null;
+    const changed=ty!==t.type,cls=m.g==='internal'?'internal':t.amount>0?'in':'';
+    const sub=[escH(m.label),escH(a.label)];if(other)sub.push(`↔ ${escH(cashAcc(other.account).label)}`);if(changed)sub.push('changed by you');
+    const title=t.counterparty||t.desc||'—',money=`${t.amount>0?'+':'−'}${cashMoney(t.amount,t.currency)}`;
+    html+=`<button class="cm-row" onclick="openCashTx('${escAttr(t.id)}')" aria-label="${escH(title)}, ${escH(m.label)}, ${t.amount>0?'in':'out'} ${escH(cashMoney(t.amount,t.currency))}, ${fmtDay(new Date(t.date+'T00:00:00'))}. Change type">
+      <span class="cat-square" style="background:${G.soft};color:${G.color}" aria-hidden="true">${ic(m.icon)}</span>
+      <span class="cm-body"><span class="tx-title" style="display:block">${escH(title)}</span><span class="tx-sub" style="display:block">${sub.join(' · ')}</span></span>
+      <span class="cm-amt ${cls}"><span class="amt">${money}</span></span></button>`;
+  }
+  return`<div>${html}</div>${all.length>CM_LIMIT?`<div class="table-foot"><button class="btn btn-ghost" onclick="CM_LIMIT+=50;renderCashTxBody()">Show more · ${all.length-CM_LIMIT} left</button></div>`:''}`;
+}
+function cashTxCardHTML(){
+  const accs=CM().accounts,seg=[['all','All'],['in','Money in'],['out','Money out'],['internal','Internal'],['invest','Investments']];
+  return`<section class="card flush span-12" id="cmTxCard">${cardHead('receipt','Transactions',`${cashFilteredTxns().length} in ${monthLabel(CM_MONTH,true)} · tap one to change its type`)}
+    <div class="cm-tools">
+      <div class="seg" role="group" aria-label="Show">${seg.map(([k,l])=>`<button aria-pressed="${CM_FILTER===k}" onclick="cashSetFilter('${k}')">${l}</button>`).join('')}</div>
+      <select class="input" aria-label="Account" onchange="cashSetAcc(this.value)"><option value="all">All accounts</option>${accs.map(a=>`<option value="${escH(a.id)}"${CM_ACC===a.id?' selected':''}>${escH(a.label)}</option>`).join('')}</select>
+      <div class="input-affix" style="flex:1;max-width:280px;min-width:160px"><span class="affix">${ic('search','s16')}</span><input class="input" id="cmSearch" type="search" placeholder="Search" value="${escH(CM_SEARCH)}" oninput="cashSetSearch(this.value)" aria-label="Search transactions" style="height:36px;width:100%"></div>
+      ${CM_TYPE?`<button class="badge accent" onclick="CM_TYPE=null;renderCashTx()" aria-label="Remove type filter">${escH(cashMeta(CM_TYPE).label)} ${ic('x','s16','width:12px;height:12px;margin-left:4px')}</button>`:''}
+    </div>
+    <div id="cmTxBody">${cashTxBodyHTML()}</div></section>`;
+}
+function renderCashTx(){const c=$('cmTxCard');if(c)c.outerHTML=cashTxCardHTML();}
+function renderCashTxBody(){const b=$('cmTxBody');if(b)b.innerHTML=cashTxBodyHTML();}
+function cashSetFilter(f){CM_FILTER=f;CM_TYPE=null;CM_LIMIT=50;renderCashTx();}
+function cashSetAcc(v){CM_ACC=v;CM_LIMIT=50;renderCashTx();}
+function cashSetSearch(v){CM_SEARCH=v;CM_LIMIT=50;renderCashTxBody();}
+function cashClearFilters(){CM_FILTER='all';CM_TYPE=null;CM_ACC='all';CM_SEARCH='';CM_LIMIT=50;renderCashTx();}
+function cashFilterTo(g,ty){CM_FILTER=g;CM_TYPE=ty||null;CM_ACC='all';CM_LIMIT=50;renderCashTx();const c=$('cmTxCard');if(c)c.scrollIntoView({behavior:'smooth',block:'start'});}
+function cashChartRows(){return cashMonths().slice(-12).map(m=>({month:m,...cashTotals(m)}));}
+function renderCash(){
+  const c=CM();if(!c)return cashEmptyHTML();
+  const months=cashMonths();
+  if(!months.length)return`${pageHead('Cash movements',cashSourceLine())}<div class="card">${emptyHTML('inbox','No Rupiah transactions in the imported statements yet')}</div>`;
+  if(!CM_MONTH||!months.includes(CM_MONTH))CM_MONTH=months[months.length-1];
+  const i=months.indexOf(CM_MONTH),t=cashTotals(CM_MONTH),p=i>0?cashTotals(months[i-1]):null,vs=p?'vs '+monthLabel(months[i-1]):'';
+  const txs=cashMonthTxns(CM_MONTH),rows=cashChartRows();
+  const untied=c.statements.filter(s=>(s.date||'').slice(0,7)===CM_MONTH&&!s.tieOk).length;
+  const fx=txs.some(x=>x.currency!=='IDR');
+  const fact=(l,v,d)=>`<div><dt class="eyebrow">${l}</dt><dd><span class="amt">${v}</span>${d?`<div style="font-size:12px;font-weight:500;margin-top:2px">${d}</div>`:''}</dd></div>`;
+  const nav=cashMonthNav(months);
+  return`${pageHead('Cash movements',cashSourceLine(),`<span class="hide-sm">${nav}</span>${hideBtn()}`)}
+    <div class="only-sm" style="margin-bottom:12px">${nav}</div>
+    ${untied?`<div class="banner info" style="border-radius:var(--radius-sm);margin-bottom:12px;padding:10px 14px">${ic('info')}<span class="msg">${untied} statement${untied===1?'':'s'} this month didn’t add up to ${untied===1?'its':'their'} own printed totals, so some lines may be missing.</span></div>`:''}
+    <div class="grid"><section class="card summary span-12" id="cmCard" aria-label="Cash movements summary">
+      <div class="summary-l">
+        <div class="eyebrow">Net · ${monthLabel(CM_MONTH,true)}</div>
+        <div class="display"><span class="amt ${t.net>=0?'good':'bad'}"><span class="cur">${t.net<0?'−':''}Rp</span>${fmtNum(Math.abs(t.net))}</span></div>
+        <div class="summary-line">Money in minus money out. Card payments and moves between your own accounts are left out.</div>
+        <dl class="facts">
+          ${fact('Money in',fmtIDRShort(t.in),p&&p.in?deltaHTML(t.in,p.in,true,vs):'')}
+          ${fact('Money out',fmtIDRShort(t.out),p&&p.out?deltaHTML(t.out,p.out,false,vs):'')}
+          ${fact('Internal moves',fmtIDRShort(t.internal))}
+          ${fact('Into investments',`${t.invest<0?'−':''}${fmtIDRShort(Math.abs(t.invest))}`)}
+        </dl>
+      </div>
+      <div class="summary-r">${cardHead('','Money in and out',`Last ${rows.length} month${rows.length===1?'':'s'} · internal moves left out`,tableToggle('cmCard'))}
+        <div class="chart-box"><canvas id="cmChart" role="img" aria-label="Money in and money out by month"></canvas></div>
+        <div class="legend"><span class="legend-item"><i style="background:var(--good)"></i>Money in</span><span class="legend-item"><i style="background:var(--bad)"></i>Money out</span><span class="legend-item"><i style="background:var(--accent)"></i>Net</span></div>
+        <div class="chart-table"><table class="data"><thead><tr><th scope="col">Month</th><th scope="col" class="num">In</th><th scope="col" class="num">Out</th><th scope="col" class="num">Net</th></tr></thead>
+          <tbody>${rows.map(r=>`<tr><td>${monthLabel(r.month)}</td><td class="num amt">${fmtIDR(r.in)}</td><td class="num amt">${fmtIDR(r.out)}</td><td class="num amt">${r.net<0?'−':''}${fmtIDR(Math.abs(r.net))}</td></tr>`).join('')}</tbody></table></div></div>
+    </section></div>
+    <div class="grid">
+      <section class="card span-6">${cardHead('arrow-left-right','Where it came from',`<span class="amt">${fmtIDRShort(t.in)}</span> in ${monthLabel(CM_MONTH,true)} · click a row to see it`)}${cashSourcesHTML(t,txs)}</section>
+      <section class="card span-6">${cardHead('shopping-bag','Where it went',`<span class="amt">${fmtIDRShort(t.out)}</span> in ${monthLabel(CM_MONTH,true)} · spending split by your categories`)}${cashSinksHTML(t,txs)}</section>
+    </div>
+    <div class="grid"><section class="card span-12">${cardHead('landmark','Accounts and cards','In and out this month, with each statement checked against its own totals')}${cashAccountsHTML(txs)}
+      ${fx?`<p class="help" style="margin-top:10px">Foreign-currency pockets are listed here but not added to the Rupiah totals.</p>`:''}</section></div>
+    <div class="grid">${cashTxCardHTML()}</div>`;
+}
+function drawCash(){
+  const el=$('cmChart'),rows=cashChartRows();if(!el||!rows.length)return;
+  const mobile=isMobile(),th=mobile?10:18;
+  CHARTS.cmChart=new Chart(el,{data:{labels:rows.map(r=>monthLabel(r.month).replace(/ \d{4}$/,'')),datasets:[
+      {type:'bar',label:'Money in',data:rows.map(r=>r.in),backgroundColor:cssVar('--good'),maxBarThickness:th},
+      {type:'bar',label:'Money out',data:rows.map(r=>r.out),backgroundColor:cssVar('--bad'),maxBarThickness:th},
+      {type:'line',label:'Net',data:rows.map(r=>r.net),borderColor:cssVar('--accent'),borderWidth:2,pointRadius:0,pointHitRadius:12,tension:0.3}]},
+    options:{responsive:true,maintainAspectRatio:false,...animOnce(),interaction:{mode:'index',intersect:false},
+      onClick:(e,els)=>{if(els.length){CM_MONTH=rows[els[0].index].month;CM_TYPE=null;CM_LIMIT=50;renderAll();}},
+      plugins:{tooltip:{enabled:!mobile,callbacks:{title:it=>monthLabel(rows[it[0].dataIndex].month,true),label:c=>` ${c.dataset.label}: ${moneyTip(c.parsed.y)}`}}},
+      scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:mobile?6:12,maxRotation:0}},y:{border:{display:false},ticks:{maxTicksLimit:5,callback:moneyTick}}}}});
+}
+
+/* ── Change a transaction's type (saved to Drive; amounts are never edited) ── */
+function openCashTx(id){
+  const t=cashTx(id);if(!t)return;
+  const cur=cashType(t),key=cashPayerKey(t),rule=(STATE.cashPayerRules||{})[key],ov=(STATE.cashTypeOverrides||{})[id];
+  const a=cashAcc(t.account),other=t.match?cashTx(t.match):null,same=key?cashTxns().filter(x=>cashPayerKey(x)===key).length:0;
+  const opts=Object.keys(CASH_GROUP).map(g=>`<div class="eyebrow" style="margin:14px 0 4px">${CASH_GROUP[g].label}</div>`
+    +Object.entries(CASH_TYPES).filter(([,m])=>m.g===g).map(([k,m])=>`<label class="cm-type"><input type="radio" name="cmType" value="${k}"${k===cur?' checked':''}>${ic(m.icon,'s16')}<span>${escH(m.label)}</span>${k===t.type?'<span class="faint" style="margin-left:auto;font-size:12px">automatic</span>':''}</label>`).join('')).join('');
+  const body=`<div class="display" style="font-size:26px;line-height:32px"><span class="amt ${t.amount>0?'good':''}">${t.amount>0?'+':'−'}${cashMoney(t.amount,t.currency)}</span></div>
+    <div class="summary-line" style="margin-top:4px">${fmtDayLong(new Date(t.date+'T00:00:00'))} · ${escH(a.label)}</div>
+    <p class="help" style="margin-top:8px;overflow-wrap:anywhere">${escH(t.desc)}</p>
+    ${other?`<p class="help">${ic('arrow-left-right','s16','width:12px;height:12px;vertical-align:-2px')} Matched with ${escH(cashAcc(other.account).label)} on ${fmtDayLong(new Date(other.date+'T00:00:00'))}</p>`:''}
+    <div role="radiogroup" aria-label="Type">${opts}</div>
+    ${key&&same>1?`<label class="check" style="margin-top:14px"><input type="checkbox" id="cmPayer"${rule?' checked':''}> Apply to all ${same} transactions from “${escH(key)}”</label>`:''}`;
+  openSheet({title:'Transaction type',body,confirmDiscard:false,
+    foot:`${ov||rule?`<button class="btn btn-ghost" onclick="resetCashType('${escAttr(id)}')">Back to automatic</button>`:''}<button class="btn btn-primary" onclick="saveCashType('${escAttr(id)}')">Save</button>`});
+  setTimeout(()=>{const c=document.querySelector('.sheet input[name="cmType"]:checked');if(c)c.closest('label').scrollIntoView({block:'center'});},60);
+}
+function cashCloseSheet(){const s=SHEETS[SHEETS.length-1];if(s)s.close(true);}
+function cashRetag(id,fn,msg){
+  const t=cashTx(id);if(!t)return;
+  const key=cashPayerKey(t),ov=STATE.cashTypeOverrides||(STATE.cashTypeOverrides={}),pr=STATE.cashPayerRules||(STATE.cashPayerRules={});
+  const before={ov:ov[id]||null,pr:pr[key]||null};
+  fn(t,key,ov,pr);
+  cashCloseSheet();scheduleDriveSave();renderAll();
+  toast(msg,{action:'Undo',onAction:()=>{ov[id]=before.ov;pr[key]=before.pr;scheduleDriveSave();renderAll();}});
+}
+function saveCashType(id){
+  const sel=document.querySelector('input[name="cmType"]:checked');if(!sel)return;
+  const t0=cashTx(id);if(!t0)return;
+  const v=sel.value,box=$('cmPayer'),all=!!(box&&box.checked),label=cashMeta(v).label;
+  const n=cashTxns().filter(x=>cashPayerKey(x)===cashPayerKey(t0)).length;
+  cashRetag(id,(t,key,ov,pr)=>{
+    if(all){pr[key]=v===t.type?null:v;ov[id]=null;}
+    else{if(box&&pr[key])pr[key]=null;ov[id]=v===(pr[key]||t.type)?null:v;}
+  },all?`${n} transactions from this payer now count as ${label}`:`Now counts as ${label}`);
+}
+function resetCashType(id){cashRetag(id,(t,key,ov,pr)=>{ov[id]=null;pr[key]=null;},'Back to the automatic type');}
 
 /* ══════════════════════════════════════════════════════════════════
    FETCH + BOOT — Gmail REST replaces the cowork MCP calls; STATE (Drive)
