@@ -117,7 +117,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 │ ▭ Credit Cards       │
 │ ─ WEALTH ─────────── │  ← group label, appears when Phase 2 ships
 │ ◇ Net Worth          │
-│ ⇄ Cash Movements     │  ← once a cash-movements file is imported
+│ ⇄ Cash Movements     │  ← always; hosts its own connect step, like Net Worth
 │ ▤ Accounts           │
 │ ✓ Month-end Close    │
 │                      │
@@ -845,7 +845,10 @@ Foreign-currency pockets show in their own currency and are never added to Rupia
   - **Back to automatic** and **Save**;
   - a toast with Undo confirms the change.
 
-**Empty state** (before any file): Connect snapshot folder · Import file….
+**Empty state** (before any file): the page is always in the navigation, like Net Worth, so the user can
+find the connect step.
+- No folder connected: Connect snapshot folder · Import file….
+- Folder connected but no `cash-movements.json` read yet: **Check folder now** · Import file….
 
 ### 11.9 Settings
 

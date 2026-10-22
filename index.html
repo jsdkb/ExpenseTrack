@@ -1919,10 +1919,10 @@ const SECTIONS=[
   {key:'spending',label:'Spending',icon:'chart-pie'},
   {key:'cards',label:'Credit cards',short:'Cards',icon:'credit-card'},
 ];
-// Wealth group (§3.2): Net worth always (it hosts the connect step); the rest once a snapshot exists.
+// Wealth group (§3.2): Net worth and Cash movements always (each hosts its connect step); the rest
+// once a snapshot exists.
 function wealthSections(){
-  const s=[{key:'networth',label:'Net worth',icon:'trending-up'}];
-  if(STATE.cash)s.push({key:'cash',label:'Cash movements',icon:'arrow-left-right'});
+  const s=[{key:'networth',label:'Net worth',icon:'trending-up'},{key:'cash',label:'Cash movements',icon:'arrow-left-right'}];
   if(STATE.wealth){s.push({key:'accounts',label:'Accounts',icon:'landmark'});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check'});}
   return s;
 }
@@ -3723,11 +3723,15 @@ function cashEmptyHTML(){
     <div class="card" style="text-align:center;padding:48px 24px">
       <span class="empty-ring">${ic('arrow-left-right','s24')}</span>
       <h2 class="card-title" style="font-size:18px;line-height:24px;margin:16px 0 6px">Connect your cash movements</h2>
-      <p class="muted" style="max-width:480px;margin:0 auto 20px">Cash movements come from your bank and card statements, read on your computer. They arrive through the same snapshot folder as your net worth, so once the folder is connected new statements show up by themselves.</p>
+      <p class="muted" style="max-width:480px;margin:0 auto 20px">${WEALTH_FOLDER
+        ?'Your snapshot folder is connected on this device, but no cash-movements file has been read from it yet. Check it now, or import the file directly.'
+        :'Cash movements come from your bank and card statements, read on your computer. They arrive through the same snapshot folder as your net worth, so once the folder is connected new statements show up by themselves. On other devices they arrive through your Drive.'}</p>
       <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        ${fsSupported()?`<button class="btn btn-primary" onclick="connectWealthFolder()">${ic('download')}Connect snapshot folder</button>`:''}
+        ${fsSupported()?(WEALTH_FOLDER?`<button class="btn btn-primary" onclick="reconnectWealthFolder()">${ic('refresh-cw')}Check folder now</button>`
+          :`<button class="btn btn-primary" onclick="connectWealthFolder()">${ic('download')}Connect snapshot folder</button>`):''}
         <button class="btn ${fsSupported()?'btn-secondary':'btn-primary'}" onclick="importWealthFile()">Import file…</button>
       </div>
+      <p class="help" style="margin-top:14px">File: <code>cash-movements.json</code> in <code>accurate-desktop-db\\exports\\&lt;book&gt;\\wealth</code> on your computer</p>
     </div>`;
 }
 
