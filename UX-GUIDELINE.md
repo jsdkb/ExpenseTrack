@@ -787,6 +787,36 @@ close). The page shows where each close stands; the app never writes to the book
 - Mobile: the stepper turns vertical; tables scroll inside their card with amounts kept on one
   line.
 
+**In-app close (added 2026-11-02).** The user fills in the close on this page instead of in chat.
+The header button **Start <Month YYYY> close** opens the latest finished month; a close that came
+from chat offers **Fill in positions here**. Data lives only in the Drive file
+(`STATE.monthEnd`, `STATE.monthEndCfg`); the code names no account.
+- **Your positions** card replaces "Positions vs books" for these closes. Rows grouped like Net
+  worth: Account · Book (latest book month on or before the close) · Your figure · Difference.
+  - Under each input, a source badge (**Statement 31 Oct** in accent, **Kept**, **Typed**) and
+    ghost buttons: **Statement <date>: <amount>** when a matched statement differs, **Same as
+    <last month>** (previous in-app close, else the book).
+  - A statement dated the month-end fills empty rows (on start and via **Fill from statements**);
+    an older one is only offered. **Keep empty rows as last month** fills the rest.
+  - Investments get a second input, **Mkt** (market value, never journaled; the Market view on
+    Net worth reads it). Foreign-currency accounts take amount × rate; the rupiah result shows
+    below, and a missing rate shows a `--warn` "Needs a rate" badge.
+  - Empty inputs have a dashed border. Typing updates the difference, badges, stepper and journal
+    in place, so the cursor never jumps.
+  - A collapsible **Statements matched to book accounts** list (last four digits + currency match
+    automatically; cards add up into the one card account; "Not in the book" is a choice).
+  - Info banner when the book lags the close month.
+- **Suggested journal** card: one voucher dated the month-end, rendered like a journal entry
+  (id **J**, Copy, Posted in Accurate). Lines: each account's difference, then statement activity
+  since the book's month-end grouped by type to the chosen counter-accounts, then the remainder to
+  the difference account. Foreign-currency accounts appear in a separate **FX** block to post by
+  hand. Primary button **Download for Accurate import** (disabled with the reason in `--bad` help
+  text until every row is filled, a difference account is chosen, and no earlier close is still
+  waiting for the book). After a download, a note gives the file name and the next step.
+  Collapsible **Counter-accounts** (open until a difference account is chosen).
+- Phone: position rows become stacked blocks (account, then Book and Difference side by side with
+  small uppercase labels, then the inputs); card tools wrap under the title; selects go full width.
+
 ### 11.8 Cash Movements (shipped 2026-10-22)
 
 Question: *"Where did my money come from and where did it go?"*
