@@ -83,7 +83,7 @@ imported by an older app version gains the new fields only when the next (newer)
 | `STATE.stmtFix` | C | Only the owner's decisions; matches themselves are recomputed every run (§6). `{match: {[emailTxKey]: {stmtId, line, amount, off: true, at}}` (an undone fix: the alert keeps its own amount and stays paired with cash line `line`), `added: {[cashTxnId]: {stmtId, excluded: true, at}}` (a statement-only line removed from spending), `review: {[emailTxKey]: {decision: 'exclude'\|'keep', at}}`, `manual: {[statementAccountId]: {on: true, at}}` (statements the owner downloads by hand)}. "Apply again" / "undo" write a dated tombstone `{deleted: true, at}`. `emailTxKey` = the transaction `id` (the key used by catOverrides, txEdits, hiddenIds) |
 | `STATE.cardMap` | C | `{[emailBank]: statementAccountId \| ''}` — which statement account a bank's email alerts are checked against. Needed when a bank has several cards (or to link a bank whose name doesn't match); `''` = not linked. Unset = automatic by name |
 | `STATE.budgets` | D | `{[category]: {monthly: number, since: 'YYYY-MM', at}}` |
-| `STATE.goals` | D | `[{id, name, kind: 'networth'\|'liquid'\|'saving'\|'account', target, by: 'YYYY-MM', accounts?: [code], at}]` |
+| `STATE.goals` | D | `[{id, name, kind: 'networth'\|'liquid'\|'saving'\|'account', target, by: 'YYYY-MM', accounts?: [code], since: 'YYYY-MM', at}]`. `since` = the month the goal was created; set once and kept on every edit (`at` changes on every edit, so it can't date the goal). A `saving` goal counts net-worth change from the end of the month before `since`. Older goals without `since` fall back to `at`'s month |
 
 Defaults (`defaultState()`): `booksMeta: null, stmtFix: {}, cardMap: {}, budgets: {}, goals: []`.
 Create `stmtFix.match` / `.added` / `.review` on first write.
@@ -124,13 +124,27 @@ Pages:
   the app; add others with `registerIcon` (Lucide path markup, 24×24 view box).
 - Menu placement: groups render in the order top, Wealth, Books, Plan; the Books and Plan headings
   only appear once a page is registered in them. Within a group, pages sort by `order`
-  (built-ins: Overview 10, Spending 20, Credit cards 30; Net worth 10, Cash movements 20,
-  Income 30, Accounts 40, Month-end 50). A `top` page with `order` below 10 (e.g. Home at 0) comes
-  first. Phone bottom bar: the first three `top` pages, then Net worth, then More; every other page
-  is listed on the More page in group order.
+  (built-ins: Daily spending 10 — key `overview`, short label "Spending" —, Spending 20, Credit
+  cards 30; Net worth 10, Cash movements 20, Income 30, Accounts 40, Month-end 50). A `top` page with
+  `order` below 10 comes first: Home is `order: 5`. The resulting menu is Home · Daily spending ·
+  Spending · Credit cards · Wealth (Net worth, Cash movements, Income, Investment returns 35,
+  Accounts, Month-end, SPT pack 60) · Books (Chart of accounts, Journals, General ledger, Balance
+  sheet, Income statement, Trial balance) · Plan (Budgets, Goals); Settings sits in the sidebar
+  footer.
+- Landing page: `defaultTab()` = `home` when js/home.js registered it, else `overview`. The app
+  starts on it and every sign-in (`onSignedIn`) returns to it.
+- Phone bottom bar: exactly the keys in `BOTTOM_KEYS` = `home, overview, cards, networth`, shown
+  with their `short` labels (Home · Spending · Cards · Net worth), then More. A key whose page isn't
+  registered is skipped. Every other page, the Spending category page included, is listed on the
+  More page in group order.
 - `needs`: a `wealth` or `cash` page (outside groups `top`/`books`) stays out of the menu until
   that data exists. `books` pages and `top` pages always show and render their own empty state.
-  Rendering a page with `needs: 'books'` or key `home` starts the lazy books load.
+  Rendering a page with `needs: 'books'` or key `home` starts the lazy books load once someone is
+  signed in (`USER_EMAIL` set); Home also renders behind the sign-in screen and must not load then.
+- Chart draws: `renderAll()` numbers every render. Each page's chart draw (the built-in pages'
+  draws and a registered page's `afterRender`) runs on the next animation frame only if no newer
+  render started since, and calls `destroyCharts()` first. Two `renderAll()` calls in one frame
+  therefore draw each chart once ("Canvas is already in use" can't happen).
 
 Keys: `home` (B), `coa`, `journals`, `ledger`, `bs`, `pl`, `tb` (A), `budgets`, `goals`,
 `invest`, `spt` (D). C adds no page: it extends built-in pages through hooks.
@@ -143,26 +157,44 @@ Hooks (results are HTML strings inserted as-is: escape data with `escH()`):
 | `cardsHistory(cards)` | Credit cards › History, once per render; `cards` = the selected card states (`{key, label, ...}`) | HTML appended below the paid-through history (e.g. a statements section) |
 | `accountsExtraCol(acc)` | each account row on Accounts | HTML appended to the account's sub-line under its name |
 | `homeComingUp()` | Home (B calls `runHooks('homeComingUp')`) | items `{date, kind: 'statement'\|'due'\|'missing'\|'manual', account, label, amount?}` |
+| `beforeRender()` | the first line of every `renderAll()`, before the menu and the page are drawn | nothing (return value ignored). For a module that keeps derived data up to date (C re-runs its reconcile here when the cash file, `stmtFix`, `cardMap`, re-tags or the day changed). Must not call `renderAll()` |
 
 `runHooks` spreads an array result into the list, skips `null`/`undefined`, and logs and skips a
 hook that throws. With no hooks registered the built-in pages render exactly as before.
 
-Transforms (added by C, the one core change it makes):
+Transforms (added by C):
 
 ```js
-registerTransform(name, fn)    // fn(list) → new list
-runTransforms(name, list)      // → the list after every transform; one that throws or returns a non-array is logged and skipped
+registerTransform(name, fn, unapply?)  // fn(list) → new list; unapply(rowCopy) → the row before fn, or null for a row fn added
+runTransforms(name, list)              // → the list after every transform; one that throws or returns a non-array is logged and skipped
+untransformed(name, list)              // → copies of the rows with every unapply run, newest transform first; dropped rows left out
 ```
 
 `load()` runs `ALL_TRANSACTIONS = runTransforms('transactions', ALL_TRANSACTIONS)` in both of its
 paths (cache and Gmail), right after the core rules (`applySplits`) and before the
 `ALL_TRANSACTIONS_RAW` snapshot, the hidden filter, manual entries and every total. So whatever a
-transform changes is seen by Overview, Spending and Credit cards alike. The cache (`saveCache`)
-stores the transformed list, so a transform must be idempotent: undo its own previous changes
-before applying them again. With no transform registered the list is unchanged.
+transform changes is seen by Daily spending, Spending and Credit cards alike. With no transform
+registered the list is unchanged.
 
-Cross-page navigation helper: `openLedger(code, fromDate?, toDate?)` (A provides on `window`;
-others call it).
+The cache never holds a transform's changes. The Gmail path calls `saveCache` before
+`runTransforms`, and `saveCache(list)` always stores `untransformed('transactions', list)`, so the
+later saves after an edit (which pass the live, transformed `ALL_TRANSACTIONS_RAW`) are stripped
+too. A module that fails to load, or whose transform stops running, therefore leaves the plain
+email rows behind: no corrected amounts, no added rows. A transform may still change the live rows
+in place (C does, so the owner's edits on a corrected row keep working); one that re-runs on the
+live list must strip its own previous changes first (C's `strip` = `unapply` on every row).
+
+Billing reminders: Maybank "billing" e-mails (`type: 'billing'`, `dueDate` as printed, no amount)
+never enter `ALL_TRANSACTIONS` / `ALL_TRANSACTIONS_RAW`, so they are in no total. The core keeps
+them in the global `BILLING` (an array of rows `{id, type: 'billing', bank, dueDate, msgDate, …}`),
+filled by both load paths, merged by id on an incremental sync and stored with the cache
+(`STATE.txns` holds them next to the email rows; `load()` splits them out again). Modules read
+`BILLING`, never write it.
+
+Cross-page navigation helpers (A provides on `window`; others call them):
+- `openLedger(code, fromDate?, toDate?)` — the General ledger for one account (dates `YYYY-MM-DD`).
+- `openJournals({from?, to?, kind?})` — Journals for a date range (either end optional); `kind`
+  `'income'` or `'expense'` keeps the vouchers that touch such an account. Other filters clear.
 
 Books loader (index.html):
 - `BOOKS()` → the imported §1 data or `null`. `booksStatus()` → `'idle' | 'loading' | 'ready' |
@@ -194,6 +226,12 @@ vouchers, a USD bank account and one suspended account. cash-demo-v2 has one ban
 cards, two of them on the same bank (`Bank-Alpha-CC`), with three card cycles each; every
 statement ties (opening + its transactions = closing). `tests/test_foundation.py` checks all of it.
 
+Sign note: the real Bank Statements pipeline ties a card as opening − transactions = closing, so
+a card's closing is what is owed (positive) and a negative closing is in credit ("CR"), which is
+how the Cash movements page labels it. The fixture's cards use the account rule instead (negative
+closing = owed). Code that reads a card closing must not assume either: `js/statements.js`
+(`owedOf`) works the rule out from each statement.
+
 ## 6. Statements module (C, `js/statements.js`)
 
 **Linking.** Email bank → statement account: `STATE.cardMap[bank]` when set, otherwise automatic —
@@ -203,7 +241,7 @@ rupiah accounts only, account id prefix before `:` minus `-CC`/`-account` (e.g. 
 Statement links).
 
 **Matching** (per linked account, recomputed on every load and whenever the cash file, `stmtFix`,
-`cardMap`, cash re-tags or the day change — checked before each `renderAll`):
+`cardMap`, cash re-tags or the day change — checked in the `beforeRender` hook):
 - alerts: `type === 'transaction'`, not manual, rupiah amount > 0 (gross of splits) or a foreign
   currency alert; card accounts skip `category === 'Transfer'`;
 - statement lines: money out, IDR, inside a statement period, on or after `HISTORY_START`;
@@ -220,14 +258,16 @@ Statement links).
   closed statement date − 3 days) → review (`tx.stmt.kind = 'review'`); Exclude sets `amount` to 0
   (original kept), Keep leaves it.
 
-`window.ETStatements` exposes `reconcile, strip, apply, calendar, cycleDay, expectedNext,
-comingUp, last()` (read-only use) and the UI actions.
+`window.ETStatements` exposes `reconcile, strip, unapply, apply, calendar, cycleDay, expectedNext,
+comingUp, last(), refresh` (read-only use) and the UI actions. It registers `unapply` with its
+transform (§4), so the cache holds the alerts as parsed and every load re-derives the corrections
+from `STATE.cash` and `STATE.stmtFix`.
 
 **Calendar** (every statement account): cycle day = lower median of statement days, a statement on
 a month's last day counting as 31; expected next = the month after the last statement, day clamped
-to the month's length. Card due = latest statement `dueDate` / owed closing / `minPayment`, else a
-Maybank billing reminder's `dueDate` (only when such rows reach the list — see limits in the
-report). Status: `overdue` (no card payment line ≥ minimum after the statement, and the cash file's
+to the month's length. Card due = latest statement `dueDate` / owed closing / `minPayment`, else the
+newest billing reminder in `BILLING` for that card (linked like the alerts) dated after the last
+statement (date only, no amount). Status: `overdue` (no card payment line ≥ minimum after the statement, and the cash file's
 `asOf` is past the due date), `manual` (owner-flagged source and the expected date has come),
 `late` (> 3 days past expected), `due-soon` (due within 7 days, unpaid), else `on-time`.
 `homeComingUp()` items: `{date, kind, account (label), accountId, label, amount?}` for the next 14

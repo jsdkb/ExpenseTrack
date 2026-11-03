@@ -1,7 +1,8 @@
 # ExpenseTrack — UX Guideline
 
-**Version 1.1 · 2026-10-16 · Status: FINAL — v1.0 approved 2026-10-15; v1.1 ("calm private-banking"
-brand and home-screen revision) approved 2026-10-16**
+**Version 1.2 · 2026-11-03 · Status: FINAL — v1.0 approved 2026-10-15; v1.1 ("calm private-banking"
+brand and home-screen revision) approved 2026-10-16; v1.2 (wealth tracker v2: Home, Books, Plan,
+statement-corrected spending) 2026-11-03**
 
 This document is the design source of truth for ExpenseTrack on web and mobile. Every UI change
 should follow it; anything that needs to break a rule here should update this file first.
@@ -95,7 +96,8 @@ anywhere, and a home screen organised like a financial statement rather than a r
 
 | Section | Contains | Comes from today | Ships in |
 |---|---|---|---|
-| **Overview** (home) | KPI row, spend trend, category breakdown, transactions list, subscriptions to review | Overview tab | Phase 1 |
+| **Home** (landing page) | Net worth, real savings, the wealth bridge, liquidity, debts, coming up, data freshness (§11.11) | Snapshot + books + statements | v2 (2026-11-03) |
+| **Daily spending** (was Overview; key `overview`, phone label "Spending") | KPI row, spend trend, category breakdown, transactions list, subscriptions to review — e-mail alerts corrected by the statements | Overview tab | Phase 1, renamed v2 |
 | **Spending** | Trend analysis, categories, top merchants, top transfers, recurring charges, bank split | Reporting tab | Phase 1 |
 | **Credit Cards** | Per-card position, estimated billing, paid-through history, current-balance transactions; sub-tab **Foreign currency** | CC Position + Foreign Currency tabs | Phase 1 |
 | **Net Worth** | Net worth over time, Book/Market toggle, assets vs liabilities by group, what changed, card tie-out, allocation | Monthly snapshot of the accounting book | Phase 2 (shipped 2026-10-16) |
@@ -103,6 +105,9 @@ anywhere, and a home screen organised like a financial statement rather than a r
 | **Month-end Close** | Close status: positions vs books → journal entries → re-check → closed (the close runs in chat with Claude) | Snapshot `closes` | Phase 3 (shipped 2026-10-16) |
 | **Cash Movements** | Money in vs out per month, where it came from / went, accounts with statement tie-out, re-taggable transactions | `cash-movements.json` (`et-cash/1`) from the local bank-statement pipeline | Shipped 2026-10-22 |
 | **Income** | Income the user types in (date, payer, receiving account, income account), one Accurate voucher per receipt | Drive file (`income`) | Shipped 2026-11-03 |
+| **Investment returns**, **SPT pack** (Wealth group) | Cost vs market and return per holding; year-end assets/liabilities, receivables, currency exposure for the tax return | Snapshot | v2 |
+| **Books** group | Chart of accounts, Journals, General ledger, Balance sheet, Income statement, Trial balance (§11.10) | `books.json` (`et-books/1`) | v2 |
+| **Plan** group | Budgets (pace per category), Goals (§11.12) | Drive file (`budgets`, `goals`) | v2 |
 | **Settings** | Appearance (theme), categories & rules, auto-note rules, date-category rules, FX rates, data (sync, export, sign out), about | Scattered controls today | Phase 1 |
 
 **Rule: sections appear in navigation only once their phase ships.** No "coming soon" tabs.
@@ -113,15 +118,23 @@ anywhere, and a home screen organised like a financial statement rather than a r
 ┌──────────────────────┐
 │ ▣ ExpenseTrack       │  ← monogram + Inter 600 wordmark, 56px tall area
 ├──────────────────────┤
-│ ◎ Overview           │  ← active: accent-soft fill, accent-text label, 3px left bar
+│ ⌂ Home               │  ← landing page; active: accent-soft fill, accent-text label, 3px left bar
+│ ◎ Daily spending     │
 │ ◔ Spending           │
 │ ▭ Credit Cards       │
-│ ─ WEALTH ─────────── │  ← group label, appears when Phase 2 ships
+│ ─ WEALTH ─────────── │  ← group label
 │ ◇ Net Worth          │
 │ ⇄ Cash Movements     │  ← always; hosts its own connect step, like Net Worth
-│ ▥ Income             │  ← once a snapshot exists
+│ ▥ Income             │  ← this and the rest of the group once a snapshot exists
+│ ↗ Investment returns │
 │ ▤ Accounts           │
 │ ✓ Month-end Close    │
+│ ▧ SPT pack           │
+│ ─ BOOKS ──────────── │  ← always (each page shows its own import step)
+│   Chart of accounts · Journals · General ledger ·
+│   Balance sheet · Income statement · Trial balance
+│ ─ PLAN ───────────── │
+│   Budgets · Goals    │
 │                      │
 │        (spacer)      │
 ├──────────────────────┤
@@ -139,20 +152,22 @@ anywhere, and a home screen organised like a financial statement rather than a r
 
 ```
 ┌─────────────────────────────┐
-│ Overview      ⟳●  [This mo▾] + │ ← top app bar 56px: title · sync dot · period chip · add
+│ Daily spending ⟳● [This mo▾] + │ ← top app bar 56px: title · sync dot · period chip · add
 ├─────────────────────────────┤
 │                             │
 │          content            │
 │                             │
 ├─────────────────────────────┤
-│  ◎      ◔      ▭      ⋯     │ ← bottom bar 64px + safe-area inset
-│ Overview Spending Cards More │
+│  ⌂     ◎      ▭     ◇     ⋯  │ ← bottom bar 64px + safe-area inset
+│ Home Spending Cards NetW. More│
 └─────────────────────────────┘
 ```
 
-- **Phase 1 tabs:** Overview · Spending · Cards · More. **Phase 2+:** Overview · Spending · Cards ·
-  Net Worth · More. Never more than 5.
-- **More** opens a full page list: Cash Movements, Accounts, Month-end Close, Settings, Export, Sign out.
+- **Tabs (v2):** Home · Spending · Cards · Net Worth · More — exactly these five. "Spending" here is
+  **Daily spending** (its short label); the Spending category page moves to More on phones.
+  (Phase 1 was Overview · Spending · Cards · More.) Never more than 5.
+- **More** opens a full page list in menu order: Spending, the Wealth pages not in the bar, the
+  Books pages, Budgets, Goals, then Settings, Export, Sign out.
 - Active tab: accent icon + label, a 32×4px accent pill above the icon. Inactive: text-3.
 - Tapping the active tab again scrolls its page to top.
 - The bar hides on scroll-down and returns on scroll-up only inside long lists; elsewhere it is fixed.
@@ -168,6 +183,11 @@ One-line description in text-2
 
 Title 22/600, description 14 text-2. Right side: page-level period picker (§8.6), primary action,
 refresh. Credit Cards adds a card switcher (§11.4).
+
+**Period selectors live in the page header**, never inside a card: the month-end picker on Home and
+the Books pages, the month on Budgets, the year on SPT pack, the date range on General ledger and
+Journals. One selector drives the whole page; on phones the header wraps and the selector goes
+full width under the title.
 
 ---
 
@@ -404,6 +424,23 @@ Disabled: 40% opacity, no hover. Loading: label stays, spinner replaces the icon
 - **Status badge** (`micro`, `--radius-xs`): `OK` (good), `Fail` (bad), `Pending` (warn),
   `Excluded` (neutral `--surface-2`). Replaces today's "✓ OK / ✗ Fail" spans.
 - **Bank badge:** neutral badge with the bank's short code; no bank logos (trademark + extra assets).
+- **Source badges (v2)** — say where a figure comes from, on the row's sub-line:
+
+  | Badge | Tone | Means |
+  |---|---|---|
+  | `Statement ✓` | good | The e-mail alert matches the statement; the statement's rupiah amount is used (tooltip gives the alert's amount when it differed) |
+  | `From statement` | accent | On the statement only (fee, interest, missed alert), added to spending |
+  | `Not on statement` | warn | Alert missing from a closed statement, waiting in the review list |
+  | `Excluded` | neutral | Removed from the totals by the owner (original kept, undoable) |
+  | `Book only` | neutral | A figure from the book with no market value recorded |
+  | `Prepared, not in Accurate yet` | warn | A voucher the app prepared (month-end, income) that the imported book doesn't have yet |
+  | `Provisional` | warn | Filled in from statements/typed income after the book's last month-end (§11.11) |
+  | `Stale` / `Missing` | warn / neutral | Data freshness (§11.11) |
+
+- **Statement calendar status** (Credit cards › History, Accounts column, Home "Coming up"):
+  `On time` good · `Due soon` / `Due in n days` / `Due today` warn · `Download due` warn (a source the
+  owner downloads by hand) · `Late n days` bad (statement > 3 days past its expected date) ·
+  `Payment not found` bad (due date passed, no card payment ≥ the minimum in the data).
 
 ### 8.5 Inputs
 
@@ -443,6 +480,17 @@ Esc closes, focus returns to the trigger. On mobile every menu becomes a bottom 
 - Sortable headers show a sort arrow; current sort is announced via `aria-sort`.
 - Long tables paginate at 50 rows or use "Show more"; never render thousands of rows at once.
 - **Below 768px tables become row lists (§8.9).** Never shrink a table to fit a phone.
+- **Statement tables** (Balance sheet, Income statement, Trial balance, SPT pack, Budgets summary):
+  - section headings (Assets, Liabilities, Equity / Income, Expenses) as a full-width row in
+    `label` style;
+  - parent accounts **bold**, carrying the subtotal of their children; each level indents 16px;
+  - totals get a 1px `--border-strong` rule on top; the grand total (net worth, net income,
+    debit = credit) a double rule;
+  - numbers keep their natural sign and the card's sub-title says which side is positive (§11.10);
+  - below 768px the table switches to a one-column `.rows` list: name on the left, figure right,
+    the same indents and rules, no horizontal scroll.
+- **Ledger links:** an account name or a voucher line in any Books table opens the General ledger
+  for that account and period (`openLedger`); Home's bridge parts open the Journals behind them.
 
 ### 8.9 Transaction row (list item — mobile, and compact web lists)
 
@@ -468,6 +516,11 @@ budget usage (future) and the Month-end Close stepper.
 - Over 100% (e.g. over budget): fill turns `--bad`, overflow shown as a striped segment.
 - Stepper: numbered dots joined by a line; done = `--good` check, current = `--accent` ring,
   upcoming = `--text-3`.
+- **Budget pace tick:** a 2px `--text-2` tick on the budget bar marks where spend would be today
+  on an even pace through the month. The fill stays `--accent` and turns `--bad` once over budget;
+  being ahead of the tick with a projected month-end over budget shows the `On pace to overspend`
+  (warn) badge instead of recolouring the bar. Goals use the same bar with `On track` (good) /
+  `Behind` (warn) / `Past its date` (bad) / `Goal reached` (good).
 
 ### 8.11 Sheets, modals, toasts
 
@@ -539,6 +592,13 @@ matches automatically.
 - Touch: tap-and-hold scrubs the crosshair; the value shows in a fixed readout above the chart
   instead of a floating tooltip covered by the finger.
 - Ranked bars show top 8 + "Show all categories" link.
+
+### 9.3a Approximated figures
+
+A metric that is an approximation states its method in a one-line footnote under the card, in
+`small` `--text-2`: e.g. "Return: modified Dietz — (end − start − flows) ÷ (start + flows ÷ 2)" on
+Investment returns, "Other = the remainder, so the bridge always sums" on Home. Never present an
+approximation as exact; never hide the method in a tooltip only.
 
 ### 9.4 Accessible charts
 
@@ -729,6 +789,10 @@ Credit Cards                       [Card: All ▾]  [This cycle ▾]
   it is a horizontal scroll of card "tiles" (credit-card shaped, 160×96, subtle `--accent`
   edge on the selected one).
 - **History:** paid-through timeline as a vertical list of statement cycles with status badges.
+  Below it (v2): the review list (alerts not on a statement, with Exclude / Keep), each statement
+  as a row saying `Reconciled` (good) or `n differences`, the statement calendar (§8.4 palette) and
+  the statement links (which card an e-mail bank is checked against). A statement row opens a sheet
+  with every fix and its own Undo, plus "Undo all for this statement".
 - **Foreign currency:** FX rate inputs as an editable list (currency code · rate · last updated),
   then the foreign transactions table with original amount + converted `Rp` amount. This is the
   one place amounts show `IDR`/`USD` codes instead of `Rp`.
@@ -912,6 +976,77 @@ Foreign-currency pockets show in their own currency and are never added to Rupia
 find the connect step.
 - No folder connected: Connect snapshot folder · Import file….
 - Folder connected but no `cash-movements.json` read yet: **Check folder now** · Import file….
+
+### 11.10 Books (v2, 2026-11-03)
+
+Question: *"What does the book say, and does it tie?"* Six pages under the Books group, all from
+the imported `books.json`; each shows its own import step until a file exists.
+
+- **One shared month-end picker** in the page header (§3.4) drives Chart of accounts, Balance
+  sheet, Income statement and Trial balance, and is remembered across them. General ledger and
+  Journals take a date range instead.
+- **Natural sign:** every account shows its natural sign — assets and expenses debit-positive;
+  liabilities, equity and income credit-positive — and each card's sub-title says which side is
+  positive ("liabilities and equity shown credit-positive"), so a negative figure is never ambiguous.
+  The balance sheet carries earlier years' results as "earnings from earlier years" and the year to
+  date as "current-year earnings", so it always balances.
+- Tables follow the statement-table rules (§8.8): section headings, bold parent subtotals, 16px
+  indent per level, a rule on totals, a double rule on the grand total.
+- **Phones:** every Books table switches to the one-column `.rows` list; the voucher detail opens
+  as a sheet.
+- **Ledger links** everywhere (§8.8); Accounts rows get a "Ledger" link (hook `accountsExtraCol`).
+- Trial balance shows `Balanced` (good) / `Unbalanced` (bad); a tie difference against the
+  snapshot shows `Check` (bad) on that account.
+- Exports: Balance sheet, Income statement and Trial balance download Excel with the as-of date in
+  the title.
+
+### 11.11 Home (v2, 2026-11-03)
+
+Question: *"How is my wealth doing, and what needs me?"* The landing page.
+
+```
+Home                                       [Book | Market]  [hide]
+┌ Net worth ─────────────┐┌ Real savings (12 months) ─────────────┐
+│ Rp 1,2 M  ▲ month · YTD ││ ▮ ▮ ▯ ▮ ▮ …  3 / 6 / 12-mo averages  │
+└─────────────────────────┘└────────────────────────────────────────┘
+┌ Wealth bridge · [Month ▾] ──────────────────┐┌ Detail ──────────┐
+│ Opening ▮ Income ▮ Expenses ▮ Reval. ▮ Other ▮ Closing ││ vouchers behind │
+└──────────────────────────────────────────────┘└──────────────────┘
+┌ Liquidity ┐┌ Debts ┐┌ Coming up (14 days) ┐┌ Data freshness ┐
+```
+
+- **Layout:** the 12-column grid — net worth (5) beside real savings (7), the bridge (7) beside
+  its detail panel, then liquidity, debts, coming up and freshness. Phones: one column in the same
+  order.
+- **Bridge waterfall:** opening and closing bars solid `--accent`; parts float between them,
+  increases `--good`, decreases `--bad`; each part is a button that opens its detail (the
+  vouchers, via Journals). The parts always sum to the change: **Other** is the exact remainder
+  and says so in the footnote (§9.3a). Revaluation appears only for months with recorded market
+  values (Market view).
+- **Provisional:** months after the book's last month-end are filled from statements and typed
+  income. Their bars are drawn at 25% fill with a 1.5px outline in the same colour, labelled
+  `Provisional` (warn) on the card and in the legend; typed income drops out once ticked Posted.
+- **Savings chart:** monthly real savings (= net-worth change) as bars, `--good` up / `--bad` down,
+  provisional months outlined; 3/6/12-month averages as facts above it.
+- **Liquidity:** cash + deposits and months of runway at the average spend. **Debts:** cards and
+  loans with the next due date and amount (from the statement calendar).
+- **Coming up:** statements and dues in the next 14 days plus anything late or overdue, sorted by
+  date; empty state "Nothing due in the next 14 days".
+- **Freshness badges:** book as-of, last statement per account, last Gmail sync. A book older than
+  40 days, a statement older than 35 days or a Gmail sync older than 7 days is `Stale` (warn); no
+  data is `Missing`.
+- Hide amounts (§20) blurs every figure on Home, details included.
+
+### 11.12 Plan and wealth extras (v2, 2026-11-03)
+
+- **Budgets:** one row per category: spent / budget with the pace tick (§8.10), projected
+  month-end, badge `On track` / `On pace to overspend` / `Over budget`. Month picker in the header.
+- **Goals:** a progress bar per goal (§8.10) with target, by-date and the pace needed; a goal counts
+  from the month it was created (`since`).
+- **Investment returns:** cost (book) vs market, unrealised gain and return per holding and overall;
+  holdings without a market value show `Book only`; the method footnote (§9.3a).
+- **SPT pack:** year picker in the header; year-end assets and liabilities (the "Declared" ticks),
+  receivables with age, currency exposure; statement-table rules (§8.8); Excel export.
 
 ### 11.9 Settings
 
