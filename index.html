@@ -799,6 +799,7 @@
   <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5"/></symbol>
   <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
   <symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
@@ -1129,6 +1130,13 @@ function mergeStates(remote, local){
     const r = remote.monthEndCfg || {}, l = local.monthEndCfg || {};
     merged.monthEndCfg = { stmtMap: { ...(r.stmtMap||{}), ...(l.stmtMap||{}) }, counter: { ...(r.counter||{}), ...(l.counter||{}) },
       diffAccount: l.diffAccount || r.diffAccount || '' };
+  }
+  // Typed income and accounts added in the app: per id, the newer edit wins; a removal is kept as
+  // a dated {deleted:true} so it wins over the other device's older copy.
+  for (const k of ['income', 'newAccounts']) {
+    const o = { ...(remote[k]||{}) };
+    for (const [id, v] of Object.entries(local[k]||{})) if (!o[id] || String(v&&v.at) >= String(o[id]&&o[id].at)) o[id] = v;
+    merged[k] = o;
   }
   const wms = [remote.watermark, local.watermark].filter(Boolean).sort();
   merged.watermark = wms.length ? wms[wms.length-1] : null;
@@ -1970,10 +1978,10 @@ const SECTIONS=[
 // once a snapshot exists.
 function wealthSections(){
   const s=[{key:'networth',label:'Net worth',icon:'trending-up'},{key:'cash',label:'Cash movements',icon:'arrow-left-right'}];
-  if(STATE.wealth){s.push({key:'accounts',label:'Accounts',icon:'landmark'});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check'});}
+  if(STATE.wealth){s.push({key:'income',label:'Income',icon:'chart-column'},{key:'accounts',label:'Accounts',icon:'landmark'});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check'});}
   return s;
 }
-const TAB_TITLES={overview:'Overview',spending:'Spending',cards:'Credit cards',networth:'Net worth',cash:'Cash movements',accounts:'Accounts',close:'Month-end',settings:'Settings',more:'More'};
+const TAB_TITLES={overview:'Overview',spending:'Spending',cards:'Credit cards',networth:'Net worth',cash:'Cash movements',accounts:'Accounts',income:'Income',close:'Month-end',settings:'Settings',more:'More'};
 function setTab(t){
   if(t===ACTIVE_TAB){window.scrollTo({top:0,behavior:'smooth'});return;}
   ACTIVE_TAB=t;SELECT_MODE=false;SELECTED.clear();TX_LIMIT=50;
@@ -1986,7 +1994,7 @@ function buildNav(){
   document.querySelectorAll('.sb-foot .sb-item[data-tab]').forEach(b=>{if(b.dataset.tab===ACTIVE_TAB)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   const bn=$('bottomNav');
   if(bn){
-    const moreActive=['more','settings','accounts','close','cash'].includes(ACTIVE_TAB);
+    const moreActive=['more','settings','accounts','income','close','cash'].includes(ACTIVE_TAB);
     bn.innerHTML=[...SECTIONS,{key:'networth',label:'Net worth',icon:'trending-up'}].map(s=>`<button class="bn-item" onclick="setTab('${s.key}')"${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span>${s.short||s.label}</span></button>`).join('')
       +`<button class="bn-item" onclick="setTab('more')"${moreActive?' aria-current="page"':''}>${ic('ellipsis')}<span>More</span></button>`;
   }
@@ -3311,6 +3319,7 @@ function renderAll(){
   if(ACTIVE_TAB==='networth'){root.innerHTML=renderNetWorth();requestAnimationFrame(()=>{renderNetWorthCharts();CHARTS_DRAWN_ONCE=true;});return;}
   if(ACTIVE_TAB==='accounts'){root.innerHTML=renderAccounts();requestAnimationFrame(()=>{drawAccountChart();CHARTS_DRAWN_ONCE=true;});return;}
   if(ACTIVE_TAB==='close'&&typeof renderClose==='function'){root.innerHTML=renderClose();return;}
+  if(ACTIVE_TAB==='income'){root.innerHTML=renderIncome();return;}
   if(ACTIVE_TAB==='cash'){root.innerHTML=renderCash();requestAnimationFrame(()=>{drawCash();CHARTS_DRAWN_ONCE=true;});return;}
   if(!DATA_READY){if(!$('prog'))root.innerHTML=skeletonHTML();return;}
   const txns=getFiltered();
@@ -3333,7 +3342,8 @@ function renderAll(){
 let NW_VIEW='book', NW_RANGE=12, ACC_FILTER='active', ACC_SEL=null, CLOSE_SEL=null;
 const WEALTH_SCHEMA='et-wealth/1';
 function W(){return STATE.wealth||null;}
-function wAccounts(){const w=W();return w?w.accounts:[];}
+// Includes accounts added in the app that the book doesn't have yet (pending:true, book 0).
+function wAccounts(){const w=W();if(!w)return[];const x=STATE.newAccounts&&Object.keys(STATE.newAccounts).length?naBalance():[];return x.length?[...w.accounts,...x]:w.accounts;}
 function wAcc(id){return wAccounts().find(a=>a.id===id);}
 function wMonths(){const w=W();return w?w.months:[];}
 function wGroup(id){const w=W();return(w&&w.groups.find(g=>g.id===id))||{id,label:id,side:'asset'};}
@@ -3525,7 +3535,7 @@ function accountRowsHTML(li){
       list.map(a=>{const v=wValue(a,li),book=wValue(a,li,'book'),mk=v!==book;
         return`<tr class="clickable${ACC_SEL===a.id?' selected':''}" onclick="selectAccount('${escAttr(a.id)}')" tabindex="0" onkeydown="if(event.key==='Enter')selectAccount('${escAttr(a.id)}')">
           <td class="sel-col"><input type="checkbox" ${declared[a.id]?'checked':''} onclick="toggleDeclared('${escAttr(a.id)}',event)" aria-label="Declared in tax return: ${escH(a.name)}" title="Declared in tax return"></td>
-          <td class="merchant"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${a.ccy!=='IDR'?`<span class="badge">${escH(a.ccy)}</span>`:''}${!a.active?'<span class="badge">Inactive</span>':''}${mk?`<span>Book <span class="amt">${fmtIDRShort(book)}</span></span>`:''}</div></td>
+          <td class="merchant"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${a.ccy!=='IDR'?`<span class="badge">${escH(a.ccy)}</span>`:''}${!a.active?'<span class="badge">Inactive</span>':''}${naBadge(a.id)}${mk?`<span>Book <span class="amt">${fmtIDRShort(book)}</span></span>`:''}</div></td>
           <td class="muted">${escH(a.id)}</td>
           <td class="amount num">${amt(v)}</td></tr>`;}).join('');
   }).join('');
@@ -3561,8 +3571,9 @@ function renderAccounts(){
   const nAct=wAccounts().filter(a=>a.active).length,nUndecl=wAccounts().filter(a=>a.active&&!declared[a.id]).length;
   if(!ACC_SEL||!wAcc(ACC_SEL))ACC_SEL=null;
   const seg=`<div class="seg" role="group" aria-label="Show accounts"><button aria-pressed="${ACC_FILTER==='active'}" onclick="ACC_FILTER='active';renderAll()">Active (${nAct})</button><button aria-pressed="${ACC_FILTER==='undeclared'}" onclick="ACC_FILTER='undeclared';renderAll()">Not declared (${nUndecl})</button><button aria-pressed="${ACC_FILTER==='all'}" onclick="ACC_FILTER='all';renderAll()">All</button></div>`;
-  return`${pageHead('Accounts',wealthSourceLine(),`${nwViewSeg()}${hideBtn()}`)}
-    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">${seg}<span class="only-sm">${nwViewSeg()}</span></div>
+  return`${pageHead('Accounts',wealthSourceLine(),`<button class="btn btn-secondary" onclick="openAddAccount()">${ic('plus')}Add account</button>${nwViewSeg()}${hideBtn()}`)}
+    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">${seg}<span class="only-sm">${nwViewSeg()}</span><button class="btn btn-secondary btn-sm only-sm" onclick="openAddAccount()">${ic('plus','s16')}Add account</button></div>
+    ${naCardHTML()}
     <div class="grid">
       <section class="card flush span-7">${cardHead('landmark','All accounts',`Net worth <span class="amt">${fmtIDR(t.net)}</span> · tick = declared in your tax return`)}
         <div class="table-wrap"><table class="data acc-table"><thead><tr><th class="sel-col" scope="col"><span class="sr-only">Declared</span>${ic('square-check','s16')}</th><th scope="col">Account</th><th scope="col">Code</th><th scope="col" class="num">${NW_VIEW==='market'?'Value':'Balance'}</th></tr></thead>
@@ -3655,6 +3666,7 @@ function renderClose(){
   return`${pageHead('Month-end',desc,[start,picker].filter(Boolean).join(''))}
     ${picker?`<div class="only-sm" style="margin-bottom:12px">${picker}</div>`:''}
     ${closeStatusCardHTML(c)}
+    ${naCardHTML()}
     ${positions}
     ${otherCard}
     <div class="grid"><section class="card span-12">${cardHead('refresh-cw','Re-check','')}<p class="summary-line">${recheck}</p></section></div>`;
@@ -3684,7 +3696,14 @@ function meLastFinished(){const d=new Date();return meShift(`${d.getFullYear()}-
 function meDay(iso){return fmtDayLong(new Date(iso+'T00:00:00')).replace(/ \d{4}$/,'');}
 function meBookIdx(M){const ms=wMonths();let i=-1;ms.forEach((m,k)=>{if(m.month<=M)i=k;});return i;}
 function meBook(code,bi){return bi<0?0:(wMonths()[bi].balances[code]||0);}
-function meLedger(){const w=W();return w&&Array.isArray(w.ledger)?w.ledger:[];}
+// What the book will hold once the income typed on the Income page is imported: the book's
+// balance plus typed receipts dated after the book's month, up to this month-end.
+function meIncAfter(M,code,bi){return incOn(code,bi>=0?meMonthEnd(wMonths()[bi].month):'',meMonthEnd(M));}
+// Typed receipts inside the book's months that the journal can't place: not ticked Posted, so
+// it can't tell whether the book already has them.
+function meIncUnsure(M,bi){const be=bi>=0?meMonthEnd(wMonths()[bi].month):'';return incList().filter(x=>x.date<=be&&x.date<=meMonthEnd(M)&&incBookState(x,be)!=='in'&&(!x.posted||incBookState(x,be)==='unsure'));}
+function meExpected(M,code,bi){return meBook(code,bi)+meIncAfter(M,code,bi);}
+function meLedger(){const w=W(),l=w&&Array.isArray(w.ledger)?w.ledger:[];const x=STATE.newAccounts&&Object.keys(STATE.newAccounts).length?naLedger():[];return x.length?[...l,...x]:l;}
 function meName(id){const a=wAcc(id);if(a)return a.name;const l=meLedger().find(x=>x.id===id);return l?l.name:id;}
 function meAccounts(M){
   const st=meClose0(M),order=W().groups.map(g=>g.id);
@@ -3757,16 +3776,16 @@ function meJournal(M){
   const pos=[],fx=[];
   for(const a of accs){
     const p=mePosOf(M,a.id);if(!p)continue;
-    const d=Math.round(p.v-meBook(a.id,bi));if(Math.abs(d)<1)continue;
+    const d=Math.round(p.v-meExpected(M,a.id,bi));if(Math.abs(d)<1)continue;
     const line={account:a.id,amount:a.side==='asset'?d:-d,memo:meText('Month-end: '+a.name,80)};
     ((a.ccy||'IDR')==='IDR'?pos:fx).push(line);
   }
   // Statement activity on matched rupiah accounts since the book's last month-end, by type.
   // Card payments, own transfers and investment moves have both sides inside this voucher.
   const inVoucher=new Set(accs.filter(a=>(a.ccy||'IDR')==='IDR'&&mePosOf(M,a.id)).map(a=>a.id));
-  const from=bookM?meMonthEnd(bookM):'',to=meMonthEnd(M),byB={};
+  const from=bookM?meMonthEnd(bookM):'',to=meMonthEnd(M),byB={},linked=new Set(Object.values(incLinks()).map(t=>t.id));
   if(CM())for(const t of cashTxns()){
-    if(t.currency!=='IDR'||t.date<=from||t.date>to)continue;
+    if(t.currency!=='IDR'||t.date<=from||t.date>to||linked.has(t.id))continue;
     const code=meMapOf(cashAcc(t.account));if(!code||!inVoucher.has(code))continue;
     const ty=cashType(t),b=ME_BUCKETS.find(x=>x.types.includes(ty));if(!b)continue;
     byB[b.id]=(byB[b.id]||0)+t.amount;
@@ -3785,12 +3804,16 @@ function meJournal(M){
   const issues=[];
   if(missing)issues.push(`Fill in every account first — ${missing} left`);
   if(earlier.length)issues.push(`The ${earlier.map(k=>monthLabel(k,true)).join(', ')} journal isn’t in the book yet. Import it and refresh the snapshot first, or this month would book it twice.`);
+  const incTodo=incList().filter(x=>x.date<=to&&!x.exportedAt&&!incInBook(x,from)).length,incUnsure=meIncUnsure(M,bi).length;
+  if(incUnsure)issues.push(`${incUnsure} typed income receipt${incUnsure===1?'':'s'} dated within the book’s months need${incUnsure===1?'s':''} an answer on the Income page: tick Posted once imported, and say whether this snapshot has ${incUnsure===1?'it':'them'}, so this journal doesn’t book ${incUnsure===1?'it':'them'} twice.`);
+  if(incTodo)issues.push(`${incTodo} income receipt${incTodo===1?'':'s'} in this period ${incTodo===1?'isn’t':'aren’t'} saved for import yet. This journal counts typed income as booked, so download it on the Income page first.`);
   if(lines.some(l=>!l.account))issues.push('Choose a difference account under Counter-accounts');
   if(!lines.length&&!missing)issues.push('Nothing to post: every rupiah account matches the book');
-  return{date:to,description:meText(`Month-end reconciliation ${monthLabel(M,true)}`,200),lines,fx,buckets,residual,bookM,from,issues};
+  const pending=[...new Set([...lines,...fx].map(l=>l.account).filter(naPending))];
+  return{date:to,description:meText(`Month-end reconciliation ${monthLabel(M,true)}`,200),lines,fx,buckets,residual,bookM,from,issues,pending};
 }
 // Used only to spot an earlier close whose journal would still be waiting (cheap: positions only).
-function meJournalHasLines(M){const bi=meBookIdx(M);return meAccounts(M).some(a=>{if((a.ccy||'IDR')!=='IDR')return false;const p=mePosOf(M,a.id);return p&&Math.abs(Math.round(p.v-meBook(a.id,bi)))>=1;});}
+function meJournalHasLines(M){const bi=meBookIdx(M);return meAccounts(M).some(a=>{if((a.ccy||'IDR')!=='IDR')return false;const p=mePosOf(M,a.id);return p&&Math.abs(Math.round(p.v-meExpected(M,a.id,bi)))>=1;});}
 function meVouchers(M){const j=meJournal(M);return[{date:j.date,description:j.description,lines:j.lines.map(l=>({account:l.account,amount:l.amount,memo:l.memo}))}];}
 function meFileName(M){return`${meText(W().source.book||'book',20).replace(/[^A-Za-z0-9_-]/g,'')}-month-end-${M}.json`;}
 function meExport(M){
@@ -3844,14 +3867,14 @@ function meSetDiff(v){meCfg().diffAccount=v;scheduleDriveSave();renderAll();}
 function meSrcHTML(M,a){
   const p=meHasEntry(M,a.id)?meClose0(M).pos[a.id]:null,s=meStmt(M,a.id),l=meLast(M,a),out=[];
   const fxA=(a.ccy||'IDR')!=='IDR',same=(x,y)=>x!=null&&y!=null&&Math.abs(x-y)<(fxA?0.005:1);
-  if(p)out.push(`<span class="badge${p.src==='statement'?' accent':''}">${p.src==='statement'?`Statement ${escH(meDay(p.date||meMonthEnd(M)))}`:p.src==='kept'?'Kept':'Typed'}</span>`);
+  if(p)out.push(`<span class="badge${p.src==='statement'?' accent':''}">${p.src==='statement'?`Statement ${escH(meDay(p.date||meMonthEnd(M)))}`:p.src==='kept'?'Kept':p.src==='excel'?'Excel':'Typed'}</span>`);
   if(fxA&&p&&p.v==null)out.push('<span class="badge warn">Needs a rate</span>');
   if(s&&!(p&&same(fxA?(p.fx||{}).amt:p.v,s.v)))out.push(`<button class="btn btn-ghost btn-sm" onclick="meUseStmt('${escAttr(M)}','${escAttr(a.id)}')" title="Use the statement figure">${ic('receipt','s16')}${s.exact?'Statement':'Statement '+escH(meDay(s.date))}: ${fxA?escH(a.ccy)+' '+fmtNum2(s.v):fmtIDRShort(s.v)}</button>`);
   if(!(p&&same(p.v,l.v)))out.push(`<button class="btn btn-ghost btn-sm" onclick="meKeep('${escAttr(M)}','${escAttr(a.id)}')" title="Same figure as ${escH(l.label)}">${ic('refresh-cw','s16')}Same as ${escH(l.label)}</button>`);
   return out.join('');
 }
 function fmtNum2(n){return Number(n||0).toLocaleString('id-ID',{maximumFractionDigits:2});}
-function meDiffHTML(M,a,bi){const p=mePosOf(M,a.id);if(!p)return'<span class="faint">—</span>';const d=Math.round(p.v-meBook(a.id,bi));
+function meDiffHTML(M,a,bi){const p=mePosOf(M,a.id);if(!p)return'<span class="faint">—</span>';const d=Math.round(p.v-meExpected(M,a.id,bi));
   return Math.abs(d)>=1?`<span class="warn">${d>0?'+':'−'}${fmtIDR(Math.abs(d))}</span>`:'<span class="good">Match</span>';}
 function meInputVal(n){return n==null?'':fmtNum2(n);}
 function mePositionsHTML(M){
@@ -3866,15 +3889,18 @@ function mePositionsHTML(M){
          <div class="help" id="me-idr-${i}">${p&&p.v!=null?fmtIDR(p.v):'Amount × rate = rupiah'}</div></div>`
       :`<div class="input-affix"><span class="affix">Rp</span><input class="input" id="me-v-${i}" ${d} data-f="v" inputmode="decimal" autocomplete="off" aria-label="${escH(a.name)}: your figure" value="${meInputVal(p?p.v:null)}" oninput="meInput(this)"></div>`;
     const mk=a.investment?`<div class="input-affix me-market"><span class="affix">Mkt</span><input class="input" id="me-mk-${i}" ${d} data-f="market" inputmode="decimal" autocomplete="off" aria-label="${escH(a.name)}: market value" placeholder="Market value (optional)" value="${meInputVal((st.market[a.id]||{}).v)}" oninput="meInput(this)"></div>`:'';
-    rows+=`<tr class="me-row${meHasEntry(M,a.id)?'':' me-empty'}" id="me-row-${i}"><td class="merchant" data-label="Account"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${escH(a.id)}${a.side==='liability'?' · owed':''}</div></td>
-      <td class="num amt" data-label="Book">${fmtIDR(meBook(a.id,bi))}</td>
+    rows+=`<tr class="me-row${meHasEntry(M,a.id)?'':' me-empty'}" id="me-row-${i}"><td class="merchant" data-label="Account"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${escH(a.id)}${a.side==='liability'?' · owed':''} ${naBadge(a.id)}</div></td>
+      <td class="num amt" data-label="Book">${fmtIDR(meBook(a.id,bi))}${meIncAfter(M,a.id,bi)?`<div class="merchant-sub">+ ${fmtIDR(meIncAfter(M,a.id,bi))} typed income</div>`:''}</td>
       <td class="me-fig" data-label="Your figure">${fig}${mk}<div class="me-src" id="me-src-${i}">${meSrcHTML(M,a)}</div></td>
       <td class="num amt" data-label="Difference" id="me-d-${i}">${meDiffHTML(M,a,bi)}</td></tr>`;
   });
   const filled=accs.filter(a=>mePosOf(M,a.id)).length,bookLbl=bi<0?'no book month':monthLabel(wMonths()[bi].month);
   const gap=bi>=0&&wMonths()[bi].month<M?`<div class="banner info me-banner">${ic('info')}<span class="msg">The book is through ${escH(monthLabel(wMonths()[bi].month,true))}, so differences cover everything since then, up to ${escH(meDay(meMonthEnd(M)))} ${M.slice(0,4)}. Market values show on Net worth once the book reaches ${escH(monthLabel(M,true))}.</span></div>`:'';
   const tools=`<button class="btn btn-secondary btn-sm" onclick="meFill('${escAttr(M)}')">${ic('receipt','s16')}Fill from statements</button>
-    <button class="btn btn-secondary btn-sm" onclick="meKeepAll('${escAttr(M)}')">${ic('refresh-cw','s16')}Keep empty rows as last month</button>`;
+    <button class="btn btn-secondary btn-sm" onclick="meKeepAll('${escAttr(M)}')">${ic('refresh-cw','s16')}Keep empty rows as last month</button>
+    <button class="btn btn-secondary btn-sm" onclick="xlDownload('${escAttr(M)}')" title="Your figures as an Excel file to edit">${ic('download','s16')}Download Excel</button>
+    <button class="btn btn-secondary btn-sm" onclick="xlPick('${escAttr(M)}')" title="Upload the edited Excel file; you see the changes before they apply">${ic('upload','s16')}Upload Excel</button>
+    <button class="btn btn-ghost btn-sm" onclick="openAddAccount()">${ic('plus','s16')}Add account</button>`;
   return`<section class="card flush span-12" id="mePosCard">${cardHead('table','Your positions',`<span id="me-count">${filled} of ${accs.length} filled</span> · book column is ${escH(bookLbl)} · liabilities as the amount owed`,tools)}
     ${gap?`<div style="padding:0 var(--card-pad)">${gap}</div>`:''}
     <div class="table-wrap"><table class="data me-table"><thead><tr><th scope="col">Account</th><th scope="col" class="num">Book</th><th scope="col">Your figure</th><th scope="col" class="num">Difference</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -3929,6 +3955,7 @@ function meJournalHTML(M,c){
   const tools=`<button class="btn btn-primary btn-sm" ${can?'':'disabled aria-disabled="true"'} onclick="meExport('${escAttr(M)}')" title="${can?'Download the voucher in the Accurate import format':escH(j.issues[0]||'')}">${ic('download','s16')}${st&&st.exportedAt?'Download again':'Download for Accurate import'}</button>`;
   return`<section class="card span-12" id="meJournal">${cardHead('receipt','Suggested journal',`One voucher that brings the book to your figures · statement activity ${escH(period)}`,tools)}
     ${!can&&j.lines.length?`<p class="help err" style="margin-bottom:12px">${ic('info','s16')}${escH(j.issues[0])}</p>`:''}
+    ${j.pending.length?`<p class="help" style="margin-bottom:12px;color:var(--warn)">${ic('triangle-alert','s16')}${j.pending.map(escH).join(', ')} ${j.pending.length===1?'isn’t':'aren’t'} in Accurate yet — create ${j.pending.length===1?'it':'them'} there before importing this file.</p>`:''}
     ${body}${fx}${next}${meCounterHTML(M,j)}</section>`;
 }
 // Patch only what depends on the figures, so the input being typed in keeps its cursor.
@@ -3951,7 +3978,7 @@ function mePatch(M){
    copy work unchanged. Entries from a chat close for the same month are kept alongside. */
 function meCloseView(M,snap){
   const bi=meBookIdx(M),accs=meAccounts(M),j=meJournal(M);
-  const rows=accs.filter(a=>mePosOf(M,a.id)).map(a=>{const v=mePosOf(M,a.id).v,bk=meBook(a.id,bi);return{account:a.id,books:bk,actual:v,diff:Math.round(v-bk)};});
+  const rows=accs.filter(a=>mePosOf(M,a.id)).map(a=>{const v=mePosOf(M,a.id).v,bk=meExpected(M,a.id,bi);return{account:a.id,books:bk,actual:v,diff:Math.round(v-bk)};});
   const toLines=ls=>ls.map(l=>({account:l.account,name:meName(l.account),debit:l.amount>0?l.amount:0,credit:l.amount<0?-l.amount:0}));
   const entries=[...(snap?snap.entries:[])];
   if(j.lines.length)entries.push({id:'J',memo:j.description,status:'to-post',lines:toLines(j.lines)});
@@ -3966,6 +3993,360 @@ function allCloses(){
   const app=Object.keys(meStore()).filter(k=>/^\d{4}-\d{2}$/.test(k));
   const months=[...new Set([...snap.map(c=>c.month),...app])].sort().reverse();
   return months.map(m=>app.includes(m)?meCloseView(m,by[m]):by[m]);
+}
+
+/* ── Accounts you add in the app (STATE.newAccounts, Drive only). One shows at once in month-end,
+   net worth and the pickers, marked "Not in Accurate yet", until a snapshot carries its code; then
+   the book's own account takes over. Accurate's import can't create accounts (not proven yet), so
+   you create it there yourself; the app gives you the code, name and type to use. ── */
+const NA_KINDS={asset:'Asset',liability:'Liability',income:'Income',expense:'Expense'};
+function naStore(){return STATE.newAccounts||(STATE.newAccounts={});}
+function naInBook(code){const w=W();return!!w&&(w.accounts.some(a=>a.id===code)||(w.ledger||[]).some(l=>l.id===code));}
+function naList(){return Object.values(STATE.newAccounts||{}).filter(a=>a&&a.id&&!a.deleted&&!naInBook(a.id)).sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true}));}
+function naBalance(){return naList().filter(a=>a.kind==='asset'||a.kind==='liability').map(a=>({id:a.id,name:a.name,group:a.group,side:a.kind,ccy:a.ccy||'IDR',investment:!!a.investment,active:true,type:a.type||'',pending:true}));}
+function naLedger(){return naList().filter(a=>a.kind==='income'||a.kind==='expense').map(a=>({id:a.id,name:a.name,kind:a.kind,type:a.type||'',pending:true}));}
+function naPending(code){return naList().some(a=>a.id===code);}
+function naAllCodes(){const w=W();return new Set([...(w?w.accounts.map(a=>a.id):[]),...((w&&w.ledger)||[]).map(l=>l.id),...naList().map(a=>a.id)]);}
+// The first unused code right after an existing one, same width: "9100.07" → "9100.08" (or later
+// if taken), "9000" → "9001".
+function naNextCode(near){
+  const m=String(near||'').match(/^(.*?)(\d+)$/);if(!m)return'';
+  const[,pre,num]=m,codes=naAllCodes();let n=Number(num),code;
+  do{n++;code=pre+String(n).padStart(num.length,'0');}while(codes.has(code));
+  return code;
+}
+function naParent(code){const m=String(code).match(/^(.*)\.\d+$/);return m?m[1]:'';}
+function naNearOptions(kind,sel){
+  const xs=kind==='income'||kind==='expense'?meLedger().filter(l=>l.kind===kind):wAccounts().filter(a=>a.side===kind);
+  return`<option value="">Choose…</option>`+xs.map(x=>`<option value="${escH(x.id)}"${x.id===sel?' selected':''}>${escH(x.id)} · ${escH(x.name)}</option>`).join('');
+}
+function naGroupOptions(kind,sel){return W().groups.filter(g=>g.side===kind).map(g=>`<option value="${escH(g.id)}"${g.id===sel?' selected':''}>${escH(g.label)}</option>`).join('');}
+let NA_EDIT=null,NA_AFTER=null;
+function openAddAccount(o){
+  if(!W()){toast('Import the wealth snapshot first');return;}
+  o=o||{};const cur=o.id?naStore()[o.id]:null,a=cur||{kind:o.kind||'asset',group:'',ccy:'IDR',investment:false,near:'',name:''};
+  NA_EDIT=cur?cur.id:null;NA_AFTER=o.after||null;
+  const bs=a.kind==='asset'||a.kind==='liability';
+  openSheet({title:cur?'Edit new account':'Add account',body:`<div class="form-grid">
+      <div class="field full"><label class="label" for="naName">Account name</label><input class="input" id="naName" type="text" maxlength="60" value="${escH(a.name||'')}" placeholder="As it should read in Accurate">
+        <div class="help err" id="naNameErr" style="display:none">${ic('triangle-alert','s16')}Enter a name.</div></div>
+      <div class="field"><label class="label" for="naKind">Kind</label><select class="input" id="naKind" onchange="naFormSync(true)">${Object.entries(NA_KINDS).map(([k,l])=>`<option value="${k}"${k===a.kind?' selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="field" id="naGroupF"${bs?'':' style="display:none"'}><label class="label" for="naGroup">Group</label><select class="input" id="naGroup">${bs?naGroupOptions(a.kind,a.group):''}</select></div>
+      <div class="field full"><label class="label" for="naNear">Put it next to</label><select class="input" id="naNear" onchange="naFormSync(false)">${naNearOptions(a.kind,a.near)}</select>
+        <div class="help">The new account copies its Accurate type and sits under the same parent.</div></div>
+      <div class="field"><label class="label" for="naCode">Code</label><input class="input" id="naCode" type="text" maxlength="20" autocomplete="off" value="${escH(a.id||naNextCode(a.near))}"${cur?' data-typed="1"':''} oninput="this.dataset.typed='1'">
+        <div class="help">Checked against the accounts in your snapshot; Accurate refuses a code it already has.</div>
+        <div class="help err" id="naCodeErr" style="display:none"></div></div>
+      <div class="field" id="naCcyF"${bs?'':' style="display:none"'}><label class="label" for="naCcy">Currency</label><input class="input" id="naCcy" type="text" maxlength="3" value="${escH(a.ccy||'IDR')}" autocomplete="off"></div>
+      <label class="check full" id="naInvF"${a.kind==='asset'?'':' style="display:none"'}><input type="checkbox" id="naInv"${a.investment?' checked':''}> Investment (has a market value)</label>
+      <div class="help full">${ic('info','s16')}Saved in your Drive file and shown at once. Create it in Accurate too — the app lists what to enter — before importing a file that uses it.</div>
+    </div>`,
+    foot:`${cur?`<button class="btn btn-ghost" style="color:var(--bad);margin-right:auto" onclick="naRemove()">Remove</button>`:''}<button class="btn btn-secondary" onclick="closeTopSheet(true)">Cancel</button><button class="btn btn-primary" onclick="naSave()">${cur?'Save':'Add account'}</button>`,
+    focus:'#naName',onEnter:naSave,onClose:()=>{NA_EDIT=null;}});
+}
+// Kind or "next to" changed: refresh the dependent fields, and the proposed code unless typed over.
+function naFormSync(kindChanged){
+  const k=$('naKind').value,bs=k==='asset'||k==='liability';
+  if(kindChanged){$('naNear').innerHTML=naNearOptions(k,'');$('naGroup').innerHTML=bs?naGroupOptions(k,''):'';}
+  $('naGroupF').style.display=bs?'':'none';$('naCcyF').style.display=bs?'':'none';$('naInvF').style.display=k==='asset'?'':'none';
+  const near=$('naNear').value;
+  if(!kindChanged&&near&&bs){const n=wAcc(near);if(n){$('naGroup').value=n.group;$('naCcy').value=n.ccy||'IDR';}}
+  const code=$('naCode');if(!code.dataset.typed)code.value=naNextCode(near);
+}
+function naSave(){
+  const name=meText($('naName').value,60),k=$('naKind').value,code=String($('naCode').value||'').trim(),near=$('naNear').value;
+  const err=(id,msg)=>{const e=$(id);if(e){e.innerHTML=msg?`${ic('triangle-alert','s16')}${escH(msg)}`:'';e.style.display=msg?'':'none';}};
+  err('naNameErr',name?'':'Enter a name.');
+  let ce='';if(!/^[0-9A-Za-z][0-9A-Za-z.\-]*$/.test(code))ce='Enter a code (digits and dots).';else if(code!==NA_EDIT&&naAllCodes().has(code))ce=`${code} is already used.`;
+  err('naCodeErr',ce);if(!name||ce)return;
+  const bs=k==='asset'||k==='liability',nearA=wAcc(near)||meLedger().find(l=>l.id===near);
+  const s=naStore(),at=meStamp();
+  if(NA_EDIT&&NA_EDIT!==code)s[NA_EDIT]={id:NA_EDIT,deleted:true,at};
+  s[code]={id:code,name,kind:k,group:bs?($('naGroup').value||W().groups.find(g=>g.side===k).id):'',ccy:bs?(String($('naCcy').value||'IDR').toUpperCase().slice(0,3)||'IDR'):'IDR',
+    investment:k==='asset'&&$('naInv').checked,type:nearA?nearA.type||'':'',near,at};
+  const after=NA_AFTER,was=NA_EDIT;closeTopSheet(true);scheduleDriveSave();renderAll();toast(was?`${code} · ${name} saved`:`${code} · ${name} added — create it in Accurate too`);
+  if(after)after(code);
+}
+function naRemove(){
+  const id=NA_EDIT;if(!id||!confirm('Remove this account from the app? Figures typed for it stay in the Drive file.'))return;
+  naStore()[id]={id,deleted:true,at:meStamp()};closeTopSheet(true);scheduleDriveSave();renderAll();toast(`${id} removed`);
+}
+function naCopy(){
+  const t=naList().map(a=>[a.id,a.name,NA_KINDS[a.kind],a.type||'',naParent(a.id),a.ccy||'IDR'].join('\t')).join('\n');
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText('Code\tName\tKind\tType\tParent\tCurrency\n'+t).then(()=>toast('Copied'),()=>toast('Copy failed'));
+  else toast('Copy is not available in this browser');
+}
+function naCardHTML(){
+  const xs=naList();if(!xs.length)return'';
+  return`<div class="grid"><section class="card flush span-12" id="naCard">${cardHead('plus','Create in Accurate',`${xs.length} account${xs.length===1?'':'s'} added here aren’t in the book yet. Add ${xs.length===1?'it':'them'} in Accurate (Chart of Accounts › New) before importing a file that uses ${xs.length===1?'it':'them'}; the next snapshot links ${xs.length===1?'it':'them'} up by itself.`,
+      `<button class="btn btn-ghost btn-sm" onclick="naCopy()">${ic('download','s16')}Copy</button>`)}
+    <div class="table-wrap"><table class="data"><thead><tr><th scope="col">Code</th><th scope="col">Name</th><th scope="col">Type (as)</th><th scope="col">Parent</th><th scope="col">Currency</th></tr></thead>
+    <tbody>${xs.map(a=>{const n=a.near?(wAcc(a.near)||meLedger().find(l=>l.id===a.near)):null;
+      return`<tr class="clickable" onclick="openAddAccount({id:'${escAttr(a.id)}'})" tabindex="0" onkeydown="if(event.key==='Enter')openAddAccount({id:'${escAttr(a.id)}'})"><td>${escH(a.id)}</td><td class="merchant"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${escH(NA_KINDS[a.kind])}${a.group?' · '+escH(wGroup(a.group).label):''}</div></td>
+        <td>${escH(a.type||'—')}${n?`<div class="merchant-sub">same as ${escH(n.id)}</div>`:''}</td><td>${escH(naParent(a.id)||'—')}</td><td>${escH(a.ccy||'IDR')}</td></tr>`;}).join('')}</tbody></table></div></section></div>`;
+}
+function naBadge(code){return naPending(code)?'<span class="badge warn">Not in Accurate yet</span>':'';}
+
+/* ── Income you type in (STATE.income, Drive only): one voucher per receipt, Dr the account it
+   arrived in / Cr the income account, in the same Accurate Write import format as month-end.
+   The month-end journal treats a receipt dated after the book's month as already booked, and a
+   receipt that matches a statement line (same account and amount, within 3 days) takes that line
+   out of the statement buckets, so nothing is booked twice. ── */
+let INC_MONTH=null,INC_EDIT=null;
+function incStore(){return STATE.income||(STATE.income={});}
+function incList(){return Object.values(STATE.income||{}).filter(x=>x&&x.id&&!x.deleted).sort((a,b)=>a.date.localeCompare(b.date)||String(a.at).localeCompare(String(b.at)));}
+function incMonths(){const d=new Date(),now=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;return[...new Set([...incList().map(x=>x.date.slice(0,7)),now])].sort();}
+// The statement receipt each income matches: earliest income first, closest date wins.
+function incLinks(){
+  const out={};if(!CM())return out;
+  const used=new Set(),ins=cashTxns().filter(t=>t.currency==='IDR'&&t.amount>0&&cashMeta(cashType(t)).g==='in');
+  for(const x of incList()){
+    if(x.unlinked||!x.account)continue;
+    let best=null,bd=99;
+    for(const t of ins){
+      if(used.has(t.id)||Math.round(t.amount)!==Math.round(x.amount)||meMapOf(cashAcc(t.account))!==x.account)continue;
+      const d=Math.abs(Date.parse(t.date)-Date.parse(x.date))/864e5;if(d<=3&&d<bd){best=t;bd=d;}
+    }
+    if(best){out[x.id]=best;used.add(best.id);}
+  }
+  return out;
+}
+// Does the snapshot (book through `bookEnd`) hold a typed receipt? 'in', 'out' or 'unsure'.
+// Ticked Posted before the snapshot was built → in. Snapshot built before the file existed → out.
+// Saved before and ticked after the snapshot → it may or may not be in: you answer once on the
+// Income page ("In this snapshot?"), stored as inBookAt / notInBookAt (that snapshot's time).
+function incBookState(x,bookEnd){
+  const w=W();if(!w||!bookEnd||x.date>bookEnd||!x.posted)return'out';
+  const g=Date.parse(w.generatedAt),t=v=>v?Date.parse(v):NaN;
+  if(g>=t(x.inBookAt)||g>t(x.postedAt))return'in';
+  if(g<=t(x.notInBookAt)||g<t(x.exportedAt))return'out';
+  return'unsure';
+}
+function incInBook(x,bookEnd){return incBookState(x,bookEnd)==='in';}
+function incSnapBookEnd(){const w=W();return w?meMonthEnd(w.source.asOf):'';}
+function incAnswerSnapshot(id,yes){const x=incStore()[id],w=W();if(!x||!w)return;
+  if(yes){x.inBookAt=w.generatedAt;x.notInBookAt=null;}else{x.notInBookAt=w.generatedAt;x.inBookAt=null;}
+  x.at=meStamp();scheduleDriveSave();renderAll();toast(yes?'Noted: this snapshot has it':'Noted: it comes with a later snapshot');}
+// Typed income on one account up to `to` that the book (through `bookEnd`) doesn't hold yet.
+function incOn(code,bookEnd,to){return incList().filter(x=>x.account===code&&x.date<=to&&!incInBook(x,bookEnd)).reduce((s,x)=>s+Math.round(x.amount),0);}
+function incIntoAccounts(){return wAccounts().filter(a=>a.side==='asset'&&(a.ccy||'IDR')==='IDR'&&(a.active||a.pending));}
+function incIncomeOptions(sel){
+  const xs=meLedger().filter(l=>l.kind==='income');
+  let o=`<option value="">Choose…</option>`+xs.map(x=>`<option value="${escH(x.id)}"${x.id===sel?' selected':''}>${escH(x.id)} · ${escH(x.name)}${x.pending?' (new)':''}</option>`).join('');
+  if(sel&&!xs.some(x=>x.id===sel))o+=`<option value="${escH(sel)}" selected>${escH(sel)}</option>`;
+  return o;
+}
+function incIntoOptions(sel){
+  const xs=incIntoAccounts();
+  let o=`<option value="">Choose…</option>`+W().groups.filter(g=>g.side==='asset').map(g=>{const ys=xs.filter(a=>a.group===g.id);return ys.length?`<optgroup label="${escH(g.label)}">${ys.map(a=>`<option value="${escH(a.id)}"${a.id===sel?' selected':''}>${escH(a.id)} · ${escH(a.name)}${a.pending?' (new)':''}</option>`).join('')}</optgroup>`:'';}).join('');
+  if(sel&&!xs.some(x=>x.id===sel))o+=`<option value="${escH(sel)}" selected>${escH(sel)}</option>`;
+  return o;
+}
+function openIncome(id){
+  if(!W()){toast('Import the wealth snapshot first');return;}
+  const cur=id?incStore()[id]:null,x=cur||{date:new Date().toISOString().slice(0,10),payer:'',amount:null,account:'',incomeAccount:'',note:''};
+  INC_EDIT=cur?cur.id:null;
+  const payers=[...new Set(incList().map(i=>i.payer))].sort();
+  openSheet({title:cur?'Edit income':'Add income',body:`<div class="form-grid">
+      <div class="field"><label class="label" for="incDate">Date received</label><input class="input" id="incDate" type="date" value="${escH(x.date)}"></div>
+      <div class="field"><label class="label" for="incAmount">Amount</label><div class="input-affix"><span class="affix">Rp</span><input class="input" id="incAmount" inputmode="decimal" autocomplete="off" value="${meInputVal(x.amount)}" placeholder="0"></div>
+        <div class="help err" id="incAmountErr" style="display:none">${ic('triangle-alert','s16')}Enter an amount above zero.</div></div>
+      <div class="field full"><label class="label" for="incPayer">From</label><input class="input" id="incPayer" type="text" maxlength="60" list="incPayers" value="${escH(x.payer)}" placeholder="Who paid you" onchange="incPayerFill()">
+        <datalist id="incPayers">${payers.map(p=>`<option value="${escH(p)}">`).join('')}</datalist>
+        <div class="help err" id="incPayerErr" style="display:none">${ic('triangle-alert','s16')}Enter who paid you.</div></div>
+      <div class="field full"><label class="label" for="incInto">Received into</label><select class="input" id="incInto">${incIntoOptions(x.account)}</select>
+        <div class="help err" id="incIntoErr" style="display:none">${ic('triangle-alert','s16')}Choose the account it arrived in.</div></div>
+      <div class="field full"><label class="label" for="incAcc">Income account</label><select class="input" id="incAcc">${incIncomeOptions(x.incomeAccount)}</select>
+        <div class="help err" id="incAccErr" style="display:none">${ic('triangle-alert','s16')}Choose the income account.</div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="openAddAccount({kind:'income',after:c=>{const s=$('incAcc');if(s){s.innerHTML=incIncomeOptions(c);}}})">${ic('plus','s16')}New income account</button></div>
+      <div class="field full"><label class="label" for="incNote">Note <span class="faint">(optional)</span></label><input class="input" id="incNote" type="text" maxlength="60" value="${escH(x.note||'')}" placeholder="e.g. October"></div>
+      ${cur&&(cur.exportedAt||cur.posted)?`<div class="help full">${ic('info','s16')}${cur.posted?'Already posted in Accurate.':`Already saved for import on ${escH(fmtDateTime(cur.exportedAt))}.`} If the voucher is in Accurate, correct or delete it there: saving a change here makes a new voucher.</div>`:''}
+    </div>`,
+    foot:`${cur?`<button class="btn btn-ghost" style="color:var(--bad);margin-right:auto" onclick="incRemove()">Remove</button>`:''}<button class="btn btn-secondary" onclick="closeTopSheet(true)">Cancel</button><button class="btn btn-primary" onclick="incSave()">${cur?'Save':'Add income'}</button>`,
+    focus:cur?'#incAmount':'#incPayer',onEnter:incSave,onClose:()=>{INC_EDIT=null;}});
+}
+// A payer you used before brings back the accounts you picked for them last time.
+function incPayerFill(){
+  const p=String($('incPayer').value||'').trim().toUpperCase(),last=incList().filter(x=>x.payer.toUpperCase()===p).pop();if(!last)return;
+  if(!$('incInto').value)$('incInto').innerHTML=incIntoOptions(last.account);
+  if(!$('incAcc').value)$('incAcc').innerHTML=incIncomeOptions(last.incomeAccount);
+}
+function incSave(){
+  const date=$('incDate').value,amount=meParse($('incAmount').value),payer=meText($('incPayer').value,60),account=$('incInto').value,incomeAccount=$('incAcc').value;
+  const show=(id,bad)=>{const e=$(id);if(e)e.style.display=bad?'':'none';return bad;};
+  const bad=[show('incAmountErr',!(amount>0)),show('incPayerErr',!payer),show('incIntoErr',!account),show('incAccErr',!incomeAccount)].some(Boolean);
+  if(bad||!/^\d{4}-\d{2}-\d{2}$/.test(date))return;
+  const s=incStore(),id=INC_EDIT||'inc-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),old=s[id]||{};
+  const changed=(old.exportedAt||old.posted)&&(old.date!==date||Math.round(old.amount)!==Math.round(amount)||old.account!==account||old.incomeAccount!==incomeAccount);
+  s[id]={...old,id,date,payer,amount:Math.round(amount),account,incomeAccount,note:meText($('incNote').value,60),at:meStamp(),...(changed?{exportedAt:null,exportFile:null,posted:false,postedAt:null,inBookAt:null,notInBookAt:null}:{})};
+  const was=INC_EDIT;INC_MONTH=date.slice(0,7);closeTopSheet(true);scheduleDriveSave();renderAll();
+  toast(changed?'Income changed — download it again for Accurate':was?'Income updated':`Income added · ${fmtIDR(Math.round(amount))}`);
+}
+function incRemove(){
+  const id=INC_EDIT,x=id&&incStore()[id];if(!x)return;
+  if(!confirm(x.exportedAt?'This income was already saved for import. Remove it from the app anyway? (It stays in the file you downloaded.)':'Remove this income?'))return;
+  incStore()[id]={id,deleted:true,at:meStamp()};closeTopSheet(true);scheduleDriveSave();renderAll();toast('Income removed');
+}
+function incSetLink(id,on){const x=incStore()[id];if(!x)return;x.unlinked=!on;x.at=meStamp();scheduleDriveSave();renderAll();}
+function incTogglePosted(id){const x=incStore()[id];if(!x)return;x.posted=!x.posted;x.postedAt=x.posted?meStamp():null;x.at=meStamp();scheduleDriveSave();renderAll();}
+function incVoucher(x){
+  const memo=meText(`${x.payer}${x.note?' - '+x.note:''}`,80);
+  return{date:x.date,description:meText(`Income: ${x.payer}${x.note?' - '+x.note:''}`,200),lines:[{account:x.account,amount:Math.round(x.amount),memo},{account:x.incomeAccount,amount:-Math.round(x.amount),memo}]};
+}
+// One name per download (month + when it was saved), so a second file never hides behind the first.
+function incFileName(M,at){const d=new Date(at),p=n=>String(n).padStart(2,'0');
+  return`${meText(W().source.book||'book',20).replace(/[^A-Za-z0-9_-]/g,'')}-income-${M}-${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.json`;}
+function incExport(M){
+  const all=incList().filter(x=>x.date.slice(0,7)===M);let xs=all.filter(x=>!x.exportedAt);
+  if(!all.length){toast('No income this month');return;}
+  if(!xs.length){if(!confirm(`Every receipt this month is already saved for import. Import only one of the files, or the book gets them twice. Download all ${all.length} again?`))return;xs=all;}
+  const bad=xs.find(x=>!x.account||!x.incomeAccount);if(bad){toast('Every receipt needs both accounts');return;}
+  const at=meStamp(),name=incFileName(M,at);
+  const blob=new Blob([JSON.stringify(xs.map(incVoucher),null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  for(const x of xs){x.exportedAt=at;x.exportFile=name;x.at=at;}
+  scheduleDriveSave();renderAll();toast(`Saved ${xs.length} voucher${xs.length===1?'':'s'} as ${name}`);
+}
+function incStatusHTML(x,link){
+  const out=[];
+  if(incBookState(x,incSnapBookEnd())==='unsure')out.push(`<span class="badge warn">In this snapshot?</span><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();incAnswerSnapshot('${escAttr(x.id)}',true)" title="The snapshot built ${escH(fmtDateTime(W().generatedAt))} already has this voucher">Yes</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();incAnswerSnapshot('${escAttr(x.id)}',false)" title="It was imported after that snapshot">No</button>`);
+  out.push(x.posted?'<span class="badge good">Posted</span>':x.exportedAt?`<span class="badge accent" title="Saved ${escH(fmtDateTime(x.exportedAt))}">Saved</span>`:'<span class="badge">To export</span>');
+  if(link)out.push(`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();incSetLink('${escAttr(x.id)}',false)" title="Matched statement line; it leaves the month-end statement totals. Click to unmatch.">${ic('receipt','s16')}Statement ${escH(meDay(link.date))}</button>`);
+  else if(x.unlinked)out.push(`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();incSetLink('${escAttr(x.id)}',true)">${ic('receipt','s16')}Match statement</button>`);
+  return out.join('');
+}
+function renderIncome(){
+  if(!W())return wealthEmptyHTML();
+  const months=incMonths();if(!INC_MONTH||!months.includes(INC_MONTH))INC_MONTH=months[months.length-1];
+  const M=INC_MONTH,xs=incList().filter(x=>x.date.slice(0,7)===M),links=incLinks();
+  const total=xs.reduce((s,x)=>s+x.amount,0),todo=xs.filter(x=>!x.exportedAt).length,pend=[...new Set(xs.flatMap(x=>[x.account,x.incomeAccount]).filter(naPending))];
+  const shown=months.slice(-6);if(!shown.includes(M))shown[0]=M;
+  const older=months.filter(m=>!shown.includes(m));
+  const picker=`<div class="seg" role="group" aria-label="Month">${shown.map(m=>`<button aria-pressed="${m===M}" onclick="INC_MONTH='${escAttr(m)}';renderAll()">${escH(monthLabel(m))}</button>`).join('')}</div>`
+    +(older.length?`<select class="input me-select" style="width:auto" aria-label="Earlier months" onchange="if(this.value){INC_MONTH=this.value;renderAll();}"><option value="">Earlier…</option>${older.reverse().map(m=>`<option value="${escH(m)}">${escH(monthLabel(m,true))}</option>`).join('')}</select>`:'');
+  const add=`<button class="btn btn-primary" onclick="openIncome()">${ic('plus')}Add income</button>`;
+  const rows=xs.map(x=>`<tr class="clickable" onclick="openIncome('${escAttr(x.id)}')" tabindex="0" onkeydown="if(event.key==='Enter')openIncome('${escAttr(x.id)}')">
+      <td>${escH(meDay(x.date))}</td><td class="merchant"><div class="merchant-name">${escH(x.payer)}</div>${x.note?`<div class="merchant-sub">${escH(x.note)}</div>`:''}</td>
+      <td class="merchant"><div class="merchant-name">${escH(meName(x.account))}</div><div class="merchant-sub">${escH(x.account)} ${naBadge(x.account)}</div></td>
+      <td class="merchant"><div class="merchant-name">${escH(meName(x.incomeAccount))}</div><div class="merchant-sub">${escH(x.incomeAccount)} ${naBadge(x.incomeAccount)}</div></td>
+      <td class="num amt">${fmtIDR(x.amount)}</td><td><div class="me-src">${incStatusHTML(x,links[x.id])}</div></td>
+      <td><label class="check" onclick="event.stopPropagation()"><input type="checkbox" ${x.posted?'checked':''} onchange="incTogglePosted('${escAttr(x.id)}')" aria-label="Posted in Accurate"> Posted</label></td></tr>`).join('');
+  const book=W().source.book,files=[...new Set(xs.filter(x=>x.exportedAt&&x.exportFile&&!x.posted).sort((a,b)=>String(a.exportedAt).localeCompare(String(b.exportedAt))).map(x=>x.exportFile))],saved=files.length>0,file=files[files.length-1]||'';
+  const tools=`<button class="btn btn-primary btn-sm" ${xs.length?'':'disabled aria-disabled="true"'} onclick="incExport('${escAttr(M)}')">${ic('download','s16')}${todo||!xs.length?`Download for Accurate import${todo&&todo<xs.length?` (${todo} new)`:''}`:'Download again'}</button>`;
+  return`${pageHead('Income','Income you type in, posted to Accurate as one voucher per receipt',add)}
+    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">${picker}<button class="btn btn-primary btn-sm only-sm" onclick="openIncome()">${ic('plus','s16')}Add income</button></div>
+    <div class="grid">
+      ${kpiCard({label:`Income · ${monthLabel(M,true)}`,value:`<span class="amt">${fmtIDR(total)}</span>`,sub:`${xs.length} receipt${xs.length===1?'':'s'}`,span:'span-4'})}
+      ${kpiCard({label:'To export',value:String(todo),sub:todo?'Not in an import file yet':'All saved for import',span:'span-4'})}
+      ${kpiCard({label:'Posted in Accurate',value:String(xs.filter(x=>x.posted).length),sub:'Ticked by you',span:'span-4'})}
+    </div>
+    ${pend.length?`<div class="banner warn" style="margin-bottom:16px">${ic('triangle-alert')}<span class="msg">${pend.map(c=>escH(c)).join(', ')} ${pend.length===1?'isn’t':'aren’t'} in Accurate yet. Create ${pend.length===1?'it':'them'} there before importing this month’s file (see Accounts).</span></div>`:''}
+    <div class="grid"><section class="card flush span-12">${cardHead('chart-column','Receipts',`Dr the account it arrived in, Cr the income account, dated the day it arrived`,tools)}
+      ${rows?`<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Date</th><th scope="col">From</th><th scope="col">Into</th><th scope="col">Income account</th><th scope="col" class="num">Amount</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Posted</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        :`<div style="padding:0 var(--card-pad) var(--card-pad)">${emptyHTML('chart-column',`No income typed for ${monthLabel(M,true)} yet`,'Add income','openIncome()')}</div>`}
+      ${saved?`<div class="me-next" style="margin:0 var(--card-pad) var(--card-pad)"><div class="li-title">${ic('square-check','s16')} Saved, not posted yet: ${files.map(f=>`<code>${escH(f)}</code>`).join(', ')}</div>
+        <p class="help">Next: ask Claude to import ${files.length===1?'it':'each of them'} into Accurate, or run <code>accurate-write queue --book ${escH(book)} --file "%USERPROFILE%\\Downloads\\${escH(file)}" --check-only</code>, then without <code>--check-only</code>, then <code>accurate-write import --book ${escH(book)}</code>. Import each file once. Tick “Posted” once it’s in. The month-end close counts these receipts as booked.</p></div>`:''}
+    </section></div>`;
+}
+
+/* ── Positions as an Excel file: download, change figures in Excel, upload back. The upload shows
+   every change first and applies only on Apply. ExcelJS loads on first use. ── */
+const XL_SRC='https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js',XL_SRI='sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz';
+const XL_COLS=[{h:'Code',w:12},{h:'Account',w:38},{h:'Group',w:20},{h:'Currency',w:10},{h:'Book (Rp)',w:18,fmt:'#,##0'},
+  {h:'Your figure (Rp)',w:18,fmt:'#,##0',edit:1},{h:'FX amount',w:14,fmt:'#,##0.00',edit:1},{h:'FX rate',w:12,fmt:'#,##0.####',edit:1},{h:'Market value (Rp)',w:18,fmt:'#,##0',edit:1},{h:'Source',w:12}];
+let XL_LOAD=null,XL_PENDING=null;
+function xlLib(){
+  if(window.ExcelJS)return Promise.resolve(window.ExcelJS);
+  return XL_LOAD||(XL_LOAD=new Promise((ok,no)=>{const s=document.createElement('script');s.src=XL_SRC;s.integrity=XL_SRI;s.crossOrigin='anonymous';
+    s.onload=()=>window.ExcelJS?ok(window.ExcelJS):no(new Error('The Excel library did not start'));
+    s.onerror=()=>{XL_LOAD=null;s.remove();no(new Error('Could not load the Excel library — check the connection'));};document.head.appendChild(s);}));
+}
+function xlFileName(M){return`${meText(W().source.book||'book',20).replace(/[^A-Za-z0-9_-]/g,'')}-positions-${M}.xlsx`;}
+async function xlDownload(M){
+  let X;try{X=await xlLib();}catch(e){toast(e.message);return;}
+  const st=meClose0(M),bi=meBookIdx(M),wb=new X.Workbook(),ws=wb.addWorksheet('Positions',{views:[{state:'frozen',xSplit:2,ySplit:2}]});
+  ws.columns=XL_COLS.map(c=>({width:c.w}));
+  ws.getCell('A1').value=`${W().source.book} month-end positions · ${monthLabel(M,true)} · change only the blue columns; keep Code as it is. Foreign-currency rows use FX amount × FX rate.`;
+  ws.getCell('A1').font={italic:true,color:{argb:'FF555555'}};
+  const hr=ws.getRow(2);XL_COLS.forEach((c,i)=>{const cell=hr.getCell(i+1);cell.value=c.h;cell.font={bold:true};
+    cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:c.edit?'FFBDD7EE':'FFE7E6E6'}};cell.border={bottom:{style:'thin'}};});
+  meAccounts(M).forEach((a,k)=>{
+    const p=st.pos[a.id]||{},fxA=(a.ccy||'IDR')!=='IDR',mk=(st.market[a.id]||{}).v;
+    const row=ws.getRow(3+k);
+    row.values=[a.id,a.name,wGroup(a.group).label,a.ccy||'IDR',meBook(a.id,bi),fxA?null:(p.v??null),fxA?((p.fx||{}).amt??null):null,fxA?((p.fx||{}).rate??null):null,a.investment?(mk??null):null,p.v!=null?(p.src||''):''];
+    XL_COLS.forEach((c,i)=>{const cell=row.getCell(i+1);if(c.fmt)cell.numFmt=c.fmt;
+      const usable=c.edit&&(i===5?!fxA:i===8?a.investment:fxA);
+      if(usable)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFDDEBF7'}};else if(c.edit)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2F2F2'}};});
+    ws.getCell(3+k,1).numFmt='@';
+  });
+  const about=wb.addWorksheet('About',{state:'hidden'});
+  about.addRows([['schema','et-positions/1'],['book',W().source.book],['month',M],['saved',meStamp()]]);
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=xlFileName(M);
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast(`Saved ${xlFileName(M)} — edit it, then Upload Excel`);
+}
+function xlPick(M){
+  const i=document.createElement('input');i.type='file';i.accept='.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  i.onchange=()=>{if(i.files&&i.files[0])xlUpload(M,i.files[0]);};i.click();
+}
+// A cell as a number: numbers as they are, formulas by their result, text through meParse.
+function xlNum(v){
+  if(v==null||v==='')return null;
+  if(typeof v==='object'){if('result' in v)return xlNum(v.result);if(v.richText)return xlNum(v.richText.map(r=>r.text).join(''));if('text' in v)return xlNum(v.text);return NaN;}
+  if(typeof v==='number')return isFinite(v)?v:NaN;
+  return meParse(String(v));
+}
+// Reads a workbook into the changes it would make. Pure (no STATE writes), so it can be tested.
+async function xlRead(M,data){
+  const X=await xlLib(),wb=new X.Workbook();await wb.xlsx.load(data);
+  const about=wb.getWorksheet('About'),meta={};if(about)about.eachRow(r=>{meta[String(r.getCell(1).value)]=String(r.getCell(2).value??'');});
+  const ws=wb.getWorksheet('Positions');if(!ws)throw new Error('This file has no “Positions” sheet — download one from the app first');
+  if(meta.schema!=='et-positions/1'||!meta.month)throw new Error('This isn’t a positions file from the app — use Download Excel first');
+  if(meta.month!==M)throw new Error(`This file is for ${monthLabel(meta.month,true)}, not ${monthLabel(M,true)}`);
+  if(meta.book&&meta.book!==W().source.book)throw new Error(`This file is for book ${meta.book}`);
+  const hdr=[];ws.getRow(2).eachCell((c,i)=>{hdr[i]=String(c.value||'').trim();});
+  const col=h=>hdr.indexOf(h);
+  if(col('Code')<0||col('Your figure (Rp)')<0)throw new Error('The header row (row 2) has been changed — download a fresh file');
+  const st=meClose0(M),accs=new Map(meAccounts(M).map(a=>[a.id,a])),changes=[],errors=[],seen=new Set();
+  const same=(x,y)=>(x==null&&y==null)||(x!=null&&y!=null&&Math.abs(x-y)<0.005);
+  ws.eachRow((r,n)=>{
+    if(n<3)return;
+    const code=String(r.getCell(col('Code')).text||'').trim();if(!code)return;
+    const a=accs.get(code);if(!a){errors.push(`Row ${n}: ${code} isn’t in this close — skipped`);return;}
+    if(seen.has(code)){errors.push(`Row ${n}: ${code} appears twice — only the first row is used`);return;}seen.add(code);
+    const get=h=>{const i=col(h);return i<0?null:xlNum(r.getCell(i).value);};
+    const p=st.pos[a.id]||{},fxA=(a.ccy||'IDR')!=='IDR';
+    const bad=(h,v)=>{if(Number.isNaN(v)){errors.push(`Row ${n} (${code}): couldn’t read “${r.getCell(col(h)).text}” in ${h}`);return true;}return false;};
+    if(fxA){const amt=get('FX amount'),rate=get('FX rate');if(bad('FX amount',amt)||bad('FX rate',rate))return;
+      const o=p.fx||{};if(!same(amt,o.amt??null)||!same(rate,o.rate??null))changes.push({code,name:a.name,f:'fx',old:{amt:o.amt??null,rate:o.rate??null,v:p.v??null},nu:{amt,rate,v:amt!=null&&rate!=null?Math.round(amt*rate):null},ccy:a.ccy});}
+    else{const v=get('Your figure (Rp)');if(bad('Your figure (Rp)',v))return;const nv=v==null?null:Math.round(v);if(!same(nv,p.v??null))changes.push({code,name:a.name,f:'v',old:p.v??null,nu:nv});}
+    if(a.investment){const m=get('Market value (Rp)');if(bad('Market value (Rp)',m))return;const nm=m==null?null:Math.round(m),om=(st.market[a.id]||{}).v??null;if(!same(nm,om))changes.push({code,name:a.name,f:'market',old:om,nu:nm});}
+  });
+  return{changes,errors};
+}
+async function xlUpload(M,file){
+  let r;try{r=await xlRead(M,await file.arrayBuffer());}catch(e){toast(e.message||'Couldn’t read that file');return;}
+  XL_PENDING={M,changes:r.changes};
+  const fmt=(c,x)=>c.f==='fx'?(x.amt==null?'—':`${escH(c.ccy)} ${fmtNum2(x.amt)} × ${x.rate==null?'?':fmtNum2(x.rate)}`):(x==null?'—':fmtIDR(x));
+  const rows=r.changes.map(c=>`<tr><td class="merchant"><div class="merchant-name">${escH(c.name)}</div><div class="merchant-sub">${escH(c.code)}${c.f==='market'?' · market value':''}</div></td><td class="num amt">${fmt(c,c.old)}</td><td class="num amt">${fmt(c,c.nu)}</td></tr>`).join('');
+  openSheet({title:'Changes from Excel',wide:true,body:`${r.changes.length?`<p class="help" style="margin-bottom:10px">${r.changes.length} change${r.changes.length===1?'':'s'} for ${escH(monthLabel(M,true))}. Nothing is saved until you press Apply.</p>
+      <div class="table-wrap" style="max-height:50vh"><table class="data"><thead><tr><th scope="col">Account</th><th scope="col" class="num">Now</th><th scope="col" class="num">From Excel</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      :emptyHTML('square-check','The file matches what’s in the app — nothing to change')}
+    ${r.errors.length?`<div class="banner warn" style="margin-top:12px">${ic('triangle-alert')}<span class="msg">${r.errors.map(escH).join('<br>')}</span></div>`:''}`,
+    foot:`<button class="btn btn-secondary" onclick="closeTopSheet(true)">${r.changes.length?'Cancel':'Close'}</button>${r.changes.length?`<button class="btn btn-primary" onclick="xlApply()">Apply ${r.changes.length} change${r.changes.length===1?'':'s'}</button>`:''}`,
+    onClose:()=>{XL_PENDING=null;}});
+}
+function xlApply(){
+  const P=XL_PENDING;if(!P)return;const st=meClose0(P.M);if(!st)return;const at=meStamp();
+  for(const c of P.changes){
+    if(c.f==='market')st.market[c.code]={v:c.nu,at};
+    else if(c.f==='fx')st.pos[c.code]={v:c.nu.v,fx:{amt:c.nu.amt,rate:c.nu.rate},src:'excel',at};
+    else st.pos[c.code]={v:c.nu,src:'excel',at};
+  }
+  const n=P.changes.length;closeTopSheet(true);scheduleDriveSave();renderAll();toast(`${n} change${n===1?'':'s'} applied from Excel`);
 }
 
 /* ── Cash flow (Phase 4): income and expense from the book's P&L, with the spend the app sees in

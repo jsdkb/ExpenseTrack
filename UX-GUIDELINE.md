@@ -102,6 +102,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 | **Accounts** | All accounts grouped with subtotals, balance history, "declared in tax return" flag | Same snapshot | Phase 2 (shipped 2026-10-16) |
 | **Month-end Close** | Close status: positions vs books → journal entries → re-check → closed (the close runs in chat with Claude) | Snapshot `closes` | Phase 3 (shipped 2026-10-16) |
 | **Cash Movements** | Money in vs out per month, where it came from / went, accounts with statement tie-out, re-taggable transactions | `cash-movements.json` (`et-cash/1`) from the local bank-statement pipeline | Shipped 2026-10-22 |
+| **Income** | Income the user types in (date, payer, receiving account, income account), one Accurate voucher per receipt | Drive file (`income`) | Shipped 2026-11-03 |
 | **Settings** | Appearance (theme), categories & rules, auto-note rules, date-category rules, FX rates, data (sync, export, sign out), about | Scattered controls today | Phase 1 |
 
 **Rule: sections appear in navigation only once their phase ships.** No "coming soon" tabs.
@@ -118,6 +119,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 │ ─ WEALTH ─────────── │  ← group label, appears when Phase 2 ships
 │ ◇ Net Worth          │
 │ ⇄ Cash Movements     │  ← always; hosts its own connect step, like Net Worth
+│ ▥ Income             │  ← once a snapshot exists
 │ ▤ Accounts           │
 │ ✓ Month-end Close    │
 │                      │
@@ -816,6 +818,37 @@ from chat offers **Fill in positions here**. Data lives only in the Drive file
   Collapsible **Counter-accounts** (open until a difference account is chosen).
 - Phone: position rows become stacked blocks (account, then Book and Difference side by side with
   small uppercase labels, then the inputs); card tools wrap under the title; selects go full width.
+- **Download Excel / Upload Excel** (positions card tools): one row per account; editable columns
+  blue. Upload never applies directly: a sheet lists each change (Now → From Excel) and the rows it
+  couldn't read, and **Apply n changes** writes them (source badge **Excel**). A file for another
+  month or book is refused with a toast.
+- Typed income after the book's month shows under the Book figure as "+ Rp x typed income"; the
+  difference is against book + typed income.
+
+### 11.7a Accounts added in the app (shipped 2026-11-03)
+
+- **Add account** on Accounts (page header; a small button in the filter row on phones) and in the
+  month-end positions card tools. Form: name, kind, group, "Put it next to" (proposes the first
+  free code after it), code, currency, investment.
+- Until the snapshot carries the code, the account shows everywhere with a `--warn` badge
+  **Not in Accurate yet**, and a **Create in Accurate** card (code, name, type as its sibling,
+  parent, currency; Copy) sits above the accounts table and on Month-end. Rows open the edit form.
+
+### 11.9 Income (shipped 2026-11-03)
+
+Question: *"Has my income gone into the book?"*
+- Page head: title, one-line description, primary **Add income** (phones: a small primary button
+  beside the month picker, because the page head is hidden).
+- Month picker (segmented, last six months with income plus the current one; an **Earlier…** select
+  for older months), then three KPI cards:
+  month total, **To export**, **Posted in Accurate**.
+- **Receipts** card: Date · From · Into · Income account · Amount · Status · Posted tick. Status is
+  a badge (**To export**, **Saved** in accent, **Posted** in good) plus a ghost **Statement <date>**
+  chip when it matched a statement line (click to unmatch). When the app can't tell whether the snapshot already
+  holds a posted receipt, a `--warn` badge **In this snapshot?** with **Yes** / **No** buttons. Card tool: primary **Download for
+  Accurate import** ("(n new)" when part of the month is saved; **Download again** asks first).
+- After a download, the same next-step note as month-end. A `--warn` banner names any account in
+  the month that isn't in Accurate yet.
 
 ### 11.8 Cash Movements (shipped 2026-10-22)
 

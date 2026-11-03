@@ -7,6 +7,13 @@
       "source": "https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"
     },
     {
+      "name": "ExcelJS",
+      "version": "4.4.0",
+      "source": "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js",
+      "integrity": "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz",
+      "version_policy": "Pinned with SRI; loaded only when Download/Upload Excel is first used"
+    },
+    {
       "name": "Google Identity Services",
       "version": null,
       "source": "https://accounts.google.com/gsi/client",
@@ -25,5 +32,8 @@
       "version_policy": "Not a runtime dependency"
     }
   ],
-  "limitations": ["Gmail and Drive access require separate live authorization and verification", "This inventory is not a dependency lock or a clean-machine setup test"]
+  "limitations": [
+    "Gmail and Drive access require separate live authorization and verification",
+    "This inventory is not a dependency lock or a clean-machine setup test"
+  ]
 }
