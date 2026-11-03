@@ -2029,6 +2029,15 @@ function runHooks(name,...args){
     if(Array.isArray(r))out.push(...r.filter(x=>x!=null));else if(r!=null)out.push(r);}
   return out;
 }
+// Transforms (docs/v2-interfaces.md §4): each fn(list) returns the new list. 'transactions' runs once
+// per load on the combined email list, after the core rules and before the hidden filter and every
+// total. A transform that throws or returns a non-array is logged and skipped.
+const TRANSFORMS={};
+function registerTransform(name,fn){if(typeof fn==='function')(TRANSFORMS[name]||(TRANSFORMS[name]=[])).push(fn);}
+function runTransforms(name,list){
+  for(const fn of TRANSFORMS[name]||[]){try{const r=fn(list);if(Array.isArray(r))list=r;else console.error('Transform '+name+' returned no list');}catch(e){console.error('Transform '+name+' failed',e);}}
+  return list;
+}
 // Adds a Lucide icon to the inline sprite (inner = the icon's <path>/<circle> markup, 24×24).
 function registerIcon(name,inner){
   const sp=$('iconSprite');if(!sp||document.getElementById('i-'+name))return;
@@ -4891,6 +4900,7 @@ async function load(isRefresh=false){
       applyMerchantAutoNotes(ALL_TRANSACTIONS);
       applyTxEdits(ALL_TRANSACTIONS);
       applySplits(ALL_TRANSACTIONS);
+      ALL_TRANSACTIONS=runTransforms('transactions',ALL_TRANSACTIONS);
       ALL_TRANSACTIONS_RAW=[...ALL_TRANSACTIONS];
       {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
       mergeManualTxns();
@@ -4963,6 +4973,7 @@ async function load(isRefresh=false){
     applyMerchantAutoNotes(ALL_TRANSACTIONS);
     applyTxEdits(ALL_TRANSACTIONS);
     applySplits(ALL_TRANSACTIONS);
+    ALL_TRANSACTIONS=runTransforms('transactions',ALL_TRANSACTIONS);
     ALL_TRANSACTIONS_RAW=[...ALL_TRANSACTIONS];
     {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
     mergeManualTxns();

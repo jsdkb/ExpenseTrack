@@ -80,8 +80,8 @@ imported by an older app version gains the new fields only when the next (newer)
 |---|---|---|
 | books (separate appData file `books.json`, IndexedDB cache `et-books`) | F1 loader, read by A/B/D | §1 as imported. Read it with `BOOKS()`; never copy it into `STATE` or localStorage |
 | `STATE.booksMeta` | F1 | `{importedAt, from: 'file'\|'folder', generatedAt}` |
-| `STATE.stmtFix` | C | `{match: {[emailTxKey]: {stmtId, amount, at}}, added: {[stmtId]: {cat, at, excluded?}}, review: {[emailTxKey]: {decision: 'exclude'\|'keep', at}}}` |
-| `STATE.cardMap` | C | `{[bank]: statementAccountId}` one-time mapping when a bank has several cards |
+| `STATE.stmtFix` | C | Only the owner's decisions; matches themselves are recomputed every run (§6). `{match: {[emailTxKey]: {stmtId, line, amount, off: true, at}}` (an undone fix: the alert keeps its own amount and stays paired with cash line `line`), `added: {[cashTxnId]: {stmtId, excluded: true, at}}` (a statement-only line removed from spending), `review: {[emailTxKey]: {decision: 'exclude'\|'keep', at}}`, `manual: {[statementAccountId]: {on: true, at}}` (statements the owner downloads by hand)}. "Apply again" / "undo" write a dated tombstone `{deleted: true, at}`. `emailTxKey` = the transaction `id` (the key used by catOverrides, txEdits, hiddenIds) |
+| `STATE.cardMap` | C | `{[emailBank]: statementAccountId \| ''}` — which statement account a bank's email alerts are checked against. Needed when a bank has several cards (or to link a bank whose name doesn't match); `''` = not linked. Unset = automatic by name |
 | `STATE.budgets` | D | `{[category]: {monthly: number, since: 'YYYY-MM', at}}` |
 | `STATE.goals` | D | `[{id, name, kind: 'networth'\|'liquid'\|'saving'\|'account', target, by: 'YYYY-MM', accounts?: [code], at}]` |
 
@@ -147,6 +147,20 @@ Hooks (results are HTML strings inserted as-is: escape data with `escH()`):
 `runHooks` spreads an array result into the list, skips `null`/`undefined`, and logs and skips a
 hook that throws. With no hooks registered the built-in pages render exactly as before.
 
+Transforms (added by C, the one core change it makes):
+
+```js
+registerTransform(name, fn)    // fn(list) → new list
+runTransforms(name, list)      // → the list after every transform; one that throws or returns a non-array is logged and skipped
+```
+
+`load()` runs `ALL_TRANSACTIONS = runTransforms('transactions', ALL_TRANSACTIONS)` in both of its
+paths (cache and Gmail), right after the core rules (`applySplits`) and before the
+`ALL_TRANSACTIONS_RAW` snapshot, the hidden filter, manual entries and every total. So whatever a
+transform changes is seen by Overview, Spending and Credit cards alike. The cache (`saveCache`)
+stores the transformed list, so a transform must be idempotent: undo its own previous changes
+before applying them again. With no transform registered the list is unchanged.
+
 Cross-page navigation helper: `openLedger(code, fromDate?, toDate?)` (A provides on `window`;
 others call it).
 
@@ -179,3 +193,42 @@ it). As built: books-demo has 41 accounts (10 parents), 23 months (2024-12 to 20
 vouchers, a USD bank account and one suspended account. cash-demo-v2 has one bank account and three
 cards, two of them on the same bank (`Bank-Alpha-CC`), with three card cycles each; every
 statement ties (opening + its transactions = closing). `tests/test_foundation.py` checks all of it.
+
+## 6. Statements module (C, `js/statements.js`)
+
+**Linking.** Email bank → statement account: `STATE.cardMap[bank]` when set, otherwise automatic —
+same bank name and kind (`Maybank`, `OCBC CC`, any `… CC` → card; `BCA`, `OCBC` → bank account),
+rupiah accounts only, account id prefix before `:` minus `-CC`/`-account` (e.g. `Maybank-CC:••1234`
+↔ `Maybank`). Several candidates → not linked until the owner picks one (Credit cards › History ›
+Statement links).
+
+**Matching** (per linked account, recomputed on every load and whenever the cash file, `stmtFix`,
+`cardMap`, cash re-tags or the day change — checked before each `renderAll`):
+- alerts: `type === 'transaction'`, not manual, rupiah amount > 0 (gross of splits) or a foreign
+  currency alert; card accounts skip `category === 'Transfer'`;
+- statement lines: money out, IDR, inside a statement period, on or after `HISTORY_START`;
+- IDR: equal rupiah. FX alert: rupiah estimate within 3% of the line, or (no estimate) the foreign
+  amount appears in the line text;
+- dates within ±3 days; one-to-one, greedy by date gap, then amount gap, then ids (deterministic).
+
+**Outcomes** (on the transaction objects, original kept in `tx.stmt`):
+- matched → `amount` := statement rupiah (`tx.stmt = {kind:'match', line, stmtId, account, stmtAmount, orig, set}`; split rows keep their share);
+- statement-only, closed statement, `cashMeta(cashType(line)).g === 'out'` and not a refund →
+  added row `{id: 'stmt:' + cashTxnId, stmtAdded: true, bank, category: categorize(desc)
+  ('Transfer' for transfer-out), …}`; the owner's category/note/edit/split rules apply to it by id;
+- alert not on a closed statement (alert date ≥ the account's first period start and ≤ the newest
+  closed statement date − 3 days) → review (`tx.stmt.kind = 'review'`); Exclude sets `amount` to 0
+  (original kept), Keep leaves it.
+
+`window.ETStatements` exposes `reconcile, strip, apply, calendar, cycleDay, expectedNext,
+comingUp, last()` (read-only use) and the UI actions.
+
+**Calendar** (every statement account): cycle day = lower median of statement days, a statement on
+a month's last day counting as 31; expected next = the month after the last statement, day clamped
+to the month's length. Card due = latest statement `dueDate` / owed closing / `minPayment`, else a
+Maybank billing reminder's `dueDate` (only when such rows reach the list — see limits in the
+report). Status: `overdue` (no card payment line ≥ minimum after the statement, and the cash file's
+`asOf` is past the due date), `manual` (owner-flagged source and the expected date has come),
+`late` (> 3 days past expected), `due-soon` (due within 7 days, unpaid), else `on-time`.
+`homeComingUp()` items: `{date, kind, account (label), accountId, label, amount?}` for the next 14
+days plus late/overdue/manual, sorted by date then kind (missing, manual, due, statement).
