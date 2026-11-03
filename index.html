@@ -781,7 +781,7 @@
 
 <!-- Icons: Lucide (https://lucide.dev), ISC License, Copyright (c) Lucide Contributors.
      Copied into an inline sprite so there is no icon CDN and no build step (§7). -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<svg id="iconSprite" width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-layout-dashboard" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
   <symbol id="i-chart-pie" viewBox="0 0 24 24"><path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z"/><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/></symbol>
   <symbol id="i-credit-card" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></symbol>
@@ -1037,7 +1037,9 @@ function defaultState(){
     dateCategoryRules: [], patternRules: [], catChangeLog: [], dismissedSuggestions: [], ccPosExcludedIds: [],
     wealth: null, wealthMeta: null, closeTicks: {}, declared: {},
     cash: null, cashMeta: null, cashTypeOverrides: {}, cashPayerRules: {},
-    monthEnd: {}, monthEndCfg: {}
+    monthEnd: {}, monthEndCfg: {},
+    // v2 (docs/v2-interfaces.md §3). The books themselves live in their own appData file, books.json.
+    booksMeta: null, stmtFix: {}, cardMap: {}, budgets: {}, goals: []
   };
 }
 
@@ -1081,6 +1083,19 @@ function unionById(a, b){
   return [...map.values()];
 }
 
+const entryAt = v => String((v && v.at) || '');
+// Two {key: entry} maps: per key, the newer entry wins; on a tie (or no dates) `local` wins.
+function newerByKey(remote, local){
+  const o = { ...(remote||{}) };
+  for (const [k, v] of Object.entries(local||{})) if (!(k in o) || entryAt(v) >= entryAt(o[k])) o[k] = v;
+  return o;
+}
+// Two [{id, at, ...}] lists: per id, the newer entry wins; this device's order first.
+function newerById(remote, local){
+  const r = new Map((remote||[]).filter(x => x && x.id).map(x => [x.id, x])), out = [];
+  for (const x of (local||[])) { if (!x || !x.id) continue; const y = r.get(x.id); out.push(y && entryAt(y) > entryAt(x) ? y : x); r.delete(x.id); }
+  return [...out, ...r.values()];
+}
 function mergeStates(remote, local){
   const merged = { ...defaultState(), ...remote };
   merged.txns = unionById(remote.txns, local.txns);
@@ -1138,6 +1153,16 @@ function mergeStates(remote, local){
     for (const [id, v] of Object.entries(local[k]||{})) if (!o[id] || String(v&&v.at) >= String(o[id]&&o[id].at)) o[id] = v;
     merged[k] = o;
   }
+  // v2 keys: per entry, the newer `at` wins (a value without `at` loses to a dated one; between two
+  // undated values this device wins). Removals are dated {deleted:true} entries, as for income.
+  merged.stmtFix = {};
+  for (const k of new Set([...Object.keys(remote.stmtFix||{}), ...Object.keys(local.stmtFix||{})]))
+    merged.stmtFix[k] = newerByKey((remote.stmtFix||{})[k], (local.stmtFix||{})[k]);
+  merged.cardMap = newerByKey(remote.cardMap, local.cardMap);
+  merged.budgets = newerByKey(remote.budgets, local.budgets);
+  merged.goals = newerById(remote.goals, local.goals);
+  { const r = remote.booksMeta, l = local.booksMeta;
+    merged.booksMeta = l && (!r || String(l.generatedAt||'') >= String(r.generatedAt||'')) ? l : (r || null); }
   const wms = [remote.watermark, local.watermark].filter(Boolean).sort();
   merged.watermark = wms.length ? wms[wms.length-1] : null;
   merged.cachedAt = new Date().toISOString();
@@ -1969,18 +1994,74 @@ function openSyncSheet(){
 /* ══════════════════════════════════════════════════════════════════
    NAVIGATION — sidebar (web/rail), bottom bar (mobile), top bar (§3)
    ══════════════════════════════════════════════════════════════════ */
+/* ── Page registry (docs/v2-interfaces.md §4). Built-in pages keep their own render code in this
+   file; v2 pages live in js/*.js and add themselves with registerPage(). Hooks let a module add to
+   a built-in page without editing it. ── */
+const PAGES=[],HOOKS={};
+const NAV_GROUPS=[['top',''],['wealth','Wealth'],['books','Books'],['plan','Plan']];
+const BUILTIN_TABS=['overview','spending','cards','networth','cash','accounts','income','close','settings','more'];
+// p: {key,label,short?,icon,group:'top'|'wealth'|'books'|'plan',order,render()→html,afterRender?(),needs?:'wealth'|'books'|'cash'}
+function registerPage(p){
+  const ok=p&&typeof p.key==='string'&&/^[a-z][a-z0-9_-]*$/.test(p.key)&&!BUILTIN_TABS.includes(p.key)&&p.label&&typeof p.render==='function'&&NAV_GROUPS.some(g=>g[0]===p.group);
+  if(!ok){console.warn('registerPage refused',p&&p.key);return false;}
+  const e={icon:'circle-ellipsis',order:100,...p},i=PAGES.findIndex(x=>x.key===p.key);
+  if(i>=0)PAGES[i]=e;else PAGES.push(e);
+  TAB_TITLES[p.key]=p.label;
+  buildNav();if(ACTIVE_TAB===p.key)renderAll();
+  return true;
+}
+let PAGE_RENDER_SEQ=0;
+function pageByKey(k){return PAGES.find(p=>p.key===k)||null;}
+// A page that needs wealth or cash data stays out of the menu until that data exists. Books pages
+// and top pages (Home) always show and render their own empty state instead.
+function pageVisible(p){
+  if(p.group==='top'||p.group==='books')return true;
+  if(p.needs==='wealth')return!!STATE.wealth;
+  if(p.needs==='cash')return!!STATE.cash;
+  return true;
+}
+function registerHook(name,fn){if(typeof fn==='function')(HOOKS[name]||(HOOKS[name]=[])).push(fn);}
+// Every hook's non-null result, in registration order; an array result is spread in. A hook that
+// throws is logged and skipped, so one module can't break a built-in page.
+function runHooks(name,...args){
+  const out=[];
+  for(const fn of HOOKS[name]||[]){let r;try{r=fn(...args);}catch(e){console.error('Hook '+name+' failed',e);continue;}
+    if(Array.isArray(r))out.push(...r.filter(x=>x!=null));else if(r!=null)out.push(r);}
+  return out;
+}
+// Adds a Lucide icon to the inline sprite (inner = the icon's <path>/<circle> markup, 24×24).
+function registerIcon(name,inner){
+  const sp=$('iconSprite');if(!sp||document.getElementById('i-'+name))return;
+  const s=document.createElementNS('http://www.w3.org/2000/svg','symbol');s.id='i-'+name;s.setAttribute('viewBox','0 0 24 24');s.innerHTML=inner;sp.appendChild(s);
+}
+function renderPage(p){
+  if(p.needs==='books'||p.key==='home')ensureBooks();
+  try{return p.render(p);}
+  catch(e){console.error('Page '+p.key+' failed to render',e);
+    return`${pageHead(p.label,'')}<div class="card">${emptyHTML('triangle-alert','This page hit a problem. Reload the app; if it keeps happening, report it.')}</div>`;}
+}
+
 const SECTIONS=[
-  {key:'overview',label:'Overview',icon:'layout-dashboard'},
-  {key:'spending',label:'Spending',icon:'chart-pie'},
-  {key:'cards',label:'Credit cards',short:'Cards',icon:'credit-card'},
+  {key:'overview',label:'Overview',icon:'layout-dashboard',order:10},
+  {key:'spending',label:'Spending',icon:'chart-pie',order:20},
+  {key:'cards',label:'Credit cards',short:'Cards',icon:'credit-card',order:30},
 ];
 // Wealth group (§3.2): Net worth and Cash movements always (each hosts its connect step); the rest
 // once a snapshot exists.
 function wealthSections(){
-  const s=[{key:'networth',label:'Net worth',icon:'trending-up'},{key:'cash',label:'Cash movements',icon:'arrow-left-right'}];
-  if(STATE.wealth){s.push({key:'income',label:'Income',icon:'chart-column'},{key:'accounts',label:'Accounts',icon:'landmark'});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check'});}
+  const s=[{key:'networth',label:'Net worth',icon:'trending-up',order:10},{key:'cash',label:'Cash movements',icon:'arrow-left-right',order:20}];
+  if(STATE.wealth){s.push({key:'income',label:'Income',icon:'chart-column',order:30},{key:'accounts',label:'Accounts',icon:'landmark',order:40});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check',order:50});}
   return s;
 }
+// One menu group: the built-in pages plus registered ones, by order (a stable sort keeps ties in place).
+function navGroup(g){
+  const base=g==='top'?SECTIONS:g==='wealth'?wealthSections():[];
+  const reg=PAGES.filter(p=>p.group===g&&pageVisible(p));
+  return reg.length?[...base,...reg].sort((a,b)=>(a.order||0)-(b.order||0)):base;
+}
+// Bottom bar: the first three top pages, then Net worth; everything else is under More.
+function bottomSections(){return[...navGroup('top').slice(0,3),{key:'networth',label:'Net worth',icon:'trending-up'}];}
+function moreSections(){const b=bottomSections().map(s=>s.key);return NAV_GROUPS.flatMap(([g])=>navGroup(g)).filter(s=>!b.includes(s.key));}
 const TAB_TITLES={overview:'Overview',spending:'Spending',cards:'Credit cards',networth:'Net worth',cash:'Cash movements',accounts:'Accounts',income:'Income',close:'Month-end',settings:'Settings',more:'More'};
 function setTab(t){
   if(t===ACTIVE_TAB){window.scrollTo({top:0,behavior:'smooth'});return;}
@@ -1990,12 +2071,12 @@ function setTab(t){
 function buildNav(){
   const sb=$('sbNav');
   const item=s=>`<button class="sb-item" data-tab="${s.key}" onclick="setTab('${s.key}')" title="${s.label}"${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span class="lbl">${s.label}</span></button>`;
-  if(sb)sb.innerHTML=SECTIONS.map(item).join('')+`<div class="sb-group" aria-hidden="true">Wealth</div>`+wealthSections().map(item).join('');
+  if(sb)sb.innerHTML=NAV_GROUPS.map(([g,l])=>{const s=navGroup(g);return s.length?(l?`<div class="sb-group" aria-hidden="true">${l}</div>`:'')+s.map(item).join(''):'';}).join('');
   document.querySelectorAll('.sb-foot .sb-item[data-tab]').forEach(b=>{if(b.dataset.tab===ACTIVE_TAB)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   const bn=$('bottomNav');
   if(bn){
-    const moreActive=['more','settings','accounts','income','close','cash'].includes(ACTIVE_TAB);
-    bn.innerHTML=[...SECTIONS,{key:'networth',label:'Net worth',icon:'trending-up'}].map(s=>`<button class="bn-item" onclick="setTab('${s.key}')"${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span>${s.short||s.label}</span></button>`).join('')
+    const bs=bottomSections(),moreActive=!bs.some(s=>s.key===ACTIVE_TAB);
+    bn.innerHTML=bs.map(s=>`<button class="bn-item" onclick="setTab('${s.key}')"${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span>${s.short||s.label}</span></button>`).join('')
       +`<button class="bn-item" onclick="setTab('more')"${moreActive?' aria-current="page"':''}>${ic('ellipsis')}<span>More</span></button>`;
   }
 }
@@ -2619,6 +2700,7 @@ function txRowsHTML(list){
     if(t.merchantRaw&&t.merchantRaw!==t.merchantClean&&!t.currency)sub.push(escH(t.merchantRaw));
     if(sp)sub.push(`Split ${sp.people} ways · ${sp.paidCount} paid · was <span class="amt">${fmtIDR(sp.originalAmount)}</span>`);
     if(!txOk(t))sub.push('<span class="badge bad">Failed</span>');
+    sub.push(...runHooks('txnBadges',t));
     return`<tr${sel?' class="selected"':''}>
       ${SELECT_MODE?`<td class="sel-col"><input type="checkbox" ${sel?'checked':''} onchange="toggleSelect('${sid}')" aria-label="Select ${escH(t.merchantClean||'')}"></td>`:''}
       <td class="date">${fmtDay(txDateOf(t))}</td>
@@ -2655,7 +2737,7 @@ function txListHTML(list){
         <span class="tx-check">${ic('check')}</span>
         ${catSquare(t.category)}
         <div class="tx-body"><div class="tx-title">${escH(t.merchantClean||t.merchantRaw||'—')}</div>
-          <div class="tx-sub">${escH(t.category||'')} · ${escH(bankLabel(t))}${t.splitInfo?` · split ${t.splitInfo.people}×`:''}${!txOk(t)?' · Failed':''}</div>
+          <div class="tx-sub">${escH(t.category||'')} · ${escH(bankLabel(t))}${t.splitInfo?` · split ${t.splitInfo.people}×`:''}${!txOk(t)?' · Failed':''}${runHooks('txnBadges',t).join('')}</div>
           ${t.note?`<div class="tx-note">${ic('pencil','s16','width:11px;height:11px;vertical-align:-1px')} ${escH(t.note)}</div>`:''}</div>
         <div class="tx-amt">${t.amount>0?`<span class="amt">−${fmtIDR(t.amount)}</span>`:txAmountHTML(t)}</div>
       </div></div>`;
@@ -3087,7 +3169,7 @@ function renderCardsHistory(sel){
         <tbody>${rows.map(r=>`<tr><td class="date">${fmtDateTime(r.p.date)}</td>${multi?`<td><span class="badge">${escH(r.card)}</span></td>`:''}<td class="amount num">${amt(r.total)}</td><td class="num">${r.count}</td><td class="muted">${escH(r.p.note||'—')}</td>
           <td><div class="row-actions"><button class="icon-btn sm danger" onclick="deleteCCPayment('${escAttr(r.p.id)}')" aria-label="Delete marker ${escH(fmtDateTime(r.p.date))}" title="Delete">${ic('trash-2','s16')}</button></div></td></tr>`).join('')}</tbody></table></div>`
         :emptyHTML('calendar-check','No paid-through markers yet. Mark your first payment above.')}
-    </section></div>`;
+    </section></div>${runHooks('cardsHistory',sel).join('')}`;
 }
 function renderForeign(){
   const fx=ALL_TRANSACTIONS.filter(t=>t.bank==='OCBC');
@@ -3283,7 +3365,7 @@ function renderSettings(){
 function renderMore(){
   const theme=themeName();
   return`<div class="card" style="padding-top:6px;padding-bottom:6px"><div class="list">
-    ${wealthSections().filter(s=>s.key!=='networth').map(s=>`<button class="list-item" onclick="setTab('${s.key}')">${ic(s.icon)}<span class="li-body"><span class="li-title">${s.label}</span></span>${ic('chevron-right','s16')}</button>`).join('')}
+    ${moreSections().map(s=>`<button class="list-item" onclick="setTab('${s.key}')">${ic(s.icon)}<span class="li-body"><span class="li-title">${s.label}</span></span>${ic('chevron-right','s16')}</button>`).join('')}
     <button class="list-item" onclick="setTab('settings')">${ic('settings')}<span class="li-body"><span class="li-title">Settings</span><span class="li-sub" style="display:block">Theme, rules, data</span></span>${ic('chevron-right','s16')}</button>
     <div class="list-item">${ic(theme==='dark'?'moon':'sun')}<span class="li-body"><span class="li-title">Dark theme</span></span><button class="switch" role="switch" aria-checked="${theme==='dark'}" aria-label="Dark theme" onclick="setTheme('${theme==='dark'?'light':'dark'}')"></button></div>
     <div class="list-item">${ic('eye-off')}<span class="li-body"><span class="li-title">Hide amounts</span></span><button class="switch" role="switch" aria-checked="${amountsHidden()}" aria-label="Hide amounts" onclick="toggleHideAmounts()"></button></div>
@@ -3316,6 +3398,9 @@ function renderAll(){
   closeMenus();destroyCharts();
   if(ACTIVE_TAB==='settings'){root.innerHTML=renderSettings();return;}
   if(ACTIVE_TAB==='more'){root.innerHTML=renderMore();return;}
+  // Only the latest render's afterRender runs, so two renders in one frame never draw a chart twice.
+  {const pg=pageByKey(ACTIVE_TAB);if(pg){root.innerHTML=renderPage(pg);const seq=++PAGE_RENDER_SEQ;
+    requestAnimationFrame(()=>{if(ACTIVE_TAB!==pg.key||seq!==PAGE_RENDER_SEQ)return;if(pg.afterRender){try{pg.afterRender(pg);}catch(e){console.error('Page '+pg.key+' afterRender failed',e);}}CHARTS_DRAWN_ONCE=true;});return;}}
   if(ACTIVE_TAB==='networth'){root.innerHTML=renderNetWorth();requestAnimationFrame(()=>{renderNetWorthCharts();CHARTS_DRAWN_ONCE=true;});return;}
   if(ACTIVE_TAB==='accounts'){root.innerHTML=renderAccounts();requestAnimationFrame(()=>{drawAccountChart();CHARTS_DRAWN_ONCE=true;});return;}
   if(ACTIVE_TAB==='close'&&typeof renderClose==='function'){root.innerHTML=renderClose();return;}
@@ -3377,10 +3462,16 @@ function applyWealth(snap,from,quiet){
   toast(`Wealth data updated · as of ${asOfLabel()}`);
   return true;
 }
+// One Import button for every file the PC pipeline makes: picked by its schema.
+function applyImported(d,from){
+  if(d&&d.schema===CASH_SCHEMA)return applyCash(d,from);
+  if(d&&d.schema===BOOKS_SCHEMA)return applyBooks(d,from);
+  return applyWealth(d,from);
+}
 function importWealthFile(){
   const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';
   inp.onchange=async()=>{const f=inp.files&&inp.files[0];if(!f)return;
-    try{const d=JSON.parse(await f.text());if(d&&d.schema===CASH_SCHEMA)applyCash(d,'file');else applyWealth(d,'file');}catch(e){toast('Couldn’t read that file: '+(e.message||e));}};
+    try{applyImported(JSON.parse(await f.text()),'file');}catch(e){toast('Couldn’t read that file: '+(e.message||e));}};
   inp.click();
 }
 function fsSupported(){return typeof window.showDirectoryPicker==='function';}
@@ -3396,6 +3487,10 @@ async function readCashFromHandle(h,quiet){
   let f;try{f=await(await h.getFileHandle('cash-movements.json')).getFile();}catch(_){return false;}
   try{return applyCash(JSON.parse(await f.text()),'folder',quiet);}catch(e){if(!quiet)toast('Couldn’t read cash-movements.json: '+(e.message||e));return false;}
 }
+async function readBooksFromHandle(h,quiet){
+  let f;try{f=await(await h.getFileHandle(BOOKS_FILE_NAME)).getFile();}catch(_){return false;}
+  try{return await applyBooks(JSON.parse(await f.text()),'folder',quiet);}catch(e){if(!quiet)toast('Couldn’t read books.json: '+(e.message||e));return false;}
+}
 async function connectWealthFolder(){
   if(!fsSupported()){toast('Folder access needs Chrome or Edge on a computer — use Import instead');return;}
   try{
@@ -3403,7 +3498,7 @@ async function connectWealthFolder(){
     await idbReq('readwrite',st=>st.put(h,'wealth'));
     hideBanner('wealth');
     try{await readWealthFromHandle(h,false);}catch(e){toast('Folder connected, but no wealth-snapshot.json was found in it');}
-    await readCashFromHandle(h,false);
+    await readCashFromHandle(h,false);await readBooksFromHandle(h,false);
     renderAll();
   }catch(e){if(e&&e.name!=='AbortError')toast('Couldn’t connect the folder: '+(e.message||e));}
 }
@@ -3411,7 +3506,7 @@ async function reconnectWealthFolder(){
   try{const h=await idbReq('readonly',st=>st.get('wealth'));if(!h)return connectWealthFolder();
     if(await h.requestPermission({mode:'read'})==='granted'){hideBanner('wealth');
       try{await readWealthFromHandle(h,false);}catch(e){toast('No wealth-snapshot.json in the folder');}
-      await readCashFromHandle(h,false);}
+      await readCashFromHandle(h,false);await readBooksFromHandle(h,false);}
   }catch(e){toast('Couldn’t read the folder: '+(e.message||e));}
 }
 async function disconnectWealthFolder(){try{await idbReq('readwrite',st=>st.delete('wealth'));}catch(_){}WEALTH_FOLDER=false;renderAll();toast('Snapshot folder disconnected on this device');}
@@ -3424,9 +3519,98 @@ async function autoImportWealth(){
     const h=await idbReq('readonly',st=>st.get('wealth'));if(!h)return;
     WEALTH_FOLDER=true;
     const p=await h.queryPermission({mode:'read'});
-    if(p==='granted'){try{await readWealthFromHandle(h,true);}catch(_){}await readCashFromHandle(h,true);}
+    if(p==='granted'){try{await readWealthFromHandle(h,true);}catch(_){}await readCashFromHandle(h,true);await readBooksFromHandle(h,true);}
     else showBanner('wealth','info','refresh-cw','Check your snapshot folder for newer wealth data?','Check now',reconnectWealthFolder);
   }catch(_){}
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BOOKS — chart of accounts, vouchers and balances (schema et-books/1, docs/v2-interfaces.md §1),
+   built on the user's PC next to the wealth snapshot. Kept in its own Drive appData file
+   (books.json), cached on this device in IndexedDB 'et-books', never in localStorage. Loaded the
+   first time a page that needs it renders (ensureBooks).
+   ══════════════════════════════════════════════════════════════════ */
+const BOOKS_SCHEMA='et-books/1',BOOKS_FILE_NAME='books.json';
+let BOOKS_DATA=null,BOOKS_STATUS='idle',BOOKS_ERROR=null,BOOKS_LOCAL=null,BOOKS_DRIVE_TRIED=false,BOOKS_BUSY=null,booksFileId=null,booksRevisionId=null;
+function BOOKS(){return BOOKS_DATA;}
+function booksStatus(){return BOOKS_STATUS;}   // idle | loading | ready | none | error
+function validBooks(b){return!!(b&&b.schema===BOOKS_SCHEMA&&b.generatedAt&&!isNaN(Date.parse(b.generatedAt))&&b.source&&Array.isArray(b.accounts)&&Array.isArray(b.vouchers)&&Array.isArray(b.months)&&b.balances&&typeof b.balances==='object');}
+function booksNewer(a,b){return!b||Date.parse(a.generatedAt)>Date.parse(b.generatedAt);}
+// IndexedDB cache. Every call is guarded and times out: a private window, blocked storage or a
+// broken IndexedDB just means no cache, and the books come from Drive or the folder instead.
+function booksIdb(mode,fn){
+  return new Promise(res=>{
+    let done=false;const end=v=>{if(!done){done=true;res(v);}};setTimeout(()=>end(null),3000);
+    try{const r=indexedDB.open('et-books',1);
+      r.onupgradeneeded=()=>{try{r.result.createObjectStore('books');}catch(_){}};
+      r.onerror=()=>end(null);r.onblocked=()=>end(null);
+      r.onsuccess=()=>{try{const db=r.result,tx=db.transaction('books',mode),q=fn(tx.objectStore('books'));
+        q.onsuccess=()=>end(q.result===undefined?null:q.result);q.onerror=()=>end(null);tx.oncomplete=()=>{try{db.close();}catch(_){}};}catch(_){end(null);}};
+    }catch(_){end(null);}
+  });
+}
+// The cache records whose books they are, so another Google account on this device never sees them.
+function booksCachePut(b){return booksIdb('readwrite',st=>st.put({owner:USER_EMAIL||'',books:b},'current'));}
+function booksLoadLocal(){
+  if(!BOOKS_LOCAL)BOOKS_LOCAL=booksIdb('readonly',st=>st.get('current')).then(c=>{
+    if(c&&c.owner===(USER_EMAIL||'')&&validBooks(c.books)&&booksNewer(c.books,BOOKS_DATA))BOOKS_DATA=c.books;});
+  return BOOKS_LOCAL;
+}
+// Compare-and-swap like the main file: if another device saved books.json since we last read it,
+// re-read it first and keep whichever copy is newer instead of overwriting it blindly.
+async function booksDriveSave(b){
+  if(!booksFileId){const f=await driveFindFileByName(BOOKS_FILE_NAME);if(f)booksFileId=f.id;}
+  if(booksFileId){const rev=await driveGetRevision(booksFileId);
+    if(rev!==booksRevisionId){const remote=await driveReadJson(booksFileId);booksRevisionId=rev;
+      if(validBooks(remote)&&!booksNewer(b,remote)){if(booksNewer(remote,BOOKS_DATA)){BOOKS_DATA=remote;booksCachePut(remote);}return'pulled';}}}
+  const saved=await driveUploadJson(booksFileId,BOOKS_FILE_NAME,b);
+  booksFileId=saved.id;booksRevisionId=saved.headRevisionId;return'pushed';
+}
+// Drive's copy wins when newer; this device's copy is uploaded when it is the newer one (an import
+// made while signed out, or the first device to have the books).
+async function booksDriveSync(){
+  const f=await driveFindFileByName(BOOKS_FILE_NAME);let remote=null;
+  if(f){booksFileId=f.id;booksRevisionId=f.headRevisionId;remote=await driveReadJson(f.id);if(!validBooks(remote))remote=null;}
+  if(remote&&booksNewer(remote,BOOKS_DATA)){BOOKS_DATA=remote;booksCachePut(remote);return'pulled';}
+  if(BOOKS_DATA&&(!remote||booksNewer(BOOKS_DATA,remote)))return booksDriveSave(BOOKS_DATA);
+  return'same';
+}
+// Loads the books once per sign-in (device cache, then Drive) and re-renders a books page when done.
+// Safe to call on every render: it returns at once when there is nothing left to try.
+function ensureBooks(){
+  if(BOOKS_BUSY)return BOOKS_BUSY;
+  const needLocal=!BOOKS_LOCAL,needDrive=!!accessToken&&!BOOKS_DRIVE_TRIED;
+  if(!needLocal&&!needDrive)return Promise.resolve(BOOKS_DATA);
+  if(!BOOKS_DATA)BOOKS_STATUS='loading';
+  BOOKS_BUSY=(async()=>{
+    try{await booksLoadLocal();
+      if(needDrive){BOOKS_DRIVE_TRIED=true;try{await booksDriveSync();BOOKS_ERROR=null;}catch(e){BOOKS_ERROR=String(e&&e.message||e);}}
+    }catch(e){BOOKS_ERROR=String(e&&e.message||e);}
+    BOOKS_STATUS=BOOKS_DATA?'ready':BOOKS_ERROR?'error':'none';BOOKS_BUSY=null;
+    const pg=pageByKey(ACTIVE_TAB);if(pg&&(pg.needs==='books'||pg.key==='home'))renderAll();
+    return BOOKS_DATA;
+  })();
+  return BOOKS_BUSY;
+}
+// For a Retry button on a books page's error state.
+function reloadBooks(){BOOKS_DRIVE_TRIED=false;return ensureBooks();}
+function resetBooks(){BOOKS_DATA=null;BOOKS_STATUS='idle';BOOKS_ERROR=null;BOOKS_LOCAL=null;BOOKS_DRIVE_TRIED=false;booksFileId=null;booksRevisionId=null;}
+// Import from the file picker or the snapshot folder. A newer generatedAt wins (like applyWealth).
+async function applyBooks(b,from,quiet){
+  if(!validBooks(b)){if(!quiet)toast('That file is not an ExpenseTrack books file');return false;}
+  const m=STATE.booksMeta;   // the folder is re-read on every start: skip a file already imported anywhere
+  if(quiet&&m&&m.generatedAt&&Date.parse(m.generatedAt)>=Date.parse(b.generatedAt))return false;
+  await(accessToken?ensureBooks():booksLoadLocal());   // compare with the newest copy we can see
+  // Without a copy on this device, only a file older than the one imported elsewhere is refused, so
+  // re-importing the same file restores books that never reached Drive.
+  if(BOOKS_DATA?!booksNewer(b,BOOKS_DATA):m&&m.generatedAt&&Date.parse(b.generatedAt)<Date.parse(m.generatedAt)){if(!quiet)toast('Books are already up to date');return false;}
+  BOOKS_DATA=b;BOOKS_STATUS='ready';BOOKS_ERROR=null;
+  STATE.booksMeta={importedAt:new Date().toISOString(),from,generatedAt:b.generatedAt};
+  scheduleDriveSave();booksCachePut(b);
+  if(accessToken)booksDriveSave(b).catch(e=>{BOOKS_ERROR=String(e&&e.message||e);BOOKS_DRIVE_TRIED=false;});
+  renderAll();
+  toast(`Books updated${b.source.glAsOf?' · to '+fmtDayLong(new Date(b.source.glAsOf+'T00:00:00')):''}`);
+  return true;
 }
 function wealthSourceLine(){
   const w=W(),m=STATE.wealthMeta||{};
@@ -3535,7 +3719,7 @@ function accountRowsHTML(li){
       list.map(a=>{const v=wValue(a,li),book=wValue(a,li,'book'),mk=v!==book;
         return`<tr class="clickable${ACC_SEL===a.id?' selected':''}" onclick="selectAccount('${escAttr(a.id)}')" tabindex="0" onkeydown="if(event.key==='Enter')selectAccount('${escAttr(a.id)}')">
           <td class="sel-col"><input type="checkbox" ${declared[a.id]?'checked':''} onclick="toggleDeclared('${escAttr(a.id)}',event)" aria-label="Declared in tax return: ${escH(a.name)}" title="Declared in tax return"></td>
-          <td class="merchant"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${a.ccy!=='IDR'?`<span class="badge">${escH(a.ccy)}</span>`:''}${!a.active?'<span class="badge">Inactive</span>':''}${naBadge(a.id)}${mk?`<span>Book <span class="amt">${fmtIDRShort(book)}</span></span>`:''}</div></td>
+          <td class="merchant"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${a.ccy!=='IDR'?`<span class="badge">${escH(a.ccy)}</span>`:''}${!a.active?'<span class="badge">Inactive</span>':''}${naBadge(a.id)}${mk?`<span>Book <span class="amt">${fmtIDRShort(book)}</span></span>`:''}${runHooks('accountsExtraCol',a).join('')}</div></td>
           <td class="muted">${escH(a.id)}</td>
           <td class="amount num">${amt(v)}</td></tr>`;}).join('');
   }).join('');
@@ -4459,7 +4643,11 @@ function applyCash(d,from,quiet){
   // Only the fields this page uses, with descriptions trimmed, to keep the synced Drive file small.
   STATE.cash={schema:d.schema,generatedAt:d.generatedAt,asOf:d.asOf||null,
     accounts:d.accounts.map(a=>({id:a.id,label:a.label,kind:a.kind,currency:a.currency||'IDR'})),
-    statements:d.statements.map(s=>({account:s.account,date:s.date,opening:s.opening,closing:s.closing,tieOk:!!s.tieOk})),
+    // id is the file's own when it has one, else account|date. periodStart, dueDate, minPayment and
+    // notes are null/[] when a statement (or an older file) doesn't carry them.
+    statements:d.statements.map(s=>({id:s.id||(s.account+'|'+s.date),account:s.account,date:s.date,periodStart:s.periodStart||null,
+      dueDate:s.dueDate||null,minPayment:s.minPayment!=null?s.minPayment:null,opening:s.opening,closing:s.closing,tieOk:!!s.tieOk,
+      notes:Array.isArray(s.notes)?s.notes.map(n=>cut(n,200)):[]})),
     txns:d.txns.map(t=>({id:t.id,account:t.account,currency:t.currency||'IDR',date:t.date,amount:t.amount,type:t.type,
       desc:cut(t.desc,120),counterparty:cut(t.counterparty,60),match:t.match||null}))};
   STATE.cashMeta={importedAt:new Date().toISOString(),from};
@@ -4992,7 +5180,7 @@ window.addEventListener('online',()=>{hideBanner('offline');toast('Back online')
 function signOut(){
   clearTimeout(refreshTimer);
   if(accessToken)google.accounts.oauth2.revoke(accessToken,()=>{});
-  accessToken=null;DATA_READY=false;
+  accessToken=null;DATA_READY=false;resetBooks();
   closeAllSheets();closeMenus();destroyCharts();
   document.body.classList.add('gated');
   $('authGate').style.display='flex';
@@ -5016,5 +5204,11 @@ updateTopbar();
 
 window.addEventListener('load', initAuth);
 </script>
+<!-- v2 modules (docs/v2-interfaces.md): each adds its pages and hooks through registerPage and
+     registerHook above. Plain scripts in a fixed order, no build step. -->
+<script src="js/books.js"></script>
+<script src="js/home.js"></script>
+<script src="js/statements.js"></script>
+<script src="js/extras.js"></script>
 </body>
 </html>
