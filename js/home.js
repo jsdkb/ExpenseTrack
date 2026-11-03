@@ -372,7 +372,6 @@
       </div></section></div>`;
   }
   function render(){
-    ensureStyle();
     const w=W(),M=w?model():null,raw=comingRaw();LAST=M;
     const ok=M&&M.pts.length;
     const head=pageHead('Home',ok?`Your wealth at a glance · ${wealthSourceLine()}`:'Your wealth at a glance',ok?`${nwViewSeg()}${hideBtn()}`:hideBtn());
@@ -426,47 +425,7 @@
   };
   window.etHome=H;
 
-  /* ── Styles (tokens only) and icons ── */
-  let STYLED=false;
-  function ensureStyle(){
-    if(STYLED||document.getElementById('homeStyle')){STYLED=true;return;}
-    const s=document.createElement('style');s.id='homeStyle';s.textContent=`
-    .h-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
-    .h-stats dd{font-size:15px;line-height:20px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .h-stats .h-sub{font-size:12px;line-height:16px;color:var(--text-3);margin-top:2px}
-    .hb-list{display:flex;flex-direction:column}
-    .hb-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(104px,auto);align-items:center;column-gap:14px;row-gap:6px;padding:10px 8px;margin:0 -8px;width:calc(100% + 16px);
-      border-top:1px solid var(--border);border-radius:var(--radius-sm);text-align:left;color:inherit;background:none;font:inherit}
-    .hb-row:first-child{border-top:none}
-    button.hb-row{cursor:pointer} button.hb-row:hover{background:var(--surface-2)}
-    .hb-name{font-size:14px;line-height:20px;font-weight:500;min-width:0}
-    .hb-name small{display:block;font-size:12px;line-height:16px;color:var(--text-3);font-weight:400;overflow-wrap:anywhere}
-    .hb-total .hb-name,.hb-total .hb-val{font-weight:600}
-    .hb-val{font-size:14px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums;display:flex;align-items:center;justify-content:flex-end;gap:4px}
-    .hb-val svg.i{width:16px;height:16px;color:var(--text-3);transition:transform 120ms ease-out}
-    .hb-row[aria-expanded="true"] .hb-val svg.i{transform:rotate(180deg)}
-    .hb-track{position:relative;height:10px;border-radius:999px;background:var(--surface-2)}
-    .hb-track>i{position:absolute;top:0;bottom:0;border-radius:999px}
-    .hb-track>i.mk{width:3px;top:-3px;bottom:-3px;border-radius:2px;background:var(--accent)}
-    .hb-change{display:flex;justify-content:space-between;gap:12px;padding-top:12px;margin-top:4px;border-top:1px solid var(--border-strong);font-weight:600;font-variant-numeric:tabular-nums}
-    .hb-detail{margin:2px 0 8px;padding:4px 12px 10px;background:var(--surface-2);border-radius:var(--radius-sm)}
-    .hb-detail .list-item{min-height:44px;padding:8px 0}
-    .h-note{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:18px;padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:12px;background:var(--warn-soft);color:var(--text-1)}
-    .h-note svg.i{color:var(--warn);flex-shrink:0;width:16px;height:16px;margin-top:1px}
-    .h-note.info{background:var(--info-soft)} .h-note.info svg.i{color:var(--info)}
-    .h-big{font-size:28px;line-height:32px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .h-due{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
-    .h-sel{width:auto;height:36px;max-width:190px}
-    @media (max-width:767px){
-      .h-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
-      .hb-row{grid-template-columns:minmax(0,1fr) auto;min-height:44px}
-      .hb-track{grid-column:1/-1;order:3}
-      .h-big{font-size:22px;line-height:28px}
-      .h-sel{height:44px;max-width:none;width:100%}
-      #homeBridge .card-head{flex-wrap:wrap} #homeBridge .card-tools{width:100%;justify-content:flex-start}
-    }`;
-    document.head.appendChild(s);STYLED=true;
-  }
+  /* ── Icons (the styles are in the core stylesheet, "v2 modules" section) ── */
   registerIcon('piggy-bank','<path d="M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z"/><path d="M16 10h.01"/><path d="M2 8v1a2 2 0 0 0 2 2h1"/>');
   registerIcon('clock','<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>');
   registerPage({key:'home',label:'Home',short:'Home',icon:'house',group:'top',order:5,render,afterRender});

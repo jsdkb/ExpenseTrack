@@ -771,6 +771,128 @@
       *, *::before, *::after { animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
       .skel::after, .loader-line > i, .dot.info, .spin { animation: none !important; }
     }
+
+    /* ══ v2 modules (js/*.js): page styles, tokens only so both themes work ══ */
+    /* ── Books pages (js/books.js) ── */
+    .bk-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+    .bk-bar .input{width:auto;max-width:100%;min-width:0}
+    .bk-month{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%}
+    .bk-month .input{min-width:150px}
+    .bk-search{flex:1 1 220px;max-width:360px}
+    .bk-date{width:150px!important}
+    .bk-grow{flex:1 1 auto}
+    table.data tr.bk-sec th{position:static;background:transparent;color:var(--text-2);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding-top:18px;border-top:1px solid var(--border)}
+    table.data tr.bk-par td{font-weight:600}
+    table.data tr.bk-tot td{font-weight:600;border-top:1px solid var(--border-strong)}
+    table.data tr.bk-grand td{font-weight:700;border-top:2px solid var(--border-strong)}
+    table.data tr.bk-flag td{background:var(--bad-soft)}
+    table.data tr.bk-open td{color:var(--text-2);font-style:italic}
+    table.data td.bk-acc{min-width:200px;padding-top:8px;padding-bottom:8px}
+    table.data td.bk-acc .merchant-name{font-weight:inherit;overflow-wrap:break-word}
+    table.data.bk-stmt td.bk-acc{width:46%}
+    .bk-dc{font-size:11px;color:var(--text-3);margin-right:4px;font-weight:500}
+    table.data tr.bk-row td{font-weight:400}
+    .bk-code{color:var(--text-3);font-size:12px;font-variant-numeric:tabular-nums;margin-right:8px;font-weight:400}
+    .bk-link{display:inline-flex;align-items:center;gap:2px;color:var(--accent-text);font-size:12px;line-height:16px;font-weight:500;padding:2px 6px;border-radius:var(--radius-xs);vertical-align:1px}
+    tr .bk-link.bk-hover{opacity:0;transition:opacity var(--dur-fast) ease-out;margin-left:6px}
+    tr:hover .bk-link.bk-hover,tr:focus-within .bk-link.bk-hover,.bk-link.bk-hover:focus-visible{opacity:1}
+    .kpi-sub .badge{height:auto;min-height:20px;white-space:normal}
+    .bk-link:hover,.bk-link:focus-visible{background:var(--accent-soft)}
+    .bk-link svg.i{width:12px;height:12px}
+    .bk-pager{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px var(--card-pad);border-top:1px solid var(--border);flex-wrap:wrap}
+    .bk-pager .btns{display:flex;gap:6px}
+    .bk-panel{position:sticky;top:20px;align-self:start}
+    .bk-vhead{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+    .bk-vtitle{font-size:16px;font-weight:600;overflow-wrap:anywhere}
+    .bk-badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .bk-check{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border);font-size:14px}
+    .bk-check:first-child{border-top:none}
+    .bk-check .li-body{flex:1;min-width:0}
+    .bk-list .list-item{cursor:pointer}
+    .bk-list .li-amt{font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .bk-note{border-radius:var(--radius-sm);margin-bottom:12px;padding:10px 14px}
+    .bk-facts{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--text-2);margin-top:4px}
+    .bk-facts b{color:var(--text-1);font-weight:600}
+    @media (max-width:767px){
+      .bk-c-off{display:none!important}
+      tr .bk-link.bk-hover{display:none}
+      table.data td.bk-acc{min-width:0}
+      .bk-bar .input{flex:1 1 140px}
+      .bk-month{flex:1 1 100%}.bk-month .input{flex:1 1 auto;min-width:0}
+      .bk-search{max-width:none;flex-basis:100%}
+      .bk-date{flex:1 1 120px;width:auto!important}
+      .bk-panel{position:static}
+      table.data.bk-stmt td.bk-acc{overflow-wrap:anywhere}
+    }
+    /* ── Budgets, Goals, Investment returns, SPT pack (js/extras.js) ── */
+    .ex-bar{position:relative;min-width:96px}
+    .ex-tick{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--text-2);border-radius:1px}
+    .ex-pct{font-size:12px;color:var(--text-2);margin-top:4px;display:block}
+    table.data.ex-rows .input{height:36px;min-width:120px;text-align:right}
+    table.data.ex-rows td.ex-in{min-width:150px}
+    :root[data-hide="1"] .ex-money{filter:blur(7px);user-select:none}
+    .ex-goal{display:grid;gap:10px}
+    .ex-goal-top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+    .ex-goal h3{font-size:15px;line-height:20px;font-weight:600;overflow-wrap:anywhere}
+    .ex-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 16px}
+    .ex-facts dt{font-size:12px;color:var(--text-3)}
+    .ex-facts dd{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+    .ex-check-list{display:grid;gap:6px;max-height:220px;overflow:auto;padding:4px 0}
+    .ex-note{font-size:13px;line-height:18px;color:var(--text-3);margin-top:12px;overflow-wrap:anywhere}
+    .ex-minis{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:13px;color:var(--text-2)}
+    .ex-minis .bad{color:var(--bad);font-weight:600}
+    .ex-year{display:inline-flex}
+    .ex-year select{height:36px;min-width:96px}
+    table.data tr.ex-total td,table.data tr.ex-total th{font-weight:600;border-top:1px solid var(--border-strong);background:var(--surface-2)}
+    @media (max-width:767px){
+      table.data.ex-rows,table.data.ex-rows tbody{display:block}
+      table.data.ex-rows thead{display:none}
+      table.data.ex-rows tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 12px;border-bottom:1px solid var(--border);padding:12px 10px}
+      table.data.ex-rows td,table.data.ex-rows th{display:block;border:none;padding:0;height:auto;min-width:0}
+      table.data.ex-rows td.ex-full{grid-column:1/-1}
+      table.data.ex-rows td[data-label]::before{content:attr(data-label);display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);margin-bottom:2px}
+      table.data.ex-rows td.num{text-align:left;white-space:normal}
+      table.data.ex-rows td.ex-in{min-width:0}
+      table.data.ex-rows .input{text-align:left;min-width:0}
+      table.data.ex-rows tr.group-row{display:block;padding:8px 10px 0}
+      table.data.ex-rows tr.group-row th,table.data.ex-rows tr.group-row td{display:inline-block;padding:0;margin-right:12px}
+      table.data.ex-rows tr.ex-total{background:var(--surface-2)}
+    }
+    /* ── Home (js/home.js) ── */
+    .h-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+    .h-stats dd{font-size:15px;line-height:20px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .h-stats .h-sub{font-size:12px;line-height:16px;color:var(--text-3);margin-top:2px}
+    .hb-list{display:flex;flex-direction:column}
+    .hb-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(104px,auto);align-items:center;column-gap:14px;row-gap:6px;padding:10px 8px;margin:0 -8px;width:calc(100% + 16px);
+      border-top:1px solid var(--border);border-radius:var(--radius-sm);text-align:left;color:inherit;background:none;font:inherit}
+    .hb-row:first-child{border-top:none}
+    button.hb-row{cursor:pointer} button.hb-row:hover{background:var(--surface-2)}
+    .hb-name{font-size:14px;line-height:20px;font-weight:500;min-width:0}
+    .hb-name small{display:block;font-size:12px;line-height:16px;color:var(--text-3);font-weight:400;overflow-wrap:anywhere}
+    .hb-total .hb-name,.hb-total .hb-val{font-weight:600}
+    .hb-val{font-size:14px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums;display:flex;align-items:center;justify-content:flex-end;gap:4px}
+    .hb-val svg.i{width:16px;height:16px;color:var(--text-3);transition:transform 120ms ease-out}
+    .hb-row[aria-expanded="true"] .hb-val svg.i{transform:rotate(180deg)}
+    .hb-track{position:relative;height:10px;border-radius:999px;background:var(--surface-2)}
+    .hb-track>i{position:absolute;top:0;bottom:0;border-radius:999px}
+    .hb-track>i.mk{width:3px;top:-3px;bottom:-3px;border-radius:2px;background:var(--accent)}
+    .hb-change{display:flex;justify-content:space-between;gap:12px;padding-top:12px;margin-top:4px;border-top:1px solid var(--border-strong);font-weight:600;font-variant-numeric:tabular-nums}
+    .hb-detail{margin:2px 0 8px;padding:4px 12px 10px;background:var(--surface-2);border-radius:var(--radius-sm)}
+    .hb-detail .list-item{min-height:44px;padding:8px 0}
+    .h-note{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:18px;padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:12px;background:var(--warn-soft);color:var(--text-1)}
+    .h-note svg.i{color:var(--warn);flex-shrink:0;width:16px;height:16px;margin-top:1px}
+    .h-note.info{background:var(--info-soft)} .h-note.info svg.i{color:var(--info)}
+    .h-big{font-size:28px;line-height:32px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .h-due{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+    .h-sel{width:auto;height:36px;max-width:190px}
+    @media (max-width:767px){
+      .h-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+      .hb-row{grid-template-columns:minmax(0,1fr) auto;min-height:44px}
+      .hb-track{grid-column:1/-1;order:3}
+      .h-big{font-size:22px;line-height:28px}
+      .h-sel{height:44px;max-width:none;width:100%}
+      #homeBridge .card-head{flex-wrap:wrap} #homeBridge .card-tools{width:100%;justify-content:flex-start}
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"
     integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi"
@@ -887,7 +1009,7 @@
 
   <div class="main">
     <header class="topbar">
-      <h1 class="topbar-title" id="topTitle">Overview</h1>
+      <h1 class="topbar-title" id="topTitle">Home</h1>
       <span id="topPeriod"></span>
       <button class="icon-btn" id="topSync" onclick="openSyncSheet()" aria-label="Sync status"><span class="dot" id="topSyncDot"></span></button>
       <button class="icon-btn" id="topHide" onclick="toggleHideAmounts()" aria-label="Hide amounts" aria-pressed="false"><svg class="i s20"><use href="#i-eye"/></svg></button>
@@ -1582,7 +1704,7 @@ let ALL_TRANSACTIONS=[];
 let ALL_TRANSACTIONS_RAW=[]; // pipeline-applied snapshot before the hidden filter — Credit Cards still sees hidden txns
 let CHARTS={};
 let ACTIVE_BANK='all';
-let ACTIVE_TAB='overview';           // overview | spending | cards | settings | more
+let ACTIVE_TAB='home';               // home (js/home.js; falls back to overview) | overview | spending | cards | … | settings | more
 let CARDS_SUB='current';             // current | history | fx
 let CCP_EST_FROM='', CCP_EST_TO='';
 let CCP_CARD='all';                  // all | Maybank | OCBC CC
@@ -1591,6 +1713,9 @@ let ACTIVE_RANGE='month',CUSTOM_FROM=null,CUSTOM_TO=null,ACTIVE_CATEGORIES=new S
 let TREND_RANGE=6;                   // months shown in trend charts; 0 = all
 let TX_SEARCH='', TX_LIMIT=50, SELECT_MODE=false, SELECTED=new Set(), TOPLIST_SEG='merchants';
 let DATA_READY=false, USER_EMAIL='';
+// Maybank billing reminders (type 'billing': due date, no amount). Kept for modules (the statement
+// calendar's due-date fallback); never part of ALL_TRANSACTIONS, so never in a total.
+let BILLING=[];
 let SYNC={drive:'idle',driveMsg:'',gmail:false,gmailMsg:'',lastSynced:null,merged:false};
 
 function isMobile(){return window.matchMedia('(max-width: 767px)').matches;}
@@ -1602,7 +1727,14 @@ function setCCCard(k){CCP_CARD=k;renderAll();}
    backed by Drive-synced STATE instead of localStorage. Every render/
    modal function below calls these by name and needs no other changes.
    ══════════════════════════════════════════════════════════════════ */
-function saveCache(t){ STATE.txns=t; STATE.cachedAt=new Date().toISOString(); scheduleDriveSave(); }
+// The cache (STATE.txns) holds the email rows as parsed plus the core rules, never a transform's
+// changes, plus the billing reminders (BILLING), which stay out of every transaction list.
+function saveCache(t){
+  const rows=untransformed('transactions',t),ids=new Set(rows.map(x=>x.id));
+  STATE.txns=rows.concat(BILLING.filter(b=>!ids.has(b.id)).map(b=>({...b})));
+  STATE.cachedAt=new Date().toISOString(); scheduleDriveSave();
+}
+const isBilling=t=>!!t&&t.type==='billing';
 function loadCache(){ if(!STATE.txns||!STATE.txns.length) return null; return { ts: STATE.cachedAt?Date.parse(STATE.cachedAt):Date.now(), data: STATE.txns }; }
 
 function getMFX(){ return STATE.manualFxRates; }
@@ -2031,12 +2163,27 @@ function runHooks(name,...args){
 }
 // Transforms (docs/v2-interfaces.md §4): each fn(list) returns the new list. 'transactions' runs once
 // per load on the combined email list, after the core rules and before the hidden filter and every
-// total. A transform that throws or returns a non-array is logged and skipped.
-const TRANSFORMS={};
-function registerTransform(name,fn){if(typeof fn==='function')(TRANSFORMS[name]||(TRANSFORMS[name]=[])).push(fn);}
+// total. A transform that throws or returns a non-array is logged and skipped. unapply(row) gets a
+// COPY of a row and returns it as it was before the transform (null = a row the transform added);
+// saveCache runs it on every row, so the cache only ever holds untransformed data.
+const TRANSFORMS={},UNAPPLY={};
+function registerTransform(name,fn,unapply){
+  if(typeof fn==='function')(TRANSFORMS[name]||(TRANSFORMS[name]=[])).push(fn);
+  if(typeof fn==='function'&&typeof unapply==='function')(UNAPPLY[name]||(UNAPPLY[name]=[])).push(unapply);
+}
 function runTransforms(name,list){
   for(const fn of TRANSFORMS[name]||[]){try{const r=fn(list);if(Array.isArray(r))list=r;else console.error('Transform '+name+' returned no list');}catch(e){console.error('Transform '+name+' failed',e);}}
   return list;
+}
+// Copies of the rows with every transform's changes taken off, newest transform first.
+function untransformed(name,list){
+  const un=(UNAPPLY[name]||[]).slice().reverse(),out=[];
+  for(const t of list||[]){
+    if(!t)continue;let r={...t};
+    for(const fn of un){try{r=fn(r);}catch(e){console.error('Unapply '+name+' failed',e);}if(!r)break;}
+    if(r)out.push(r);
+  }
+  return out;
 }
 // Adds a Lucide icon to the inline sprite (inner = the icon's <path>/<circle> markup, 24×24).
 function registerIcon(name,inner){
@@ -2044,14 +2191,15 @@ function registerIcon(name,inner){
   const s=document.createElementNS('http://www.w3.org/2000/svg','symbol');s.id='i-'+name;s.setAttribute('viewBox','0 0 24 24');s.innerHTML=inner;sp.appendChild(s);
 }
 function renderPage(p){
-  if(p.needs==='books'||p.key==='home')ensureBooks();
+  // Not before sign-in: Home is the landing page and renders behind the sign-in screen too.
+  if((p.needs==='books'||p.key==='home')&&USER_EMAIL)ensureBooks();
   try{return p.render(p);}
   catch(e){console.error('Page '+p.key+' failed to render',e);
     return`${pageHead(p.label,'')}<div class="card">${emptyHTML('triangle-alert','This page hit a problem. Reload the app; if it keeps happening, report it.')}</div>`;}
 }
 
 const SECTIONS=[
-  {key:'overview',label:'Overview',icon:'layout-dashboard',order:10},
+  {key:'overview',label:'Daily spending',short:'Spending',icon:'layout-dashboard',order:10},
   {key:'spending',label:'Spending',icon:'chart-pie',order:20},
   {key:'cards',label:'Credit cards',short:'Cards',icon:'credit-card',order:30},
 ];
@@ -2068,10 +2216,15 @@ function navGroup(g){
   const reg=PAGES.filter(p=>p.group===g&&pageVisible(p));
   return reg.length?[...base,...reg].sort((a,b)=>(a.order||0)-(b.order||0)):base;
 }
-// Bottom bar: the first three top pages, then Net worth; everything else is under More.
-function bottomSections(){return[...navGroup('top').slice(0,3),{key:'networth',label:'Net worth',icon:'trending-up'}];}
+// Bottom bar (phones): Home · Spending (Daily spending) · Cards · Net worth, then More; everything
+// else, the Spending category page included, is listed on the More page. A key whose page isn't
+// registered (e.g. js/home.js failed to load) is skipped.
+const BOTTOM_KEYS=['home','overview','cards','networth'];
+function bottomSections(){const all=NAV_GROUPS.flatMap(([g])=>navGroup(g));return BOTTOM_KEYS.map(k=>all.find(s=>s.key===k)).filter(Boolean);}
+// The landing page: Home when js/home.js registered it, else Daily spending.
+function defaultTab(){return pageByKey('home')?'home':'overview';}
 function moreSections(){const b=bottomSections().map(s=>s.key);return NAV_GROUPS.flatMap(([g])=>navGroup(g)).filter(s=>!b.includes(s.key));}
-const TAB_TITLES={overview:'Overview',spending:'Spending',cards:'Credit cards',networth:'Net worth',cash:'Cash movements',accounts:'Accounts',income:'Income',close:'Month-end',settings:'Settings',more:'More'};
+const TAB_TITLES={overview:'Daily spending',spending:'Spending',cards:'Credit cards',networth:'Net worth',cash:'Cash movements',accounts:'Accounts',income:'Income',close:'Month-end',settings:'Settings',more:'More'};
 function setTab(t){
   if(t===ACTIVE_TAB){window.scrollTo({top:0,behavior:'smooth'});return;}
   ACTIVE_TAB=t;SELECT_MODE=false;SELECTED.clear();TX_LIMIT=50;
@@ -3402,28 +3555,33 @@ function brandLoaderHTML(){
    list, so every caller can simply call renderAll().
    ══════════════════════════════════════════════════════════════════ */
 function renderAll(){
+  if(ACTIVE_TAB==='home'&&!pageByKey('home'))ACTIVE_TAB='overview';
+  runHooks('beforeRender');
   buildNav();updateTopbar();renderSyncUI();
   const root=$('root');if(!root)return;
   closeMenus();destroyCharts();
+  // Every chart draw waits for the next frame; only the latest render's draw runs (destroying
+  // whatever is on the canvases first), so two renders in one frame never draw a chart twice.
+  const seq=++PAGE_RENDER_SEQ;
+  const drawLater=fn=>requestAnimationFrame(()=>{if(seq!==PAGE_RENDER_SEQ)return;destroyCharts();fn();CHARTS_DRAWN_ONCE=true;});
   if(ACTIVE_TAB==='settings'){root.innerHTML=renderSettings();return;}
   if(ACTIVE_TAB==='more'){root.innerHTML=renderMore();return;}
   // Only the latest render's afterRender runs, so two renders in one frame never draw a chart twice.
-  {const pg=pageByKey(ACTIVE_TAB);if(pg){root.innerHTML=renderPage(pg);const seq=++PAGE_RENDER_SEQ;
-    requestAnimationFrame(()=>{if(ACTIVE_TAB!==pg.key||seq!==PAGE_RENDER_SEQ)return;if(pg.afterRender){try{pg.afterRender(pg);}catch(e){console.error('Page '+pg.key+' afterRender failed',e);}}CHARTS_DRAWN_ONCE=true;});return;}}
-  if(ACTIVE_TAB==='networth'){root.innerHTML=renderNetWorth();requestAnimationFrame(()=>{renderNetWorthCharts();CHARTS_DRAWN_ONCE=true;});return;}
-  if(ACTIVE_TAB==='accounts'){root.innerHTML=renderAccounts();requestAnimationFrame(()=>{drawAccountChart();CHARTS_DRAWN_ONCE=true;});return;}
+  {const pg=pageByKey(ACTIVE_TAB);if(pg){root.innerHTML=renderPage(pg);
+    drawLater(()=>{if(ACTIVE_TAB!==pg.key||!pg.afterRender)return;try{pg.afterRender(pg);}catch(e){console.error('Page '+pg.key+' afterRender failed',e);}});return;}}
+  if(ACTIVE_TAB==='networth'){root.innerHTML=renderNetWorth();drawLater(renderNetWorthCharts);return;}
+  if(ACTIVE_TAB==='accounts'){root.innerHTML=renderAccounts();drawLater(drawAccountChart);return;}
   if(ACTIVE_TAB==='close'&&typeof renderClose==='function'){root.innerHTML=renderClose();return;}
   if(ACTIVE_TAB==='income'){root.innerHTML=renderIncome();return;}
-  if(ACTIVE_TAB==='cash'){root.innerHTML=renderCash();requestAnimationFrame(()=>{drawCash();CHARTS_DRAWN_ONCE=true;});return;}
+  if(ACTIVE_TAB==='cash'){root.innerHTML=renderCash();drawLater(drawCash);return;}
   if(!DATA_READY){if(!$('prog'))root.innerHTML=skeletonHTML();return;}
   const txns=getFiltered();
   if(ACTIVE_TAB==='spending')root.innerHTML=renderSpending(txns);
   else if(ACTIVE_TAB==='cards')root.innerHTML=renderCards();
   else root.innerHTML=renderOverview(txns);
-  requestAnimationFrame(()=>{
+  drawLater(()=>{
     if(ACTIVE_TAB==='overview'&&ALL_TRANSACTIONS.length)renderOverviewCharts();
     else if(ACTIVE_TAB==='spending'&&ALL_TRANSACTIONS.length)renderSpendingCharts();
-    CHARTS_DRAWN_ONCE=true;
     maybeSwipeHint();
   });
 }
@@ -3540,7 +3698,7 @@ async function autoImportWealth(){
    first time a page that needs it renders (ensureBooks).
    ══════════════════════════════════════════════════════════════════ */
 const BOOKS_SCHEMA='et-books/1',BOOKS_FILE_NAME='books.json';
-let BOOKS_DATA=null,BOOKS_STATUS='idle',BOOKS_ERROR=null,BOOKS_LOCAL=null,BOOKS_DRIVE_TRIED=false,BOOKS_BUSY=null,booksFileId=null,booksRevisionId=null;
+let BOOKS_DATA=null,BOOKS_STATUS='idle',BOOKS_ERROR=null,BOOKS_LOCAL=null,BOOKS_LOCAL_FOR="",BOOKS_DRIVE_TRIED=false,BOOKS_BUSY=null,booksFileId=null,booksRevisionId=null;
 function BOOKS(){return BOOKS_DATA;}
 function booksStatus(){return BOOKS_STATUS;}   // idle | loading | ready | none | error
 function validBooks(b){return!!(b&&b.schema===BOOKS_SCHEMA&&b.generatedAt&&!isNaN(Date.parse(b.generatedAt))&&b.source&&Array.isArray(b.accounts)&&Array.isArray(b.vouchers)&&Array.isArray(b.months)&&b.balances&&typeof b.balances==='object');}
@@ -3561,8 +3719,9 @@ function booksIdb(mode,fn){
 // The cache records whose books they are, so another Google account on this device never sees them.
 function booksCachePut(b){return booksIdb('readwrite',st=>st.put({owner:USER_EMAIL||'',books:b},'current'));}
 function booksLoadLocal(){
-  if(!BOOKS_LOCAL)BOOKS_LOCAL=booksIdb('readonly',st=>st.get('current')).then(c=>{
-    if(c&&c.owner===(USER_EMAIL||'')&&validBooks(c.books)&&booksNewer(c.books,BOOKS_DATA))BOOKS_DATA=c.books;});
+  if(BOOKS_LOCAL&&BOOKS_LOCAL_FOR!==(USER_EMAIL||''))BOOKS_LOCAL=null;   // read for another (or no) account
+  if(!BOOKS_LOCAL){BOOKS_LOCAL_FOR=USER_EMAIL||'';BOOKS_LOCAL=booksIdb('readonly',st=>st.get('current')).then(c=>{
+    if(c&&c.owner===(USER_EMAIL||'')&&validBooks(c.books)&&booksNewer(c.books,BOOKS_DATA))BOOKS_DATA=c.books;});}
   return BOOKS_LOCAL;
 }
 // Compare-and-swap like the main file: if another device saved books.json since we last read it,
@@ -3588,7 +3747,7 @@ async function booksDriveSync(){
 // Safe to call on every render: it returns at once when there is nothing left to try.
 function ensureBooks(){
   if(BOOKS_BUSY)return BOOKS_BUSY;
-  const needLocal=!BOOKS_LOCAL,needDrive=!!accessToken&&!BOOKS_DRIVE_TRIED;
+  const needLocal=!BOOKS_LOCAL||BOOKS_LOCAL_FOR!==(USER_EMAIL||''),needDrive=!!accessToken&&!BOOKS_DRIVE_TRIED;
   if(!needLocal&&!needDrive)return Promise.resolve(BOOKS_DATA);
   if(!BOOKS_DATA)BOOKS_STATUS='loading';
   BOOKS_BUSY=(async()=>{
@@ -3603,7 +3762,7 @@ function ensureBooks(){
 }
 // For a Retry button on a books page's error state.
 function reloadBooks(){BOOKS_DRIVE_TRIED=false;return ensureBooks();}
-function resetBooks(){BOOKS_DATA=null;BOOKS_STATUS='idle';BOOKS_ERROR=null;BOOKS_LOCAL=null;BOOKS_DRIVE_TRIED=false;booksFileId=null;booksRevisionId=null;}
+function resetBooks(){BOOKS_DATA=null;BOOKS_STATUS='idle';BOOKS_ERROR=null;BOOKS_LOCAL=null;BOOKS_LOCAL_FOR='';BOOKS_DRIVE_TRIED=false;booksFileId=null;booksRevisionId=null;}
 // Import from the file picker or the snapshot folder. A newer generatedAt wins (like applyWealth).
 async function applyBooks(b,from,quiet){
   if(!validBooks(b)){if(!quiet)toast('That file is not an ExpenseTrack books file');return false;}
@@ -4889,7 +5048,8 @@ async function load(isRefresh=false){
   const cached=loadCache();
   if(!isRefresh){
     if(cached&&cached.data&&cached.data.length){
-      ALL_TRANSACTIONS=cached.data.map(t=>({...t}));
+      BILLING=cached.data.filter(isBilling).map(t=>({...t}));
+      ALL_TRANSACTIONS=cached.data.filter(t=>!isBilling(t)).map(t=>({...t}));
       applyManualFXRates(ALL_TRANSACTIONS);
       applyAutoCategory(ALL_TRANSACTIONS);
       applyDateCategoryRules(ALL_TRANSACTIONS);
@@ -4947,17 +5107,22 @@ async function load(isRefresh=false){
     const ocCcParsed=await fetchAndParse(ocCcThreads,parseOCBCCreditFromBody,sp,'OCBC CC');
     const bcaParsed=await fetchAndParse(bcaThreads,parseBCAFromBody,sp,'BCA');
     const mbFinal=mbItems.filter(t=>(t.amount&&t.amount>0)||t.currency);
+    const mbBilling=mbItems.filter(t=>isBilling(t)&&t.dueDate);
     const ocFinal=ocParsed.filter(t=>t.amountOrig&&t.amountOrig>0);
     const ocCcFinal=ocCcParsed.filter(t=>(t.amount&&t.amount>0)||t.currency);
     const bcaFinal=bcaParsed.filter(t=>(t.amount&&t.amount>0)||t.currency);
     let combined=[...mbFinal,...ocFinal,...ocCcFinal,...bcaFinal].sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0));
 
+    let billing=mbBilling;
     if(isInc&&cached&&cached.data){
-      const ei=new Set(cached.data.map(t=>t.id).filter(Boolean));
+      const old=cached.data.filter(t=>!isBilling(t)),ei=new Set(old.map(t=>t.id).filter(Boolean));
       const nw=combined.filter(t=>!ei.has(t.id));
-      combined=[...nw,...cached.data].sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0));
+      combined=[...nw,...old].sort((a,b)=>new Date(b.txDate||b.msgDate||0)-new Date(a.txDate||a.msgDate||0));
+      const ob=cached.data.filter(isBilling),bi=new Set(ob.map(t=>t.id));
+      billing=[...billing.filter(t=>!bi.has(t.id)),...ob];
     }
     combined=combined.filter(t=>(t.txDate||t.msgDate||'')>=HISTORY_START);
+    BILLING=billing.filter(t=>(t.msgDate||'')>=HISTORY_START).map(t=>({...t}));
 
     const newestDate=combined.reduce((acc,t)=>{const d=t.txDate||t.msgDate;return(d&&d>acc)?d:acc;},watermark||'1970-01-01');
     STATE.watermark=newestDate;
@@ -4973,11 +5138,11 @@ async function load(isRefresh=false){
     applyMerchantAutoNotes(ALL_TRANSACTIONS);
     applyTxEdits(ALL_TRANSACTIONS);
     applySplits(ALL_TRANSACTIONS);
+    saveCache(ALL_TRANSACTIONS);   // before the transforms: the cache never holds their changes
     ALL_TRANSACTIONS=runTransforms('transactions',ALL_TRANSACTIONS);
     ALL_TRANSACTIONS_RAW=[...ALL_TRANSACTIONS];
     {const _h=getHidden();if(_h.size)ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!_h.has(t.id));}
     mergeManualTxns();
-    saveCache(ALL_TRANSACTIONS_RAW);
     if(!isRefresh){ACTIVE_RANGE='month';CUSTOM_FROM=null;CUSTOM_TO=null;ACTIVE_BANK='all';}
     DATA_READY=true;SYNC.gmail=false;SYNC.lastSynced=new Date();
     renderAll();
@@ -5007,6 +5172,7 @@ async function onSignedIn(){
   $('authGate').style.display='none';
   $('refBtn').disabled=false;
   $('authStatus').textContent='';
+  ACTIVE_TAB=defaultTab();   // a sign-in always lands on Home
   DATA_READY=false;renderAll(); // skeleton until data renders
   offlineBanner();
   try{

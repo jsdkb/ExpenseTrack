@@ -28,46 +28,7 @@
   registerIcon('chart-line','<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/>');
   registerIcon('file-text','<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>');
 
-  // Styles for the four pages. Colours come from the app's tokens, so both themes work.
-  (function(){
-    if(document.getElementById('exStyle'))return;
-    const s=document.createElement('style');s.id='exStyle';
-    s.textContent=`
-      .ex-bar{position:relative;min-width:96px}
-      .ex-tick{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--text-2);border-radius:1px}
-      .ex-pct{font-size:12px;color:var(--text-2);margin-top:4px;display:block}
-      table.data.ex-rows .input{height:36px;min-width:120px;text-align:right}
-      table.data.ex-rows td.ex-in{min-width:150px}
-      :root[data-hide="1"] .ex-money{filter:blur(7px);user-select:none}
-      .ex-goal{display:grid;gap:10px}
-      .ex-goal-top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
-      .ex-goal h3{font-size:15px;line-height:20px;font-weight:600;overflow-wrap:anywhere}
-      .ex-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 16px}
-      .ex-facts dt{font-size:12px;color:var(--text-3)}
-      .ex-facts dd{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-      .ex-check-list{display:grid;gap:6px;max-height:220px;overflow:auto;padding:4px 0}
-      .ex-note{font-size:13px;line-height:18px;color:var(--text-3);margin-top:12px;overflow-wrap:anywhere}
-      .ex-minis{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:13px;color:var(--text-2)}
-      .ex-minis .bad{color:var(--bad);font-weight:600}
-      .ex-year{display:inline-flex}
-      .ex-year select{height:36px;min-width:96px}
-      table.data tr.ex-total td,table.data tr.ex-total th{font-weight:600;border-top:1px solid var(--border-strong);background:var(--surface-2)}
-      @media (max-width:767px){
-        table.data.ex-rows,table.data.ex-rows tbody{display:block}
-        table.data.ex-rows thead{display:none}
-        table.data.ex-rows tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 12px;border-bottom:1px solid var(--border);padding:12px 10px}
-        table.data.ex-rows td,table.data.ex-rows th{display:block;border:none;padding:0;height:auto;min-width:0}
-        table.data.ex-rows td.ex-full{grid-column:1/-1}
-        table.data.ex-rows td[data-label]::before{content:attr(data-label);display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);margin-bottom:2px}
-        table.data.ex-rows td.num{text-align:left;white-space:normal}
-        table.data.ex-rows td.ex-in{min-width:0}
-        table.data.ex-rows .input{text-align:left;min-width:0}
-        table.data.ex-rows tr.group-row{display:block;padding:8px 10px 0}
-        table.data.ex-rows tr.group-row th,table.data.ex-rows tr.group-row td{display:inline-block;padding:0;margin-right:12px}
-        table.data.ex-rows tr.ex-total{background:var(--surface-2)}
-      }`;
-    document.head.appendChild(s);
-  })();
+  // Styles for the four pages: the core stylesheet in index.html ("v2 modules" section).
 
   /* Sheet row for a Rp amount: formatted, with the "Rp" prefix inside the field (§8.5). */
   const rpInput=(id,val,attrs)=>`<div class="input-affix"><span class="affix">Rp</span><input class="input ex-money" id="${id}" inputmode="numeric" autocomplete="off" value="${val==null?'':escH(fmtN(val))}" ${attrs||''}></div>`;

@@ -33,62 +33,7 @@
   registerIcon('book-open','<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>');
   registerIcon('file-text','<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>');
   registerIcon('scale','<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>');
-  (function(){
-    if(document.getElementById('bkStyle'))return;
-    const s=document.createElement('style');s.id='bkStyle';
-    s.textContent=`
-.bk-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
-.bk-bar .input{width:auto;max-width:100%;min-width:0}
-.bk-month{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%}
-.bk-month .input{min-width:150px}
-.bk-search{flex:1 1 220px;max-width:360px}
-.bk-date{width:150px!important}
-.bk-grow{flex:1 1 auto}
-table.data tr.bk-sec th{position:static;background:transparent;color:var(--text-2);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding-top:18px;border-top:1px solid var(--border)}
-table.data tr.bk-par td{font-weight:600}
-table.data tr.bk-tot td{font-weight:600;border-top:1px solid var(--border-strong)}
-table.data tr.bk-grand td{font-weight:700;border-top:2px solid var(--border-strong)}
-table.data tr.bk-flag td{background:var(--bad-soft)}
-table.data tr.bk-open td{color:var(--text-2);font-style:italic}
-table.data td.bk-acc{min-width:200px;padding-top:8px;padding-bottom:8px}
-table.data td.bk-acc .merchant-name{font-weight:inherit;overflow-wrap:break-word}
-table.data.bk-stmt td.bk-acc{width:46%}
-.bk-dc{font-size:11px;color:var(--text-3);margin-right:4px;font-weight:500}
-table.data tr.bk-row td{font-weight:400}
-.bk-code{color:var(--text-3);font-size:12px;font-variant-numeric:tabular-nums;margin-right:8px;font-weight:400}
-.bk-link{display:inline-flex;align-items:center;gap:2px;color:var(--accent-text);font-size:12px;line-height:16px;font-weight:500;padding:2px 6px;border-radius:var(--radius-xs);vertical-align:1px}
-tr .bk-link.bk-hover{opacity:0;transition:opacity var(--dur-fast) ease-out;margin-left:6px}
-tr:hover .bk-link.bk-hover,tr:focus-within .bk-link.bk-hover,.bk-link.bk-hover:focus-visible{opacity:1}
-.kpi-sub .badge{height:auto;min-height:20px;white-space:normal}
-.bk-link:hover,.bk-link:focus-visible{background:var(--accent-soft)}
-.bk-link svg.i{width:12px;height:12px}
-.bk-pager{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px var(--card-pad);border-top:1px solid var(--border);flex-wrap:wrap}
-.bk-pager .btns{display:flex;gap:6px}
-.bk-panel{position:sticky;top:20px;align-self:start}
-.bk-vhead{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
-.bk-vtitle{font-size:16px;font-weight:600;overflow-wrap:anywhere}
-.bk-badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.bk-check{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border);font-size:14px}
-.bk-check:first-child{border-top:none}
-.bk-check .li-body{flex:1;min-width:0}
-.bk-list .list-item{cursor:pointer}
-.bk-list .li-amt{font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
-.bk-note{border-radius:var(--radius-sm);margin-bottom:12px;padding:10px 14px}
-.bk-facts{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--text-2);margin-top:4px}
-.bk-facts b{color:var(--text-1);font-weight:600}
-@media (max-width:767px){
-  .bk-c-off{display:none!important}
-  tr .bk-link.bk-hover{display:none}
-  table.data td.bk-acc{min-width:0}
-  .bk-bar .input{flex:1 1 140px}
-  .bk-month{flex:1 1 100%}.bk-month .input{flex:1 1 auto;min-width:0}
-  .bk-search{max-width:none;flex-basis:100%}
-  .bk-date{flex:1 1 120px;width:auto!important}
-  .bk-panel{position:static}
-  table.data.bk-stmt td.bk-acc{overflow-wrap:anywhere}
-}`;
-    document.head.appendChild(s);
-  })();
+  // Styles: the core stylesheet in index.html ("v2 modules" section).
 
   /* ── Small formatting helpers ── */
   const PAGE_KEYS=['coa','journals','ledger','bs','pl','tb'];

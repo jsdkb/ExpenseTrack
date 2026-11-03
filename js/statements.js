@@ -182,18 +182,17 @@
     return R;
   }
 
-  /* ── Apply / strip. Corrections live on the transaction objects (tx.stmt keeps the original),
-     and the cached list may carry them, so every run first strips the previous run's changes. ── */
-  function strip(list){
-    const out=[];
-    for(const t of list||[]){
-      if(!t||t.stmtAdded)continue;
-      const s=t.stmt;
-      if(s){if(Object.prototype.hasOwnProperty.call(s,'set')&&t.amount===s.set)t.amount=s.orig;delete t.stmt;}
-      out.push(t);
-    }
-    return out;
+  /* ── Apply / strip. Corrections live on the transaction objects (tx.stmt keeps the original).
+     The cache never holds them (core saveCache runs unapply on a copy of every row), but a re-run
+     on the live list after a decision does, so every run first strips the previous run's changes. ── */
+  // One row back to the alert as it was before apply(): null for an added row. Changes `t` itself.
+  function unapply(t){
+    if(!t||t.stmtAdded)return null;
+    const s=t.stmt;
+    if(s){if(Object.prototype.hasOwnProperty.call(s,'set')&&t.amount===s.set)t.amount=s.orig;delete t.stmt;}
+    return t;
   }
+  function strip(list){return(list||[]).map(unapply).filter(Boolean);}
   function addedTx(a){
     const l=a.line,name=String(l.counterparty||l.desc||'Statement charge').replace(/\s+/g,' ').trim(),at=l.date+'T12:00:00';
     const clean=typeof cleanMerchant==='function'?cleanMerchant(name):name;
@@ -228,7 +227,7 @@
     JSON.stringify(STATE.cashPayerRules||{}),todayISO()].join('|');};
   function run(list){const base=strip(list);LAST=reconcile(base,opts());const out=apply(LAST,base);SIG=sig();CAL=null;return out;}
 
-  registerTransform('transactions',run);
+  registerTransform('transactions',run,unapply);
 
   // Re-run on the live lists after a decision, a new cash file, a re-tag or a merged Drive state.
   function refresh(){
@@ -239,11 +238,7 @@
     ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!t.stmtAdded).concat(added).sort(sortByDateDesc);
   }
   // Inputs can change without a reload (cash import, Drive merge), so check before each render.
-  const coreRender=window.renderAll;
-  if(typeof coreRender==='function')window.renderAll=function(){
-    try{if(DATA_READY&&SIG!==sig())refresh();}catch(e){console.error('Statements refresh failed',e);}
-    return coreRender.apply(this,arguments);
-  };
+  registerHook('beforeRender',()=>{if(DATA_READY&&SIG!==sig())refresh();});
 
   /* ── Decisions (STATE.stmtFix; dated entries, removals are dated tombstones) ── */
   const fixMap=sub=>{const f=STATE.stmtFix||(STATE.stmtFix={});return f[sub]||(f[sub]={});};
@@ -286,7 +281,7 @@
     setManual(id,on){put('manual',id,on?{on:true}:{deleted:true});commit(on?'Download reminder on':'Download reminder off');},
     openStmt,
     // For tests and other modules (read-only).
-    reconcile,strip,apply,calendar,cycleDay,expectedNext,comingUp,last:()=>LAST,refresh,
+    reconcile,strip,unapply,apply,calendar,cycleDay,expectedNext,comingUp,last:()=>LAST,refresh,
   };
   window.ETStatements=API;
 
@@ -361,10 +356,11 @@
   }
   let CAL=null;
   function calRows(){
-    const s=sig();if(CAL&&CAL.sig===s)return CAL.rows;
+    const s=sig()+'|'+(typeof BILLING!=='undefined'?BILLING.length:0);if(CAL&&CAL.sig===s)return CAL.rows;
     const c=CM(),billing=[];
     if(c){
-      const src=(typeof ALL_TRANSACTIONS_RAW!=='undefined'?ALL_TRANSACTIONS_RAW:[]).filter(t=>t&&t.type==='billing'&&t.dueDate);
+      // Billing reminders never reach the transaction lists; the core keeps them in BILLING.
+      const src=(typeof BILLING!=='undefined'?BILLING:[]).filter(t=>t&&t.type==='billing'&&t.dueDate);
       for(const t of src){const L=linkFor(t.bank||'Maybank',c.accounts,STATE.cardMap);const d=looseDate(t.dueDate);if(L.link&&d)billing.push({account:L.link,date:d});}
     }
     const rows=calendar({cash:c,today:todayISO(),fix:STATE.stmtFix||{},billing});
@@ -492,7 +488,7 @@
       <div class="list" style="margin-top:8px">
         ${row('Statement charges','Spending lines on the statement',money(s.charges),'')}
         ${row('Alerts before fixes','What your email alerts said',money(s.before),'')}
-        ${row('Alerts after fixes','What Overview, Spending and Credit cards now count',money(s.after),'')}</div>
+        ${row('Alerts after fixes','What Daily spending, Spending and Credit cards now count',money(s.after),'')}</div>
       <p class="help" style="margin-top:8px">${s.exact} alert${s.exact===1?'':'s'} matched the statement exactly.</p>
       ${part('Amounts fixed',fixRows)}${part('Only on the statement',addRows)}${part('Alerts not on the statement',revRows)}`;
   }
