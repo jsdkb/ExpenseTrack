@@ -1161,6 +1161,8 @@ function defaultState(){
     wealth: null, wealthMeta: null, closeTicks: {}, declared: {},
     cash: null, cashMeta: null, cashTypeOverrides: {}, cashPayerRules: {},
     monthEnd: {}, monthEndCfg: {},
+    // v3: when the last full backup was downloaded, and the reminder snoozed until.
+    lastBackupAt: null, backupRemindAfter: null,
     // v2 (docs/v2-interfaces.md §3). The books themselves live in their own appData file, books.json.
     booksMeta: null, stmtFix: {}, cardMap: {}, budgets: {}, goals: []
   };
@@ -1269,6 +1271,9 @@ function mergeStates(remote, local){
     const newer = (a, b) => { const o = { ...(a||{}) }; for (const [k, v] of Object.entries(b||{})) if (!o[k] || String(v&&v.at) >= String(o[k]&&o[k].at)) o[k] = v; return o; };
     merged.monthEnd[m] = { ...r, ...l, pos: newer(r.pos, l.pos), market: newer(r.market, l.market),
       exportedAt: [r.exportedAt, l.exportedAt].filter(Boolean).sort().pop() || null };
+    // The voucher this month's journal went into (own book): the later posting wins.
+    const pw = String(l.postedAt||'') >= String(r.postedAt||'') ? l : r;
+    if (pw.postedId) { merged.monthEnd[m].postedId = pw.postedId; merged.monthEnd[m].postedAt = pw.postedAt || null; }
   }
   {
     const r = remote.monthEndCfg || {}, l = local.monthEndCfg || {};
@@ -1282,6 +1287,17 @@ function mergeStates(remote, local){
     for (const [id, v] of Object.entries(local[k]||{})) if (!o[id] || String(v&&v.at) >= String(o[id]&&o[id].at)) o[id] = v;
     merged[k] = o;
   }
+  // A receipt posted to the book on one device stays posted when the other device's copy, edited
+  // since, doesn't know the voucher yet (the later posting wins if both posted).
+  for (const [id, v] of Object.entries(merged.income)) {
+    const a = (remote.income||{})[id], b = (local.income||{})[id];
+    if (!v || v.deleted || v.postedId) continue;
+    const pw = [a, b].filter(x => x && x.postedId && !x.deleted).sort((x, y) => String(y.postedAt||'').localeCompare(String(x.postedAt||'')))[0];
+    if (pw) merged.income[id] = { ...v, postedId: pw.postedId, postedAt: pw.postedAt || null };
+  }
+  // Backup reminder: the latest backup and the latest "remind me later" win.
+  merged.lastBackupAt = [remote.lastBackupAt, local.lastBackupAt].filter(Boolean).sort().pop() || null;
+  merged.backupRemindAfter = [remote.backupRemindAfter, local.backupRemindAfter].filter(Boolean).sort().pop() || null;
   // v2 keys: per entry, the newer `at` wins (a value without `at` loses to a dated one; between two
   // undated values this device wins). Removals are dated {deleted:true} entries, as for income.
   merged.stmtFix = {};
@@ -2070,14 +2086,15 @@ function toast(msg,o){
   run();
 }
 const BANNERS={};
-function showBanner(key,kind,icon,msg,actionLabel,action){
-  BANNERS[key]={kind,icon,msg,actionLabel,action};renderBanners();
+function showBanner(key,kind,icon,msg,actionLabel,action,alt){
+  BANNERS[key]={kind,icon,msg,actionLabel,action,alt};renderBanners();
 }
 function hideBanner(key){if(BANNERS[key]){delete BANNERS[key];renderBanners();}}
 function renderBanners(){
   const host=$('banners');if(!host)return;
-  host.innerHTML=Object.entries(BANNERS).map(([k,b])=>`<div class="banner ${b.kind}" role="${b.kind==='bad'?'alert':'status'}">${ic(b.icon)}<span class="msg">${escH(b.msg)}</span>${b.actionLabel?`<button class="btn btn-secondary btn-sm" data-banner="${k}">${escH(b.actionLabel)}</button>`:''}</div>`).join('');
+  host.innerHTML=Object.entries(BANNERS).map(([k,b])=>`<div class="banner ${b.kind}" role="${b.kind==='bad'?'alert':'status'}">${ic(b.icon)}<span class="msg">${escH(b.msg)}</span>${b.actionLabel?`<button class="btn btn-secondary btn-sm" data-banner="${k}">${escH(b.actionLabel)}</button>`:''}${b.alt?`<button class="btn btn-ghost btn-sm" data-banner-alt="${k}">${escH(b.alt.label)}</button>`:''}</div>`).join('');
   host.querySelectorAll('[data-banner]').forEach(btn=>btn.onclick=()=>{const b=BANNERS[btn.dataset.banner];if(b&&b.action)b.action();});
+  host.querySelectorAll('[data-banner-alt]').forEach(btn=>btn.onclick=()=>{const b=BANNERS[btn.dataset.bannerAlt];if(b&&b.alt&&b.alt.action)b.alt.action();});
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -3523,6 +3540,8 @@ function renderSettings(){
           <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${CM()?`<button class="btn btn-secondary" onclick="setTab('cash')">Open${ic('chevron-right','s16')}</button>`:''}<button class="btn btn-ghost" onclick="importWealthFile()">Import file…</button></div></div>
         <div class="setting-row"><div><div class="li-title">Currencies</div><div class="li-sub">Exchange rates for foreign debit-card spend</div></div><button class="btn btn-ghost" onclick="CARDS_SUB='fx';setTab('cards')">Open rates${ic('chevron-right','s16')}</button></div>
         <div class="setting-row"><div><div class="li-title">Export</div><div class="li-sub">All transactions as a CSV file that opens in Excel</div></div><button class="btn btn-secondary" onclick="exportToExcel()">${ic('download')}Export</button></div>
+        <div class="setting-row" id="set-backup"><div><div class="li-title">Full backup</div><div class="li-sub">${escH(backupSummaryLine())}</div></div><button class="btn btn-secondary" onclick="backupDownload()">${ic('download')}Download full backup</button></div>
+        <div class="setting-row"><div><div class="li-title">Restore from backup</div><div class="li-sub">Adds what a backup file has to what you already have. Nothing is replaced or removed.</div></div><button class="btn btn-ghost" onclick="backupPick()">${ic('upload')}Restore from backup…</button></div>
         <div class="setting-row"><div><div class="li-title">Account</div><div class="li-sub">${escH(USER_EMAIL||'Signed in')}</div></div><button class="btn btn-danger" onclick="signOut()">${ic('log-out')}Sign out</button></div>
       </section>
       ${typeof ledgerSettingsHTML==='function'?ledgerSettingsHTML():''}
@@ -3544,6 +3563,111 @@ function renderMore(){
     <button class="list-item" onclick="signOut()" style="color:var(--bad)">${ic('log-out')}<span class="li-body"><span class="li-title">Sign out</span><span class="li-sub" style="display:block">${escH(USER_EMAIL)}</span></span></button>
   </div></div>`;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   BACKUP AND RESTORE (docs/v3-ledger.md §7). One file, schema et-backup/1:
+   { schema, createdAt, ledger: the app's own book (or null), state: STATE without the wealth and
+   cash copies (the book holds them), without anything secret }. Restoring MERGES: the book through
+   ledgerMergeIn, the rest through mergeStates (this device's choices win a tie); nothing is replaced
+   or removed. A quiet banner asks for a new backup once the last one is over 31 days old.
+   ══════════════════════════════════════════════════════════════════ */
+const BACKUP_SCHEMA='et-backup/1',BACKUP_DAYS=31,BACKUP_SNOOZE_DAYS=7;
+const BACKUP_SECRET_KEY=/^((api|ai|secret|client|access|refresh|auth|private)[-_]?(key|token|secret)|secret|token|password|passwd|authorization)$/i,BACKUP_SECRET_VALUE=/(^|[^A-Za-z0-9])sk-(ant-)?[A-Za-z0-9_-]{16,}/;
+function backupStripSecrets(x){
+  if(Array.isArray(x)){x.forEach(backupStripSecrets);return x;}
+  if(x&&typeof x==='object')for(const k of Object.keys(x)){if(BACKUP_SECRET_KEY.test(k)||(typeof x[k]==='string'&&BACKUP_SECRET_VALUE.test(x[k])))delete x[k];else backupStripSecrets(x[k]);}
+  return x;
+}
+// The wealth and cash copies are left out only when the book holds them; before the book is set up
+// they are the only copy in the Drive file, so they go in.
+function backupState(own){
+  const o=backupStripSecrets(JSON.parse(JSON.stringify(STATE)));
+  if(own)for(const k of['wealth','wealthMeta','cash','cashMeta'])delete o[k];
+  return o;
+}
+function backupFileName(d){const p=n=>String(n).padStart(2,'0');d=d||new Date();return`expensetrack-backup-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.json`;}
+async function backupBuild(){
+  try{await ensureLedger();}catch(_){}
+  const own=typeof ledgerSeeded==='function'&&ledgerSeeded();
+  if(own){try{await ledgerFlush();}catch(_){}}
+  return{schema:BACKUP_SCHEMA,createdAt:new Date().toISOString(),ledger:own?backupStripSecrets(ledgerExport()):null,state:backupState(own)};
+}
+async function backupDownload(){
+  let doc;try{doc=await backupBuild();}catch(e){toast('Couldn’t build the backup: '+(e.message||e));return null;}
+  const name=backupFileName(),blob=new Blob([JSON.stringify(doc)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  STATE.lastBackupAt=doc.createdAt;STATE.backupRemindAfter=null;scheduleDriveSave();hideBanner('backup');renderAll();
+  toast(`Saved ${name} to your downloads`);return doc;
+}
+function backupSummaryLine(){
+  const last=STATE.lastBackupAt,n=last?Math.floor((Date.now()-Date.parse(last))/864e5):null;
+  const what=typeof ledgerSeeded==='function'&&ledgerSeeded()?'Your book and everything you saved in the app':'Everything you saved in the app';
+  return`${what}, in one file${last?` · last backup ${n<=0?'today':n===1?'yesterday':n+' days ago'}`:' · no backup downloaded yet'}`;
+}
+// What a restore can bring, counted before and after.
+function backupCounts(){
+  const live=o=>Object.values(o||{}).filter(x=>x&&!x.deleted).length;
+  return{vouchers:0,accounts:0,transactions:(STATE.txns||[]).length+(STATE.manualTxns||[]).length,payments:(STATE.payments||[]).length,
+    income:live(STATE.income),closes:Object.keys(STATE.monthEnd||{}).length,newAccounts:live(STATE.newAccounts),goals:(STATE.goals||[]).length,
+    rules:Object.keys(STATE.merchantCats||{}).length+(STATE.patternRules||[]).length};
+}
+// Validates first, merges the book, then the rest. Returns the counts of what it added.
+async function backupRestoreDoc(doc){
+  if(!doc||doc.schema!==BACKUP_SCHEMA||!doc.state||typeof doc.state!=='object'||Array.isArray(doc.state))throw new Error('That is not an ExpenseTrack backup file');
+  if(doc.ledger!=null&&(typeof doc.ledger!=='object'||doc.ledger.schema!=='et-ledger/1'))throw new Error('The book inside this backup is not readable');
+  try{await ensureLedger();}catch(_){}
+  const before=backupCounts();let book={vouchers:0,accounts:0};
+  if(doc.ledger)book=ledgerMergeIn(backupStripSecrets(doc.ledger),'backup');   // throws before anything else changes
+  const remote={...defaultState(),...backupStripSecrets(JSON.parse(JSON.stringify(doc.state)))};
+  STATE=mergeStates(remote,STATE);
+  saveStateMirror(STATE);scheduleDriveSave();
+  const after=backupCounts();
+  return{vouchers:book.vouchers,accounts:book.accounts,transactions:after.transactions-before.transactions,payments:after.payments-before.payments,
+    income:after.income-before.income,closes:after.closes-before.closes,newAccounts:after.newAccounts-before.newAccounts,
+    goals:after.goals-before.goals,rules:after.rules-before.rules,createdAt:doc.createdAt||null};
+}
+function backupSummaryText(r){
+  const pl=(n,w,w2)=>`${n} ${n===1?w:(w2||w+'s')}`,bits=[];
+  if(r.vouchers)bits.push(pl(r.vouchers,'voucher'));if(r.accounts)bits.push(pl(r.accounts,'account'));
+  if(r.transactions)bits.push(pl(r.transactions,'card transaction'));if(r.payments)bits.push(pl(r.payments,'card payment'));
+  if(r.income)bits.push(pl(r.income,'income receipt'));if(r.closes)bits.push(pl(r.closes,'month-end close'));
+  if(r.newAccounts)bits.push(pl(r.newAccounts,'account added in the app','accounts added in the app'));if(r.goals)bits.push(pl(r.goals,'goal'));if(r.rules)bits.push(pl(r.rules,'rule'));
+  return bits.length?'Added '+bits.join(', ')+'.':'Nothing new: everything in this backup was already here.';
+}
+async function backupRestoreText(text){
+  let doc;try{doc=JSON.parse(text);}catch(_){toast('That file isn’t a backup (it isn’t valid JSON)');return null;}
+  try{
+    const r=await backupRestoreDoc(doc);
+    renderAll();
+    openSheet({title:'Backup restored',body:`<p>${escH(backupSummaryText(r))}</p><p class="help">${r.createdAt?`The backup was made ${escH(fmtDateTime(r.createdAt))}. `:''}Restoring only adds: your current figures, vouchers and choices were kept. If card transactions were added, press Sync now to refresh them.</p>`,
+      foot:`<button class="btn btn-primary" onclick="closeTopSheet(true)">Done</button>`});
+    return r;
+  }catch(e){toast(e.message||'Couldn’t restore that backup');return null;}
+}
+function backupPick(){
+  const i=document.createElement('input');i.type='file';i.accept='.json,application/json';
+  i.onchange=async()=>{const f=i.files&&i.files[0];if(f)backupRestoreText(await f.text());};i.click();
+}
+// The quiet reminder: shown once the book is set up and the last backup (or the set-up, if none yet) is over 31 days old.
+function backupAgeDays(){
+  const base=STATE.lastBackupAt||(typeof LEDGER==='function'&&LEDGER()&&LEDGER().seededAt)||null;
+  return base?(Date.now()-Date.parse(base))/864e5:0;
+}
+function backupDue(){
+  if(!(typeof ledgerSeeded==='function'&&ledgerSeeded()))return false;
+  if(STATE.backupRemindAfter&&Date.now()<Date.parse(STATE.backupRemindAfter))return false;
+  return backupAgeDays()>BACKUP_DAYS;
+}
+function backupSnooze(){STATE.backupRemindAfter=new Date(Date.now()+BACKUP_SNOOZE_DAYS*864e5).toISOString();scheduleDriveSave();hideBanner('backup');toast('Reminder in 7 days');}
+function backupReminderCheck(){
+  if(backupDue()){
+    if(!BANNERS.backup){const d=Math.floor(backupAgeDays());
+      showBanner('backup','info','info',STATE.lastBackupAt?`Your last full backup is ${d} days old. A fresh one takes a few seconds.`:`You haven’t downloaded a backup of your book yet (set up ${d} days ago).`,
+        'Back up now',()=>{backupDownload();},{label:'Remind me in 7 days',action:backupSnooze});}
+  }else if(BANNERS.backup)hideBanner('backup');
+}
+registerHook('beforeRender',backupReminderCheck);
 
 /* ══════════════════════════════════════════════════════════════════
    LOADING STATES — skeleton + brand loader (§12)
@@ -3954,7 +4078,10 @@ function renderAccounts(){
    reads the books on the user's computer; this page shows where each close stands. The only
    thing the app records is which entries the user has ticked as posted (Drive). ── */
 function wCloses(){const w=W();return w&&Array.isArray(w.closes)?[...w.closes].sort((a,b)=>b.month.localeCompare(a.month)):[];}
-function entryPosted(c,e){const t=(STATE.closeTicks||{})[c.month]||{};return t[e.id]!==undefined?!!t[e.id]:e.status==='posted';}
+// Once the app keeps its own book, the app journal (J) counts as posted when its voucher is in the book (not a tick).
+function entryPosted(c,e){
+  if(c.app&&e.id==='J'&&typeof meOwn==='function'&&meOwn())return e.status==='posted';
+  const t=(STATE.closeTicks||{})[c.month]||{};return t[e.id]!==undefined?!!t[e.id]:e.status==='posted';}
 function toggleEntryPosted(month,id){
   const c=allCloses().find(x=>x.month===month),e=c&&c.entries.find(x=>x.id===id);if(!e)return;
   const t=STATE.closeTicks||(STATE.closeTicks={});const m=t[month]||(t[month]={});
@@ -4070,7 +4197,7 @@ function meBook(code,bi){return bi<0?0:(wMonths()[bi].balances[code]||0);}
 function meIncAfter(M,code,bi){return incOn(code,bi>=0?meMonthEnd(wMonths()[bi].month):'',meMonthEnd(M));}
 // Typed receipts inside the book's months that the journal can't place: not ticked Posted, so
 // it can't tell whether the book already has them.
-function meIncUnsure(M,bi){const be=bi>=0?meMonthEnd(wMonths()[bi].month):'';return incList().filter(x=>x.date<=be&&x.date<=meMonthEnd(M)&&incBookState(x,be)!=='in'&&(!x.posted||incBookState(x,be)==='unsure'));}
+function meIncUnsure(M,bi){if(meOwn())return[];const be=bi>=0?meMonthEnd(wMonths()[bi].month):'';return incList().filter(x=>x.date<=be&&x.date<=meMonthEnd(M)&&incBookState(x,be)!=='in'&&(!x.posted||incBookState(x,be)==='unsure'));}
 function meExpected(M,code,bi){return meBook(code,bi)+meIncAfter(M,code,bi);}
 function meLedger(){const w=W(),l=w&&Array.isArray(w.ledger)?w.ledger:[];const x=STATE.newAccounts&&Object.keys(STATE.newAccounts).length?naLedger().filter(a=>!l.some(b=>b.id===a.id)):[];return x.length?[...l,...x]:l;}
 function meName(id){const a=wAcc(id);if(a)return a.name;const l=meLedger().find(x=>x.id===id);return l?l.name:id;}
@@ -4147,7 +4274,10 @@ function meJournal(M){
     const p=mePosOf(M,a.id);if(!p)continue;
     const d=Math.round(p.v-meExpected(M,a.id,bi));if(Math.abs(d)<1)continue;
     const line={account:a.id,amount:a.side==='asset'?d:-d,memo:meText('Month-end: '+a.name,80)};
-    ((a.ccy||'IDR')==='IDR'?pos:fx).push(line);
+    const fxA=(a.ccy||'IDR')!=='IDR',rate=fxA&&p.fx&&p.fx.rate>0?+p.fx.rate:0;
+    // The book keeps foreign accounts in rupiah; the foreign figure on the line is the rupiah change at the month-end rate.
+    if(rate)line.fx={ccy:String(a.ccy).toUpperCase(),amount:Math.round(line.amount/rate*1e6)/1e6,rate};
+    (fxA?fx:pos).push(line);
   }
   // Statement activity on matched rupiah accounts since the book's last month-end, by type.
   // Card payments, own transfers and investment moves have both sides inside this voucher.
@@ -4169,24 +4299,71 @@ function meJournal(M){
   const fxRes=-fx.reduce((s,l)=>s+l.amount,0);
   if(fx.length)fx.push({account:cfg.diffAccount||'',amount:fxRes,memo:'Month-end difference, foreign-currency accounts'});
   const missing=accs.filter(a=>!mePosOf(M,a.id)).length;
+  const pv=mePostedV(M);
   const earlier=Object.keys(meStore()).filter(k=>k<M&&(!bookM||k>bookM)&&meJournalHasLines(k)).sort();
   const issues=[];
   if(missing)issues.push(`Fill in every account first — ${missing} left`);
   if(earlier.length)issues.push(`The ${earlier.map(k=>monthLabel(k,true)).join(', ')} journal isn’t in the book yet. Import it and refresh the snapshot first, or this month would book it twice.`);
-  const incTodo=incList().filter(x=>x.date<=to&&!x.exportedAt&&!incInBook(x,from)).length,incUnsure=meIncUnsure(M,bi).length;
+  const own=meOwn(),incTodo=incList().filter(x=>x.date<=to&&!x.exportedAt&&!incInBook(x,from)).length,incUnsure=meIncUnsure(M,bi).length;
   if(incUnsure)issues.push(`${incUnsure} typed income receipt${incUnsure===1?'':'s'} dated within the book’s months need${incUnsure===1?'s':''} an answer on the Income page: tick Posted once imported, and say whether this snapshot has ${incUnsure===1?'it':'them'}, so this journal doesn’t book ${incUnsure===1?'it':'them'} twice.`);
-  if(incTodo)issues.push(`${incTodo} income receipt${incTodo===1?'':'s'} in this period ${incTodo===1?'isn’t':'aren’t'} saved for import yet. This journal counts typed income as booked, so download it on the Income page first.`);
+  if(incTodo)issues.push(own?`${incTodo} income receipt${incTodo===1?'':'s'} in this period ${incTodo===1?'isn’t':'aren’t'} posted to your book yet. This journal counts typed income as booked, so post ${incTodo===1?'it':'them'} on the Income page first.`
+    :`${incTodo} income receipt${incTodo===1?'':'s'} in this period ${incTodo===1?'isn’t':'aren’t'} saved for import yet. This journal counts typed income as booked, so download it on the Income page first.`);
   if(lines.some(l=>!l.account))issues.push('Choose a difference account under Counter-accounts');
-  if(!lines.length&&!missing)issues.push('Nothing to post: every rupiah account matches the book');
+  if(!lines.length&&!missing&&!pv)issues.push('Nothing to post: every rupiah account matches the book');
   const pending=[...new Set([...lines,...fx].map(l=>l.account).filter(naPending))];
-  return{date:to,description:meText(`Month-end reconciliation ${monthLabel(M,true)}`,200),lines,fx,buckets,residual,bookM,from,issues,pending};
+  const j={date:to,description:meText(`Month-end reconciliation ${monthLabel(M,true)}`,200),lines,fx,buckets,residual,bookM,from,issues,pending,state:'new',posted:null};
+  if(pv)meApplyPosted(M,j,pv);
+  return j;
+}
+/* ── Posting the journal to the app's own book (ledger origin 'month-end'). The positions table
+   compares your figures with the live book, which holds the posted voucher, so right after posting every
+   difference is zero. If a figure changes later, the journal above is only the change; the update merges
+   it into the posted voucher (state 'update'), so the book never gets a second voucher for the month. ── */
+const ME_FXDIFF='Month-end difference, foreign-currency accounts';
+function meOwn(){return typeof ledgerSeeded==='function'&&ledgerSeeded();}
+function mePostedV(M){const st=meStore()[M],id=st&&st.postedId;if(!id||!meOwn())return null;const v=LEDGER().vouchers[id];return v&&v.status==='posted'?v:null;}
+function meFxGroup(l){return!!l.fx||l.memo===ME_FXDIFF;}
+function meApplyPosted(M,j,pv){
+  const resid=[...j.lines,...j.fx];
+  if(!resid.length){j.state='posted';j.posted=pv;j.lines=[];j.fx=[];return;}
+  const map=new Map(),key=l=>l.account+'|'+(meFxGroup(l)?'f':'i');
+  for(const l of pv.lines)map.set(key(l),{account:l.account,amount:l.amount,memo:l.memo||'',...(l.fx?{fx:{...l.fx}}:{})});
+  for(const l of resid){
+    const k=key(l),cur=map.get(k);
+    if(cur){cur.amount+=l.amount;if(l.fx)cur.fx=l.fx;}else map.set(k,{...l});
+  }
+  const out=[];
+  for(const l of map.values()){
+    if(Math.abs(l.amount)<1)continue;
+    if(l.fx&&l.fx.rate>0)l.fx={ccy:l.fx.ccy,rate:l.fx.rate,amount:Math.round(l.amount/l.fx.rate*1e6)/1e6};
+    out.push(l);
+  }
+  j.state='update';j.posted=pv;
+  j.lines=out.filter(l=>!meFxGroup(l));j.fx=out.filter(meFxGroup);
+}
+function meLedgerLine(l){const o={account:l.account,amount:l.amount,memo:l.memo||''};if(l.fx)o.fx={ccy:l.fx.ccy,amount:l.fx.amount,rate:l.fx.rate};return o;}
+function mePost(M){
+  if(!meOwn()){toast('Your book isn’t set up yet');return;}
+  const st=meClose0(M),j=meJournal(M);if(!st)return;
+  if(j.state==='posted'){toast('Already posted to your book');return;}
+  if(j.issues.length){toast(j.issues[0]);return;}
+  const lines=[...j.lines,...j.fx].map(meLedgerLine);
+  try{
+    if(j.state==='update')ledgerEdit(st.postedId,{date:j.date,description:j.description,lines},'Updated after the month-end positions changed');
+    else st.postedId=ledgerPost({date:j.date,description:j.description,ref:'month-end:'+M,lines},{origin:'month-end',why:'Month-end '+M});
+  }catch(e){toast(e.errors&&e.errors[0]||e.message||'Couldn’t post to your book');return;}
+  st.postedAt=meStamp();scheduleDriveSave();renderAll();
+  toast(j.state==='update'?`${monthLabel(M,true)} entry updated in your book`:`${monthLabel(M,true)} posted to your book`);
 }
 // Used only to spot an earlier close whose journal would still be waiting (cheap: positions only).
 function meJournalHasLines(M){const bi=meBookIdx(M);return meAccounts(M).some(a=>{if((a.ccy||'IDR')!=='IDR')return false;const p=mePosOf(M,a.id);return p&&Math.abs(Math.round(p.v-meExpected(M,a.id,bi)))>=1;});}
-function meVouchers(M){const j=meJournal(M);return[{date:j.date,description:j.description,lines:j.lines.map(l=>({account:l.account,amount:l.amount,memo:l.memo}))}];}
+// The Accurate import file: the rupiah lines only. Once posted to the book, the posted voucher's rupiah lines.
+function meVouchers(M){
+  const j=meJournal(M),ls=j.state==='posted'?j.posted.lines.filter(l=>!meFxGroup(l)):j.lines;
+  return[{date:j.date,description:j.description,lines:ls.map(l=>({account:l.account,amount:l.amount,memo:l.memo}))}];}
 function meFileName(M){return`${meText(W().source.book||'book',20).replace(/[^A-Za-z0-9_-]/g,'')}-month-end-${M}.json`;}
 function meExport(M){
-  const j=meJournal(M);if(j.issues.length){toast(j.issues[0]);return;}
+  const j=meJournal(M);if(j.issues.length&&j.state!=='posted'){toast(j.issues[0]);return;}
   const st0=meClose0(M);
   if(st0.exportedAt&&W().source.asOf<M&&!confirm(`You already saved this voucher on ${fmtDateTime(st0.exportedAt)}. Import only one of the files, or the book gets it twice. Download again?`))return;
   const blob=new Blob([JSON.stringify(meVouchers(M),null,1)],{type:'application/json'});
@@ -4297,7 +4474,7 @@ function meMapHTML(){
 function meLinesTable(lines){
   const td=lines.reduce((s,l)=>s+(l.amount>0?l.amount:0),0),tc=lines.reduce((s,l)=>s+(l.amount<0?-l.amount:0),0);
   return`<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Account</th><th scope="col" class="num">Debit</th><th scope="col" class="num">Credit</th></tr></thead>
-    <tbody>${lines.map(l=>`<tr><td>${l.account?`<span class="muted">${escH(l.account)}</span> ${escH(meName(l.account))}`:'<span class="badge warn">Choose a difference account</span>'}<div class="merchant-sub">${escH(l.memo)}</div></td><td class="num amt">${l.amount>0?fmtIDR(l.amount):''}</td><td class="num amt">${l.amount<0?fmtIDR(-l.amount):''}</td></tr>`).join('')}</tbody>
+    <tbody>${lines.map(l=>`<tr><td>${l.account?`<span class="muted">${escH(l.account)}</span> ${escH(meName(l.account))}`:'<span class="badge warn">Choose a difference account</span>'}<div class="merchant-sub">${escH(l.memo)}${l.fx&&l.fx.rate?` · ${escH(l.fx.ccy)} ${fmtNum2(l.fx.amount)} at ${fmtNum2(l.fx.rate)}`:''}</div></td><td class="num amt">${l.amount>0?fmtIDR(l.amount):''}</td><td class="num amt">${l.amount<0?fmtIDR(-l.amount):''}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td style="font-weight:600">Total${Math.round(td)!==Math.round(tc)?' <span class="badge bad">Unbalanced</span>':''}</td><td class="num amt" style="font-weight:600">${fmtIDR(td)}</td><td class="num amt" style="font-weight:600">${fmtIDR(tc)}</td></tr></tfoot></table></div>`;
 }
 function meCounterHTML(M,j){
@@ -4311,20 +4488,32 @@ function meCounterHTML(M,j){
     ${rows}</details>`;
 }
 function meJournalHTML(M,c){
-  const j=meJournal(M),e=c.entries.find(x=>x.id==='J'),posted=e?entryPosted(c,e):false,st=meClose0(M);
+  const j=meJournal(M),e=c.entries.find(x=>x.id==='J'),posted=e?entryPosted(c,e):false,st=meClose0(M),own=meOwn();
   const period=j.from?`${meDay(j.from)} ${j.from.slice(0,4)} – ${meDay(j.date)} ${j.date.slice(0,4)}`:`up to ${meDay(j.date)} ${j.date.slice(0,4)}`;
-  const body=j.lines.length?`<div class="entry${posted?' posted':''}"><div class="entry-head"><div class="li-title"><span class="badge accent" style="margin-right:8px">J</span>${escH(j.description)} · dated ${escH(meDay(j.date))} ${j.date.slice(0,4)}</div>
+  const jtitle=(extra)=>`<div class="li-title"><span class="badge accent" style="margin-right:8px">J</span>${escH(j.description)} · dated ${escH(meDay(j.date))} ${j.date.slice(0,4)}${extra||''}</div>`;
+  let body;
+  if(own&&j.state==='posted'){
+    const v=j.posted;
+    body=`<div class="entry posted" id="mePosted"><div class="entry-head">${jtitle(` <span class="badge good" style="margin-left:8px">${ic('check','s16','width:11px;height:11px;margin-right:4px')}Posted to your book</span>`)}
+      <div class="entry-tools"><button class="btn btn-ghost btn-sm" onclick="openJournals({from:'${escAttr(v.date)}',to:'${escAttr(v.date)}'})" title="Find the voucher in Journals">${ic('book-open','s16')}View voucher</button></div></div>${meLinesTable(v.lines)}
+      <p class="help" style="margin-top:10px">${st&&st.postedAt?`Posted ${escH(fmtDateTime(st.postedAt))}. `:''}Your figures match the book. If you change one, the page offers to update this entry; it never adds a second voucher.</p></div>`;
+  }else if(j.lines.length||(own&&j.fx.length)){
+    const upd=own&&j.state==='update';
+    body=`<div class="entry${posted?' posted':''}"><div class="entry-head">${jtitle()}${own?'':`
       <div class="entry-tools"><button class="btn btn-ghost btn-sm" onclick="copyEntry('${escAttr(M)}','J')">${ic('download','s16')}Copy</button>
-      <label class="check"><input type="checkbox" ${posted?'checked':''} onchange="toggleEntryPosted('${escAttr(M)}','J')"> Posted in Accurate</label></div></div>${meLinesTable(j.lines)}</div>`
-    :emptyHTML('square-check',j.issues.length?j.issues[0]:'Nothing to post');
-  const fx=j.fx.length?`<div class="entry"><div class="entry-head"><div class="li-title"><span class="badge warn" style="margin-right:8px">FX</span>Foreign-currency accounts — post by hand in Accurate (the import file can’t carry exchange rates)</div></div>${meLinesTable(j.fx)}</div>`:'';
-  const can=!j.issues.length;
+      <label class="check"><input type="checkbox" ${posted?'checked':''} onchange="toggleEntryPosted('${escAttr(M)}','J')"> Posted in Accurate</label></div>`}</div>
+      ${upd?`<div class="banner info me-banner">${ic('info')}<span class="msg">You changed your figures after posting this month. Update the posted entry so the book follows; the earlier version stays in its history.</span></div>`:''}${j.lines.length?meLinesTable(j.lines):''}</div>`;
+  }else body=emptyHTML('square-check',j.issues.length?j.issues[0]:'Nothing to post');
+  const fx=j.fx.length&&!(own&&j.state==='posted')?`<div class="entry"><div class="entry-head"><div class="li-title"><span class="badge warn" style="margin-right:8px">FX</span>${own?'Foreign-currency accounts — go into your book with the lines above. The Accurate import file leaves them out (it can’t carry exchange rates)':'Foreign-currency accounts — post by hand in Accurate (the import file can’t carry exchange rates)'}</div></div>${meLinesTable(j.fx)}</div>`:'';
+  const can=!j.issues.length||(own&&j.state==='posted');
   const next=st&&st.exportedAt?`<div class="me-next"><div class="li-title">${ic('square-check','s16')} Saved ${escH(fmtDateTime(st.exportedAt))} as <code>${escH(meFileName(M))}</code></div>
-      <p class="help">Next: ask Claude to import it into Accurate, or run <code>accurate-write queue --book ${escH(W().source.book)} --file "%USERPROFILE%\\Downloads\\${escH(meFileName(M))}" --check-only</code>, then without <code>--check-only</code>, then <code>accurate-write import --book ${escH(W().source.book)}</code>. Tick “Posted in Accurate” once it’s in.</p></div>`:'';
-  const tools=`<button class="btn btn-primary btn-sm" ${can?'':'disabled aria-disabled="true"'} onclick="meExport('${escAttr(M)}')" title="${can?'Download the voucher in the Accurate import format':escH(j.issues[0]||'')}">${ic('download','s16')}${st&&st.exportedAt?'Download again':'Download for Accurate import'}</button>`;
-  return`<section class="card span-12" id="meJournal">${cardHead('receipt','Suggested journal',`One voucher that brings the book to your figures · statement activity ${escH(period)}`,tools)}
+      <p class="help">${own?'Optional: only if you also want this in Accurate. ':''}Next: ask Claude to import it into Accurate, or run <code>accurate-write queue --book ${escH(W().source.book)} --file "%USERPROFILE%\Downloads\${escH(meFileName(M))}" --check-only</code>, then without <code>--check-only</code>, then <code>accurate-write import --book ${escH(W().source.book)}</code>.${own?' The next books import links it to the entry in your book instead of adding it again.':' Tick “Posted in Accurate” once it’s in.'}</p></div>`:'';
+  const dl=`<button class="btn ${own?'btn-secondary':'btn-primary'} btn-sm" ${can?'':'disabled aria-disabled="true"'} onclick="meExport('${escAttr(M)}')" title="${can?'Download the voucher in the Accurate import format':escH(j.issues[0]||'')}">${ic('download','s16')}${st&&st.exportedAt?'Download again':own?'Download for Accurate import (optional)':'Download for Accurate import'}</button>`;
+  const post=own&&j.state!=='posted'?`<button class="btn btn-primary btn-sm" id="mePostBtn" ${j.issues.length?'disabled aria-disabled="true"':''} onclick="mePost('${escAttr(M)}')" title="${j.issues.length?escH(j.issues[0]):'Put this voucher in your own book'}">${ic('book-open','s16')}${j.state==='update'?'Update posted entry':'Post to book'}</button>`:'';
+  const tools=post+dl;
+  return`<section class="card span-12" id="meJournal">${cardHead('receipt','Suggested journal',own?`One voucher that brings your book to your figures · statement activity ${escH(period)}`:`One voucher that brings the book to your figures · statement activity ${escH(period)}`,tools)}
     ${!can&&j.lines.length?`<p class="help err" style="margin-bottom:12px">${ic('info','s16')}${escH(j.issues[0])}</p>`:''}
-    ${j.pending.length?`<p class="help" style="margin-bottom:12px;color:var(--warn)">${ic('triangle-alert','s16')}${j.pending.map(escH).join(', ')} ${j.pending.length===1?'isn’t':'aren’t'} in Accurate yet — create ${j.pending.length===1?'it':'them'} there before importing this file.</p>`:''}
+    ${j.pending.length&&!own?`<p class="help" style="margin-bottom:12px;color:var(--warn)">${ic('triangle-alert','s16')}${j.pending.map(escH).join(', ')} ${j.pending.length===1?'isn’t':'aren’t'} in Accurate yet — create ${j.pending.length===1?'it':'them'} there before importing this file.</p>`:''}
     ${body}${fx}${next}${meCounterHTML(M,j)}</section>`;
 }
 // Patch only what depends on the figures, so the input being typed in keeps its cursor.
@@ -4350,7 +4539,8 @@ function meCloseView(M,snap){
   const rows=accs.filter(a=>mePosOf(M,a.id)).map(a=>{const v=mePosOf(M,a.id).v,bk=meExpected(M,a.id,bi);return{account:a.id,books:bk,actual:v,diff:Math.round(v-bk)};});
   const toLines=ls=>ls.map(l=>({account:l.account,name:meName(l.account),debit:l.amount>0?l.amount:0,credit:l.amount<0?-l.amount:0}));
   const entries=[...(snap?snap.entries:[])];
-  if(j.lines.length)entries.push({id:'J',memo:j.description,status:'to-post',lines:toLines(j.lines)});
+  if(j.state==='posted')entries.push({id:'J',memo:j.description,status:'posted',lines:toLines(j.posted.lines)});
+  else if(j.lines.length)entries.push({id:'J',memo:j.description,status:'to-post',lines:toLines(j.lines)});
   const asOf=W().source.asOf,through=asOf>=M,open=rows.filter(r=>Math.abs(r.diff)>=1).length;
   const c={month:M,label:monthLabel(M),app:true,positions:rows,entries,note:snap?snap.note:'',missing:accs.length-rows.length,
     booksAsOf:bi>=0?wMonths()[bi].month:null,recheck:through&&!(accs.length-rows.length)?{asOf,openDiffs:open}:null};
@@ -4493,6 +4683,7 @@ function incLinks(){
 // Saved before and ticked after the snapshot → it may or may not be in: you answer once on the
 // Income page ("In this snapshot?"), stored as inBookAt / notInBookAt (that snapshot's time).
 function incBookState(x,bookEnd){
+  if(incOwn())return incBook().has(x.id)?'in':'out';   // the app's own book answers; no guessing from timestamps
   const w=W();if(!w||!bookEnd||x.date>bookEnd||!x.posted)return'out';
   const g=Date.parse(w.generatedAt),t=v=>v?Date.parse(v):NaN;
   if(g>=t(x.inBookAt)||g>t(x.postedAt))return'in';
@@ -4500,6 +4691,27 @@ function incBookState(x,bookEnd){
   return'unsure';
 }
 function incInBook(x,bookEnd){return incBookState(x,bookEnd)==='in';}
+/* ── Once the app keeps its own book, a receipt is "in the book" when its voucher is posted there
+   (x.postedId, origin 'income') or an Accurate voucher with the same date, total and accounts has
+   come in since it was saved or ticked. Cached per change of the book or of the receipts. ── */
+function incOwn(){return typeof ledgerSeeded==='function'&&ledgerSeeded();}
+function incPostedV(x){if(!x||!x.postedId||!incOwn())return null;const v=LEDGER().vouchers[x.postedId];return v&&v.status==='posted'?v:null;}
+let INC_BK={key:'',map:null};
+function incBook(){
+  const L=LEDGER(),xs=incList();
+  const key=L.updatedAt+'|'+Object.keys(L.vouchers).length+'|'+xs.map(i=>[i.id,i.postedId||'',i.date,i.amount,i.account,i.incomeAccount,i.posted?1:0,i.exportedAt?1:0].join(':')).join(',');
+  if(INC_BK.key===key&&INC_BK.map)return INC_BK.map;
+  const pool=new Map(),map=new Map();
+  for(const v of Object.values(L.vouchers))if(v.origin==='accurate'&&v.status==='posted'){const k=ledgerLib.sigOf(v);pool.set(k,(pool.get(k)||0)+1);}
+  for(const i of xs){
+    const pv=i.postedId&&L.vouchers[i.postedId];
+    if(pv&&pv.status==='posted'){map.set(i.id,'own');continue;}
+    if(!(i.exportedAt||i.posted)||!i.account||!i.incomeAccount||!(i.amount>0))continue;
+    const k=ledgerLib.sigOf(incVoucher(i)),n=pool.get(k)||0;
+    if(n>0){pool.set(k,n-1);map.set(i.id,'accurate');}
+  }
+  INC_BK={key,map};return map;
+}
 function incSnapBookEnd(){const w=W();return w?meMonthEnd(w.source.asOf):'';}
 function incAnswerSnapshot(id,yes){const x=incStore()[id],w=W();if(!x||!w)return;
   if(yes){x.inBookAt=w.generatedAt;x.notInBookAt=null;}else{x.notInBookAt=w.generatedAt;x.inBookAt=null;}
@@ -4537,7 +4749,9 @@ function openIncome(id){
         <div class="help err" id="incAccErr" style="display:none">${ic('triangle-alert','s16')}Choose the income account.</div>
         <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="openAddAccount({kind:'income',after:c=>{const s=$('incAcc');if(s){s.innerHTML=incIncomeOptions(c);}}})">${ic('plus','s16')}New income account</button></div>
       <div class="field full"><label class="label" for="incNote">Note <span class="faint">(optional)</span></label><input class="input" id="incNote" type="text" maxlength="60" value="${escH(x.note||'')}" placeholder="e.g. October"></div>
-      ${cur&&(cur.exportedAt||cur.posted)?`<div class="help full">${ic('info','s16')}${cur.posted?'Already posted in Accurate.':`Already saved for import on ${escH(fmtDateTime(cur.exportedAt))}.`} If the voucher is in Accurate, correct or delete it there: saving a change here makes a new voucher.</div>`:''}
+      ${cur&&incPostedV(cur)?`<div class="help full">${ic('info','s16')}Posted in your book. Saving a change updates its voucher; the earlier version stays in the voucher’s history.</div>`
+        :cur&&incOwn()&&incBook().get(cur.id)==='accurate'?`<div class="help full">${ic('info','s16')}This receipt is in your book as an Accurate voucher. Changing it here doesn’t change that voucher.</div>`
+        :cur&&(cur.exportedAt||cur.posted)?`<div class="help full">${ic('info','s16')}${cur.posted?'Already posted in Accurate.':`Already saved for import on ${escH(fmtDateTime(cur.exportedAt))}.`} If the voucher is in Accurate, correct or delete it there: saving a change here makes a new voucher.</div>`:''}
     </div>`,
     foot:`${cur?`<button class="btn btn-ghost" style="color:var(--bad);margin-right:auto" onclick="incRemove()">Remove</button>`:''}<button class="btn btn-secondary" onclick="closeTopSheet(true)">Cancel</button><button class="btn btn-primary" onclick="incSave()">${cur?'Save':'Add income'}</button>`,
     focus:cur?'#incAmount':'#incPayer',onEnter:incSave,onClose:()=>{INC_EDIT=null;}});
@@ -4555,20 +4769,52 @@ function incSave(){
   if(bad||!/^\d{4}-\d{2}-\d{2}$/.test(date))return;
   const s=incStore(),id=INC_EDIT||'inc-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),old=s[id]||{};
   const changed=(old.exportedAt||old.posted)&&(old.date!==date||Math.round(old.amount)!==Math.round(amount)||old.account!==account||old.incomeAccount!==incomeAccount);
-  s[id]={...old,id,date,payer,amount:Math.round(amount),account,incomeAccount,note:meText($('incNote').value,60),at:meStamp(),...(changed?{exportedAt:null,exportFile:null,posted:false,postedAt:null,inBookAt:null,notInBookAt:null}:{})};
+  const nx={...old,id,date,payer,amount:Math.round(amount),account,incomeAccount,note:meText($('incNote').value,60),at:meStamp(),...(changed?{exportedAt:null,exportFile:null,posted:false,postedAt:null,inBookAt:null,notInBookAt:null}:{})};
+  // A receipt posted to the book: its voucher is edited in place (the earlier version stays in the voucher's history).
+  const pv=incPostedV(old);
+  if(pv){try{const v=incVoucher(nx);ledgerEdit(old.postedId,{date:v.date,description:v.description,lines:v.lines},'Edited on the Income page');}
+    catch(e){toast(e.errors&&e.errors[0]||e.message||'Couldn’t update the voucher in your book');return;}}
+  s[id]=nx;
   const was=INC_EDIT;INC_MONTH=date.slice(0,7);closeTopSheet(true);scheduleDriveSave();renderAll();
-  toast(changed?'Income changed — download it again for Accurate':was?'Income updated':`Income added · ${fmtIDR(Math.round(amount))}`);
+  toast(pv?'Income updated in your book':changed?'Income changed — '+(incOwn()?'post it again to your book':'download it again for Accurate'):was?'Income updated':`Income added · ${fmtIDR(Math.round(amount))}`);
 }
 function incRemove(){
   const id=INC_EDIT,x=id&&incStore()[id];if(!x)return;
-  if(!confirm(x.exportedAt?'This income was already saved for import. Remove it from the app anyway? (It stays in the file you downloaded.)':'Remove this income?'))return;
-  incStore()[id]={id,deleted:true,at:meStamp()};closeTopSheet(true);scheduleDriveSave();renderAll();toast('Income removed');
+  const pv=incPostedV(x);
+  if(!confirm(pv?'This income is posted in your book. Remove it here and void its voucher? The voucher stays in the book’s history; nothing is deleted.':x.exportedAt?'This income was already saved for import. Remove it from the app anyway? (It stays in the file you downloaded.)':'Remove this income?'))return;
+  if(pv){try{ledgerVoid(x.postedId,'Income removed on the Income page');}catch(e){toast(e.errors&&e.errors[0]||e.message||'Couldn’t void the voucher');return;}}
+  incStore()[id]={id,deleted:true,at:meStamp()};closeTopSheet(true);scheduleDriveSave();renderAll();toast(pv?'Income removed and its voucher voided':'Income removed');
+}
+// Post receipts to the app's own book: one voucher per receipt, origin 'income', ref = the receipt's id.
+function incPostOne(x){
+  const v=incVoucher(x);
+  x.postedId=ledgerPost(v,{origin:'income',why:`Income ${x.date}`});x.postedAt=x.at=meStamp();
+}
+function incPost(id){
+  const x=incStore()[id];if(!x||x.deleted)return;
+  if(!incOwn()){toast('Your book isn’t set up yet');return;}
+  if(incBook().has(x.id)){toast('Already in your book');return;}
+  if(!x.account||!x.incomeAccount){toast('Choose both accounts first');return;}
+  try{incPostOne(x);}catch(e){toast(e.errors&&e.errors[0]||e.message||'Couldn’t post to your book');return;}
+  scheduleDriveSave();renderAll();toast(`Posted to your book · ${fmtIDR(Math.round(x.amount))}`);
+}
+function incPostAll(M){
+  if(!incOwn()){toast('Your book isn’t set up yet');return;}
+  const xs=incList().filter(x=>x.date.slice(0,7)===M&&!incBook().has(x.id));
+  if(!xs.length){toast('Nothing left to post');return;}
+  let n=0,bad=null;
+  for(const x of xs){
+    if(!x.account||!x.incomeAccount){bad=bad||'Every receipt needs both accounts';continue;}
+    try{incPostOne(x);n++;}catch(e){bad=bad||(e.errors&&e.errors[0])||e.message||'Couldn’t post';}
+  }
+  if(n)scheduleDriveSave();
+  renderAll();toast(n?`Posted ${n} receipt${n===1?'':'s'} to your book${bad?` · ${bad}`:''}`:bad);
 }
 function incSetLink(id,on){const x=incStore()[id];if(!x)return;x.unlinked=!on;x.at=meStamp();scheduleDriveSave();renderAll();}
 function incTogglePosted(id){const x=incStore()[id];if(!x)return;x.posted=!x.posted;x.postedAt=x.posted?meStamp():null;x.at=meStamp();scheduleDriveSave();renderAll();}
 function incVoucher(x){
   const memo=meText(`${x.payer}${x.note?' - '+x.note:''}`,80);
-  return{date:x.date,description:meText(`Income: ${x.payer}${x.note?' - '+x.note:''}`,200),lines:[{account:x.account,amount:Math.round(x.amount),memo},{account:x.incomeAccount,amount:-Math.round(x.amount),memo}]};
+  return{date:x.date,description:meText(`Income: ${x.payer}${x.note?' - '+x.note:''}`,200),ref:x.id,lines:[{account:x.account,amount:Math.round(x.amount),memo},{account:x.incomeAccount,amount:-Math.round(x.amount),memo}]};
 }
 // One name per download (month + when it was saved), so a second file never hides behind the first.
 function incFileName(M,at){const d=new Date(at),p=n=>String(n).padStart(2,'0');
@@ -4587,8 +4833,15 @@ function incExport(M){
 }
 function incStatusHTML(x,link){
   const out=[];
-  if(incBookState(x,incSnapBookEnd())==='unsure')out.push(`<span class="badge warn">In this snapshot?</span><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();incAnswerSnapshot('${escAttr(x.id)}',true)" title="The snapshot built ${escH(fmtDateTime(W().generatedAt))} already has this voucher">Yes</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();incAnswerSnapshot('${escAttr(x.id)}',false)" title="It was imported after that snapshot">No</button>`);
-  out.push(x.posted?'<span class="badge good">Posted</span>':x.exportedAt?`<span class="badge accent" title="Saved ${escH(fmtDateTime(x.exportedAt))}">Saved</span>`:'<span class="badge">To export</span>');
+  if(incOwn()){
+    const b=incBook().get(x.id);
+    out.push(b==='own'?'<span class="badge good" title="Posted to your book">Posted</span><span class="faint">in your book</span>'
+      :b==='accurate'?'<span class="badge good" title="Accurate sent a voucher with the same date, total and accounts">In your book</span><span class="faint">from Accurate</span>'
+      :x.posted?'<span class="badge accent" title="Ticked as posted in Accurate; it joins your book with the next books import, or post it here">Posted in Accurate</span>'
+      :'<span class="badge">To post</span>');
+  }
+  else if(incBookState(x,incSnapBookEnd())==='unsure')out.push(`<span class="badge warn">In this snapshot?</span><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();incAnswerSnapshot('${escAttr(x.id)}',true)" title="The snapshot built ${escH(fmtDateTime(W().generatedAt))} already has this voucher">Yes</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();incAnswerSnapshot('${escAttr(x.id)}',false)" title="It was imported after that snapshot">No</button>`);
+  if(!incOwn())out.push(x.posted?'<span class="badge good">Posted</span>':x.exportedAt?`<span class="badge accent" title="Saved ${escH(fmtDateTime(x.exportedAt))}">Saved</span>`:'<span class="badge">To export</span>');
   if(link)out.push(`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();incSetLink('${escAttr(x.id)}',false)" title="Matched statement line; it leaves the month-end statement totals. Click to unmatch.">${ic('receipt','s16')}Statement ${escH(meDay(link.date))}</button>`);
   else if(x.unlinked)out.push(`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();incSetLink('${escAttr(x.id)}',true)">${ic('receipt','s16')}Match statement</button>`);
   return out.join('');
@@ -4596,7 +4849,8 @@ function incStatusHTML(x,link){
 function renderIncome(){
   if(!W())return wealthEmptyHTML();
   const months=incMonths();if(!INC_MONTH||!months.includes(INC_MONTH))INC_MONTH=months[months.length-1];
-  const M=INC_MONTH,xs=incList().filter(x=>x.date.slice(0,7)===M),links=incLinks();
+  const M=INC_MONTH,xs=incList().filter(x=>x.date.slice(0,7)===M),links=incLinks(),own=incOwn(),bk=own?incBook():null;
+  const toPost=own?xs.filter(x=>!bk.has(x.id)).length:0,inBook=own?xs.length-toPost:0;
   const total=xs.reduce((s,x)=>s+x.amount,0),todo=xs.filter(x=>!x.exportedAt).length,pend=[...new Set(xs.flatMap(x=>[x.account,x.incomeAccount]).filter(naPending))];
   const shown=months.slice(-6);if(!shown.includes(M))shown[0]=M;
   const older=months.filter(m=>!shown.includes(m));
@@ -4608,22 +4862,27 @@ function renderIncome(){
       <td class="merchant"><div class="merchant-name">${escH(meName(x.account))}</div><div class="merchant-sub">${escH(x.account)} ${naBadge(x.account)}</div></td>
       <td class="merchant"><div class="merchant-name">${escH(meName(x.incomeAccount))}</div><div class="merchant-sub">${escH(x.incomeAccount)} ${naBadge(x.incomeAccount)}</div></td>
       <td class="num amt">${fmtIDR(x.amount)}</td><td><div class="me-src">${incStatusHTML(x,links[x.id])}</div></td>
-      <td><label class="check" onclick="event.stopPropagation()"><input type="checkbox" ${x.posted?'checked':''} onchange="incTogglePosted('${escAttr(x.id)}')" aria-label="Posted in Accurate"> Posted</label></td></tr>`).join('');
+      <td>${own?(bk.has(x.id)?'':`<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();incPost('${escAttr(x.id)}')" title="Put this receipt in your own book">Post</button>`)
+        :`<label class="check" onclick="event.stopPropagation()"><input type="checkbox" ${x.posted?'checked':''} onchange="incTogglePosted('${escAttr(x.id)}')" aria-label="Posted in Accurate"> Posted</label>`}</td></tr>`).join('');
   const book=W().source.book,files=[...new Set(xs.filter(x=>x.exportedAt&&x.exportFile&&!x.posted).sort((a,b)=>String(a.exportedAt).localeCompare(String(b.exportedAt))).map(x=>x.exportFile))],saved=files.length>0,file=files[files.length-1]||'';
-  const tools=`<button class="btn btn-primary btn-sm" ${xs.length?'':'disabled aria-disabled="true"'} onclick="incExport('${escAttr(M)}')">${ic('download','s16')}${todo||!xs.length?`Download for Accurate import${todo&&todo<xs.length?` (${todo} new)`:''}`:'Download again'}</button>`;
-  return`${pageHead('Income','Income you type in, posted to Accurate as one voucher per receipt',add)}
+  const dlLabel=todo||!xs.length?`Download for Accurate import${own?' (optional)':''}${todo&&todo<xs.length?` (${todo} new)`:''}`:'Download again';
+  const tools=(own?`<button class="btn btn-primary btn-sm" id="incPostAll" ${toPost?'':'disabled aria-disabled="true"'} onclick="incPostAll('${escAttr(M)}')">${ic('book-open','s16')}Post all to-post receipts${toPost?` (${toPost})`:''}</button>`:'')
+    +`<button class="btn ${own?'btn-secondary':'btn-primary'} btn-sm" ${xs.length?'':'disabled aria-disabled="true"'} onclick="incExport('${escAttr(M)}')">${ic('download','s16')}${dlLabel}</button>`;
+  return`${pageHead('Income',own?'Income you type in, posted to your book as one voucher per receipt':'Income you type in, posted to Accurate as one voucher per receipt',add)}
     <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">${picker}<button class="btn btn-primary btn-sm only-sm" onclick="openIncome()">${ic('plus','s16')}Add income</button></div>
     <div class="grid">
       ${kpiCard({label:`Income · ${monthLabel(M,true)}`,value:`<span class="amt">${fmtIDR(total)}</span>`,sub:`${xs.length} receipt${xs.length===1?'':'s'}`,span:'span-4'})}
-      ${kpiCard({label:'To export',value:String(todo),sub:todo?'Not in an import file yet':'All saved for import',span:'span-4'})}
-      ${kpiCard({label:'Posted in Accurate',value:String(xs.filter(x=>x.posted).length),sub:'Ticked by you',span:'span-4'})}
+      ${own?kpiCard({label:'To post',value:String(toPost),sub:toPost?'Not in your book yet':'All in your book',span:'span-4'})
+        :kpiCard({label:'To export',value:String(todo),sub:todo?'Not in an import file yet':'All saved for import',span:'span-4'})}
+      ${own?kpiCard({label:'In your book',value:String(inBook),sub:'Posted here or matched from Accurate',span:'span-4'})
+        :kpiCard({label:'Posted in Accurate',value:String(xs.filter(x=>x.posted).length),sub:'Ticked by you',span:'span-4'})}
     </div>
-    ${pend.length?`<div class="banner warn" style="margin-bottom:16px">${ic('triangle-alert')}<span class="msg">${pend.map(c=>escH(c)).join(', ')} ${pend.length===1?'isn’t':'aren’t'} in Accurate yet. Create ${pend.length===1?'it':'them'} there before importing this month’s file (see Accounts).</span></div>`:''}
+    ${pend.length?`<div class="banner warn" style="margin-bottom:16px">${ic('triangle-alert')}<span class="msg">${pend.map(c=>escH(c)).join(', ')} ${pend.length===1?'isn’t':'aren’t'} in Accurate yet. ${own?'Your book has':'Create'} ${pend.length===1?'it':'them'}${own?', so posting works; create it in Accurate too before importing a file that uses it (see Accounts).':' there before importing this month’s file (see Accounts).'}</span></div>`:''}
     <div class="grid"><section class="card flush span-12">${cardHead('chart-column','Receipts',`Dr the account it arrived in, Cr the income account, dated the day it arrived`,tools)}
-      ${rows?`<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Date</th><th scope="col">From</th><th scope="col">Into</th><th scope="col">Income account</th><th scope="col" class="num">Amount</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Posted</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ${rows?`<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Date</th><th scope="col">From</th><th scope="col">Into</th><th scope="col">Income account</th><th scope="col" class="num">Amount</th><th scope="col">Status</th><th scope="col"><span class="sr-only">${own?'Post':'Posted'}</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
         :`<div style="padding:0 var(--card-pad) var(--card-pad)">${emptyHTML('chart-column',`No income typed for ${monthLabel(M,true)} yet`,'Add income','openIncome()')}</div>`}
-      ${saved?`<div class="me-next" style="margin:0 var(--card-pad) var(--card-pad)"><div class="li-title">${ic('square-check','s16')} Saved, not posted yet: ${files.map(f=>`<code>${escH(f)}</code>`).join(', ')}</div>
-        <p class="help">Next: ask Claude to import ${files.length===1?'it':'each of them'} into Accurate, or run <code>accurate-write queue --book ${escH(book)} --file "%USERPROFILE%\\Downloads\\${escH(file)}" --check-only</code>, then without <code>--check-only</code>, then <code>accurate-write import --book ${escH(book)}</code>. Import each file once. Tick “Posted” once it’s in. The month-end close counts these receipts as booked.</p></div>`:''}
+      ${saved&&!(own&&!files.length)?`<div class="me-next" style="margin:0 var(--card-pad) var(--card-pad)"><div class="li-title">${ic('square-check','s16')} Saved${own?' for Accurate (optional)':', not posted yet'}: ${files.map(f=>`<code>${escH(f)}</code>`).join(', ')}</div>
+        <p class="help">${own?'Only if you also want these in Accurate: the next books import links them to the vouchers in your book instead of adding them again. ':''}Next: ask Claude to import ${files.length===1?'it':'each of them'} into Accurate, or run <code>accurate-write queue --book ${escH(book)} --file "%USERPROFILE%\\Downloads\\${escH(file)}" --check-only</code>, then without <code>--check-only</code>, then <code>accurate-write import --book ${escH(book)}</code>. Import each file once.${own?'':' Tick “Posted” once it’s in. The month-end close counts these receipts as booked.'}</p></div>`:''}
     </section></div>`;
 }
 
