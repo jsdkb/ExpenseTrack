@@ -412,7 +412,9 @@
   function render(){
     const w=W(),M=w?model():null,raw=comingRaw();LAST=M;
     const ok=M&&M.pts.length;
-    const head=pageHead('Home',ok?`Your wealth at a glance · ${wealthSourceLine()}`:'Your wealth at a glance',ok?`${nwViewSeg()}${hideBtn()}`:hideBtn());
+    // 'homeActions': quick buttons other modules add to the header (js/entry.js: Tell me what happened).
+    const extra=runHooks('homeActions').join('');
+    const head=pageHead('Home',ok?`Your wealth at a glance · ${wealthSourceLine()}`:'Your wealth at a glance',ok?`${extra}${nwViewSeg()}${hideBtn()}`:`${extra}${hideBtn()}`);
     if(!ok)return`${head}${connectHTML()}<div class="grid">${comingHTML(raw).replace('span-5','span-6')}${freshHTML().replace('span-4','span-6')}</div>`;
     const p=M.pts[M.L],mkMissing=NW_VIEW==='market'&&!p.mk;
     return`${head}<div class="only-sm" style="margin-bottom:12px">${nwViewSeg()}</div>

@@ -217,3 +217,115 @@ seed, and the review list (Add all · Add · Take Accurate's version · Dismiss)
   seed); `W().pnl` comes from the vouchers, so a month can differ from the snapshot's P&L sheet by a
   few rupiah of rounding (not part of the gate).
 - The Settings card is its own section (`#set-book`, sub-nav "Your book") right after Data.
+
+## 6. New entry, edit and void (`js/entry.js`)
+
+`js/entry.js` loads after `js/books.js`. It owns the entry form, the AI call and the key; Journals and
+the voucher sheet call into it through `window.etEntry`.
+
+- **Where:** Journals header **New entry** (primary button, only once the book is seeded) and Home's
+  header **Tell me what happened** (hook `homeActions` in js/home.js). Both open the same sheet.
+- **The form** (one form for manual entries, AI drafts and edits): date, description, then two or
+  more lines, each with an account (text input with a searchable datalist of the non-parent,
+  non-suspended accounts; the account's name, or "Not in your book", shows under it), debit, credit,
+  memo and an optional foreign-currency row (currency, foreign amount, rate, "= Rp x" hint). Live
+  checks run `ledgerValidate` on every keystroke (balanced, accounts exist and are not parents, whole
+  rupiah, fx consistent); totals and a `Balanced` / `Off by Rp x` badge sit under the lines. **Post**
+  stays disabled while any check fails.
+- **With a key:** a "Tell me what happened" box and **Draft with Claude** above the form. Claude's
+  draft fills the form; its assumptions and questions are listed under it; proposed new accounts are
+  shown with editable code / name / kind / currency / parent and an **Add** button
+  (→ `ledgerAddAccount`). Post stays blocked until each is added or removed. The AI never posts.
+- **Without a key, offline, or on any API error** (401, 403, 429, 5xx, timeout at 90 s, malformed or
+  refused answer): the same form, empty, with a message saying what happened and to fill it in by
+  hand. One request per click; nothing retries by itself.
+- **Post:** `ledgerPost(v, {origin, why})`: origin `ai` with `prompt` = the sentence when the form
+  came from a Claude draft (even if the owner changed it), else `app`. Then Journals opens with the
+  voucher in the panel (`window.openVoucher(key)` in js/books.js).
+- **Edit** (voucher panel / sheet): the form prefilled, plus a required **Why the change**; saves
+  with `ledgerEdit(id, v, why)`. Accurate vouchers are editable too and the form warns "your book
+  differs from Accurate from now on" (a later Accurate export then flags it, never overwrites it).
+- **Void:** a small sheet with a required reason → `ledgerVoid(id, why)`. The voucher stays in the
+  book and shows with a `Void` badge; Journals gets a **Show void (n)** check that lists them.
+- **Voucher panel extras:** an origin badge (From Accurate · Manual · AI · Month-end · Income), Edit /
+  Void buttons, and a **History** list: newest change first (Changed / Voided / Accurate's version
+  taken · why · by you or from an Accurate import · when · the earlier date, total and lines in a
+  `<details>`), ending with how it was created (and the owner's sentence for an AI entry).
+- **Excel:** Journals downloads the filtered set (`journals-<YYYY-MM | all | from_to>.xlsx`, one row
+  per line: date, number, description, type, account, name, memo, debit, credit, foreign amount; a
+  Total row) and General ledger the current account and range (`ledger-<from|start>_<to>.xlsx`:
+  opening, every line with the running balance in the natural sign, closing). Same look as the other
+  Books exports (`xlReport`, which now takes `numCols` and `xSplit`). File names never carry account
+  names.
+
+`window.etEntry = {open, edit(id), void(id), canPost, originBadge(v), voucherTools(v), voucherByKey(key),
+voidList(), newEntryBtn()}`.
+
+## 7. The AI request and response
+
+Browser-direct `POST https://api.anthropic.com/v1/messages` with the owner's key. Headers:
+`x-api-key`, `anthropic-version: 2026-10-21`, `anthropic-dangerous-direct-browser-access: true`,
+`content-type: application/json`, and for Sonnet / Opus `anthropic-beta: server-side-fallback-2026-07-01`
+(with `fallbacks: "default"` in the body, so a safety decline is retried on a fallback model by
+Anthropic, not by the app). No `temperature` / `top_p` / `top_k` (rejected on this API version).
+
+```json
+{"model": "claude-sonnet-5-5", "max_tokens": 16000, "system": "<drafting rules>",
+ "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": {"...": "below"}}},
+ "fallbacks": "default",
+ "messages": [{"role": "user", "content": "{\"today\":\"2026-11-04\",\"baseCurrency\":\"IDR\",\"chartOfAccounts\":[{\"id\":\"1100.01\",\"name\":\"Bank A ••1234\",\"kind\":\"asset\",\"ccy\":\"IDR\",\"isParent\":false}],\"sentence\":\"I just bought USD 1,000 at 16,350 from Bank B\"}"}]}
+```
+
+The user message is exactly four fields: `today`, `baseCurrency`, `chartOfAccounts` (id, name, kind,
+ccy, isParent of every non-suspended account, parents included so a proposed account can name one;
+the system prompt forbids posting to them) and `sentence`. Never balances, statement lines, notes or
+anything else from the book.
+
+Structured output (every object `additionalProperties: false`, every field required):
+
+```json
+{"date": "2026-11-04", "description": "Bought USD 1,000",
+ "lines": [{"account": "1100.12", "debit": 16350000, "credit": 0, "memo": "USD purchase", "fx": {"ccy": "USD", "amount": 1000, "rate": 16350}},
+           {"account": "1100.11", "debit": 0, "credit": 16350000, "memo": "USD purchase", "fx": null}],
+ "newAccounts": [{"id": "6000.12", "name": "Hobby supplies", "kind": "expense", "ccy": "IDR", "parent": "6000"}],
+ "assumptions": ["Paid from Bank B in rupiah"], "questions": ["Was there a transfer fee?"]}
+```
+
+The app reads the text blocks as JSON and checks the shape itself (a `refusal` or `max_tokens` stop,
+unparsable text or no lines → the manual form with a message). A line with both a debit and a credit
+is netted; `fx.amount` is stored as a positive amount; a proposed account without a usable code gets
+the next free code under its parent. Settings › AI → **Test** sends one tiny request
+(`max_tokens: 16`, effort low, "Reply with OK.") to check the key.
+
+Models (Settings › AI): Claude Sonnet 5.5 `claude-sonnet-5-5` (default), Claude Opus 5.5
+`claude-opus-5-5`, Claude Haiku 5.5 `claude-haiku-5-5` (no server-side fallback).
+
+## 8. The owner's API key
+
+- Pasted by the owner in Settings › AI (`#set-ai`, sub-nav "AI", after Your book): a password input,
+  **Save key**, **Test**, **Remove** (with Undo), the model choice and the note "Your key is stored in
+  your private Google Drive app folder and this device; set a spend limit on it at
+  console.anthropic.com; your sentence and your chart of accounts are sent to Anthropic when you ask
+  the AI."
+- Stored as `{key, model, at}` in its own Drive appData file `ai.json` (through `driveFindFileByName`
+  / `driveReadJson` / `driveUploadJson`) and in IndexedDB database `et-secret`, store `secret`, key
+  `ai|<account e-mail>`, value `{key, model, at, owner}`. Signed out (no Drive token): IndexedDB only.
+  On load the newer `at` wins and the older copy is updated. **Remove** writes `{key: null, model, at}`
+  to both, so the removal also wins on other devices.
+- Never in `STATE`, the localStorage mirror, the ledger (`ledgerExport()`), backups, Excel, the DOM
+  (only `sk-…••••` + the last 4 characters) or the console; error messages from Anthropic are
+  scrubbed of anything key-shaped. `window.etAI.state()` gives `{hasKey, masked, model, at, status}`,
+  never the key.
+- Tests mock api.anthropic.com inside the page and use a fake `sk-ant-test-0000`; no real key and no
+  real call.
+
+## 9. Deviations (entry builder, 2026-11-04)
+
+- `chartOfAccounts` includes parent accounts (flagged `isParent: true`), not only posting accounts,
+  so Claude can place a proposed account under the right parent.
+- `newAccounts[].id` and `parent` are required in the schema (`parent` may be null); the app fills a
+  missing code itself.
+- `fallbacks: "default"` + its beta header are sent for Sonnet / Opus (Anthropic's recommended
+  default); Haiku requests go without.
+- The voucher history shows "By you" for every in-app change: the ledger records why and when, not
+  who (there is one owner).

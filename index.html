@@ -3483,7 +3483,7 @@ function renderSettings(){
   const theme=themeName(),hid=amountsHidden();
   return`${pageHead('Settings','Appearance, rules and your data')}
   <div class="settings-grid">
-    <nav class="subnav" aria-label="Settings sections"><a href="#set-appearance">Appearance</a><a href="#set-rules">Rules</a><a href="#set-data">Data</a>${typeof ledgerSettingsHTML==='function'?'<a href="#set-book">Your book</a>':''}<a href="#set-about">About</a></nav>
+    <nav class="subnav" aria-label="Settings sections"><a href="#set-appearance">Appearance</a><a href="#set-rules">Rules</a><a href="#set-data">Data</a>${typeof ledgerSettingsHTML==='function'?'<a href="#set-book">Your book</a>':''}${typeof aiSettingsHTML==='function'?'<a href="#set-ai">AI</a>':''}<a href="#set-about">About</a></nav>
     <div class="settings-sections">
       <section class="card" id="set-appearance">${cardHead('sun','Appearance','Saved on this device only')}
         <div class="setting-row"><div><div class="li-title">Theme</div><div class="li-sub">Dark is the default</div></div>
@@ -3526,6 +3526,7 @@ function renderSettings(){
         <div class="setting-row"><div><div class="li-title">Account</div><div class="li-sub">${escH(USER_EMAIL||'Signed in')}</div></div><button class="btn btn-danger" onclick="signOut()">${ic('log-out')}Sign out</button></div>
       </section>
       ${typeof ledgerSettingsHTML==='function'?ledgerSettingsHTML():''}
+      ${typeof aiSettingsHTML==='function'?aiSettingsHTML():''}
       <section class="card" id="set-about">${cardHead('info','About')}
         <p class="muted">ExpenseTrack reads your bank notification emails and keeps your notes, rules and edits in a private file in your own Google Drive app folder. Nothing personal is stored in the app itself.</p>
       </section>
@@ -5421,6 +5422,7 @@ window.addEventListener('load', initAuth);
      registerHook above. Plain scripts in a fixed order, no build step. -->
 <script src="js/ledger.js"></script>
 <script src="js/books.js"></script>
+<script src="js/entry.js"></script>
 <script src="js/home.js"></script>
 <script src="js/statements.js"></script>
 <script src="js/extras.js"></script>

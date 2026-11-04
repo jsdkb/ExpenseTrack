@@ -122,7 +122,7 @@
 
   /* ── Page state shared by every Books page ── */
   const BK={month:null,coaAll:false,coaQ:'',jPeriod:'all',jFrom:'',jTo:'',jAcc:'',jType:'',jQ:'',jPage:0,jSel:null,
-    lAcc:null,lPreset:'ytd',lFrom:'',lTo:'',lLimit:300,bsView:'book',bsCol:0,plCol:1};
+    lAcc:null,lPreset:'ytd',lFrom:'',lTo:'',lLimit:300,bsView:'book',bsCol:0,plCol:1,jVoid:false};
   const J_SIZE=50;
   let J_CACHE={key:null,list:null};
   function syncMonth(){const ms=I.months;if(!BK.month||!ms.includes(BK.month))BK.month=ms[ms.length-1]||null;return BK.month;}
@@ -147,6 +147,7 @@
   function sourceLine(){
     const b=BOOKS(),m=STATE.booksMeta||{};if(!b)return'';
     const gl=b.source&&b.source.glAsOf?`, entries to ${dLong(b.source.glAsOf)}`:'';
+    if(b.fromLedger)return`Your own book${gl} · new entries, edits and voids are kept here; Accurate exports only add to it`;
     return`From your accounting book${gl}${m.importedAt?` · imported ${fmtDateTime(m.importedAt)}`:''} · read-only`;
   }
   function gateHTML(title){
@@ -267,16 +268,18 @@
   /* ── Excel (ExcelJS via the core's on-demand loader xlLib) ── */
   async function xlReport(o){
     let X;try{X=await xlLib();}catch(e){toast(e.message);return false;}
-    const wb=new X.Workbook(),ws=wb.addWorksheet(o.sheet,{views:[{state:'frozen',ySplit:3,xSplit:2}]});
+    const wb=new X.Workbook(),ws=wb.addWorksheet(o.sheet,{views:[{state:'frozen',ySplit:3,xSplit:o.xSplit!=null?o.xSplit:2}]});
+    // Number columns (1-based): o.numCols, else every column from the third.
+    const isNum=c=>o.numCols?o.numCols.includes(c):c>=3;
     ws.columns=o.widths.map(w=>({width:w}));
     ws.getCell('A1').value=o.title;ws.getCell('A1').font={bold:true,size:14};
     ws.getCell('A2').value=o.sub;ws.getCell('A2').font={italic:true,color:{argb:'FF555555'}};
     const hr=ws.getRow(3);o.head.forEach((h,i)=>{const c=hr.getCell(i+1);c.value=h;c.font={bold:true};
-      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE7E6E6'}};c.border={bottom:{style:'thin'}};if(i>=2)c.alignment={horizontal:'right'};});
+      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE7E6E6'}};c.border={bottom:{style:'thin'}};if(isNum(i+1))c.alignment={horizontal:'right'};});
     const FMT='#,##0;-#,##0;0';
     o.rows.forEach((r,k)=>{
       const row=ws.getRow(4+k);row.values=r.v;
-      for(let i=3;i<=r.v.length;i++)row.getCell(i).numFmt=FMT;
+      for(let i=3;i<=r.v.length;i++)if(isNum(i))row.getCell(i).numFmt=FMT;
       row.getCell(1).numFmt='@';
       if(r.indent)row.getCell(2).alignment={indent:r.indent};
       if(r.s==='sec'){row.getCell(1).font={bold:true};row.getCell(2).font={bold:true};}
@@ -319,6 +322,36 @@
     return xlReport({file:`trial-balance-${M}.xlsx`,sheet:'Trial balance',
       title:`Trial balance as at ${dLong(meMonthEnd(M))}`,sub:'Amounts in Rp · balances are cumulative from the book’s lines',
       head:['Code','Account','Kind','Debit balance','Credit balance',`Debits in ${monthLabel(M)}`,`Credits in ${monthLabel(M)}`],widths:[12,44,12,18,18,18,18],rows});
+  }
+
+  // Journals: every line of the filtered vouchers, oldest first; totals = the screen's debits.
+  function xlJournals(){
+    const list=jFiltered().slice().reverse(),[from,to]=jRange(),open=to==='\uffff';
+    const rows=[];let dr=0,cr=0;
+    for(const i of list){const v=I.b.vouchers[i];
+      for(const l of v.lines||[]){const a=Math.round(l.amount||0),c=String(l.account);if(a>0)dr+=a;else cr-=a;
+        rows.push({v:[v.date,v.number||'',v.description||'',I.vType[i],c,I.acc.has(c)?accName(c):c,l.description||'',a>0?a:null,a<0?-a:null,
+          l.fx?`${l.fx.ccy} ${l.fx.amount} @ ${l.fx.rate}`:'']});}}
+    rows.push({v:['','','Total','','','','',dr,cr,''],s:'grand'});
+    const per=BK.jPeriod==='all'?'all':BK.jPeriod==='custom'?`${from||'start'}_${open?'end':to}`:BK.jPeriod;
+    const f=[BK.jAcc?`account ${BK.jAcc.startsWith('kind:')?'any '+BK.jAcc.slice(5):BK.jAcc}`:'',BK.jType?`type ${BK.jType}`:'',BK.jQ?`search “${BK.jQ}”`:''].filter(Boolean).join(' · ');
+    return xlReport({file:`journals-${per}.xlsx`,sheet:'Journals',xSplit:0,numCols:[8,9],
+      title:`Journals · ${BK.jPeriod==='all'?'all dates':BK.jPeriod==='custom'?`${from?dLong(from):'start'} – ${open?'end':dLong(to)}`:monthLabel(BK.jPeriod,true)}`,
+      sub:`${list.length} voucher${list.length===1?'':'s'}${f?' · '+f:''} · amounts in Rp, debit and credit per line`,
+      head:['Date','Number','Description','Type','Account','Account name','Memo','Debit','Credit','Foreign amount'],widths:[12,16,40,16,12,32,32,18,18,24],rows});
+  }
+  // General ledger: the chosen account and range, opening and closing balances in the natural sign.
+  function xlLedger(){
+    const code=BK.lAcc;if(!code)return false;
+    const k=kindOf(code),s=sgn(k),[from,to]=lRange(),d=ledgerData(code,from,to),multi=leavesOf(code).length>1;
+    let run=d.open;const rows=[{v:[from||'','','Opening balance','',null,null,s*d.open||0],s:'tot'}];
+    for(const{vi,li,a}of d.lines){run+=a;const v=I.b.vouchers[vi],l=v.lines[li];
+      rows.push({v:[v.date,v.number||'',l.description||v.description||'',multi?String(l.account):'',a>0?a:null,a<0?-a:null,s*run||0]});}
+    rows.push({v:[to,'','Closing balance','',d.dr,d.cr,s*d.close||0],s:'grand'});
+    return xlReport({file:`ledger-${from||'start'}_${to}.xlsx`,sheet:'General ledger',xSplit:0,numCols:[5,6,7],
+      title:`General ledger · ${code} · ${accName(code)}`,
+      sub:`${from?dLong(from):'From the start'} – ${dLong(to)} · amounts in Rp · balance shown ${s>0?'debit':'credit'}-positive`,
+      head:['Date','Voucher','Description','Account','Debit','Credit','Balance'],widths:[12,16,44,12,18,18,20],rows});
   }
 
   /* ── Chart of accounts ── */
@@ -435,8 +468,11 @@
   function voucherByKey(key){
     if(key==null)return null;
     if(String(key).startsWith('prep|'))return preparedAll().find(v=>v.key===key)||null;
-    const i=I.byKey.get(String(key));return i==null?null:I.b.vouchers[i];
+    const i=I.byKey.get(String(key));if(i!=null)return I.b.vouchers[i];
+    // A void voucher is left out of the view; the app's own book still has it (js/entry.js).
+    return EN()?EN().voucherByKey(key):null;
   }
+  const EN=()=>typeof etEntry==='object'&&BOOKS()&&BOOKS().fromLedger?etEntry:null;
   function voucherHTML(v){
     if(!v)return emptyHTML('book-open','Select a voucher to see its lines');
     const prep=String(v.key).startsWith('prep|');
@@ -449,10 +485,10 @@
     return`<div class="bk-vhead"><div class="eyebrow">${escH(dLong(v.date))} · ${escH([v.source,v.type].filter(Boolean).join(' · '))}</div>
         <div class="bk-vtitle">${escH(v.number||(prep?'No number yet':'No voucher number'))}</div>
         <div class="muted" style="overflow-wrap:anywhere">${escH(v.description||'')}</div>
-        <div class="bk-badges">${prep?`<span class="badge warn">Prepared, not in Accurate yet</span><span class="badge">${escH(v.from)}</span>`:''}${v.note?`<span class="help">${escH(v.note)}</span>`:''}</div></div>
+        <div class="bk-badges">${prep?`<span class="badge warn">Prepared, not in Accurate yet</span><span class="badge">${escH(v.from)}</span>`:''}${!prep&&EN()?EN().originBadge(v):''}${v.status==='void'?'<span class="badge bad">Void</span>':''}${v.note?`<span class="help">${escH(v.note)}</span>`:''}</div></div>
       <div class="table-wrap"><table class="data" id="bkVLines" data-key="${attr(v.key)}"><thead><tr><th scope="col">Account</th><th scope="col" class="num hide-sm">Debit</th><th scope="col" class="num hide-sm">Credit</th><th scope="col" class="num only-sm">Amount</th></tr></thead>
         <tbody>${rows}</tbody><tfoot><tr class="bk-tot"><td>Total ${bal?'<span class="badge good">Balanced</span>':'<span class="badge bad">Unbalanced</span>'}</td>
-        <td class="num hide-sm" id="bkVDr" data-raw="${dr}">${plain(dr)}</td><td class="num hide-sm" id="bkVCr" data-raw="${cr}">${plain(cr)}</td><td class="num only-sm"><span class="bk-dc">${bal?'Dr = Cr':'Dr'}</span>${plain(dr)}</td></tr></tfoot></table></div>`;
+        <td class="num hide-sm" id="bkVDr" data-raw="${dr}">${plain(dr)}</td><td class="num hide-sm" id="bkVCr" data-raw="${cr}">${plain(cr)}</td><td class="num only-sm"><span class="bk-dc">${bal?'Dr = Cr':'Dr'}</span>${plain(dr)}</td></tr></tfoot></table></div>${!prep&&EN()?EN().voucherTools(v):''}`;
   }
   function openVoucherSheet(key){const v=voucherByKey(key);if(!v)return;openSheet({title:'Voucher',body:voucherHTML(v),wide:true});}
   function jRowHTML(i){
@@ -485,6 +521,12 @@
       <div class="list bk-list">${ps.map(v=>`<button class="list-item" data-bk="jopen" data-key="${attr(v.key)}" data-prep="1"><span class="li-body"><span class="li-title" style="display:block">${escH(v.description)}</span>
         <span class="li-sub" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${escH(dShort(v.date))} · ${escH(v.from)} <span class="badge warn">Prepared, not in Accurate yet</span></span></span><span class="li-amt">${plain(vTotal(v))}</span></button>`).join('')}</div></section></div>`;
   }
+  function voidCardHTML(){
+    const vs=etEntry.voidList();
+    return`<div class="grid"><section class="card span-12" id="bkVoid">${cardHead('ban','Void vouchers',`${vs.length} voucher${vs.length===1?'':'s'} voided in your book. They stay here with their history and are left out of every balance.`)}
+      <div class="list bk-list">${vs.map(v=>`<button class="list-item" data-bk="jopen" data-key="${attr(v.key)}"><span class="li-body"><span class="li-title" style="display:block">${escH(v.description)}</span>
+        <span class="li-sub" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${escH(dShort(v.date))} <span class="badge bad">Void</span></span></span><span class="li-amt">${plain(v.debit)}</span></button>`).join('')}</div></section></div>`;
+  }
   function renderJournals(){
     const g=gateHTML('Journals');if(g)return g;
     idx();syncMonth();
@@ -498,11 +540,13 @@
     const ty=`<select class="input" data-bk="jtype" aria-label="Type"><option value="">All types</option>${types.map(([t,n])=>`<option value="${attr(t)}"${t===BK.jType?' selected':''}>${escH(t)} (${n.toLocaleString('en-GB')})</option>`).join('')}</select>`;
     const filtered=BK.jPeriod!=='all'||BK.jAcc||BK.jType||BK.jQ;
     const sel=voucherByKey(BK.jSel);if(!sel)BK.jSel=null;
-    return`${pageHead('Journals',sourceLine(),hideBtn())}
+    const en=EN(),nVoid=en?en.voidList().length:0;
+    return`${pageHead('Journals',sourceLine(),`${en?en.newEntryBtn():''}${hideBtn()}`)}
       <div class="bk-bar">${period}${range}${acc}${ty}<input class="input bk-search" type="search" data-bk="jq" placeholder="Search number or description" aria-label="Search vouchers" value="${attr(BK.jQ)}">
-        ${filtered?`<button class="btn btn-ghost btn-sm" data-bk="jclear">${ic('x','s16')}Clear</button>`:''}</div>
-      ${prepCardHTML()}
-      <div class="grid"><section class="card flush span-7">${cardHead('book-open','Vouchers','Newest first · amount = total debits · read-only copy of your book')}<div id="bkJList">${jListHTML()}</div></section>
+        ${filtered?`<button class="btn btn-ghost btn-sm" data-bk="jclear">${ic('x','s16')}Clear</button>`:''}
+        ${nVoid?`<label class="check"><input type="checkbox" data-bk="jvoid" ${BK.jVoid?'checked':''}> Show void (${nVoid})</label>`:''}<span class="bk-grow"></span>${xlBtn('journals')}</div>
+      ${prepCardHTML()}${nVoid&&BK.jVoid?voidCardHTML():''}
+      <div class="grid"><section class="card flush span-7">${cardHead('book-open','Vouchers',`Newest first · amount = total debits${en?'':' · read-only copy of your book'}`)}<div id="bkJList">${jListHTML()}</div></section>
         <section class="card span-5 hide-sm bk-panel" id="bkVPanel">${voucherHTML(sel)}</section></div>`;
   }
   function jRefreshList(){const el=$('bkJList');if(el)el.innerHTML=jListHTML();else renderAll();}
@@ -559,7 +603,7 @@
     const label=`${escH(code)} · ${escH(accName(code))}`;
     return`${pageHead('General ledger',sourceLine(),hideBtn())}
       <div class="bk-bar"><select class="input me-select" data-bk="lacc" aria-label="Account">${accOptions(code)}</select>${monthPicker()}${seg}</div>
-      <div class="bk-bar"><input class="input bk-date" type="date" data-bk="lfrom" aria-label="From" value="${attr(from)}"><span class="muted">to</span><input class="input bk-date" type="date" data-bk="lto" aria-label="To" value="${attr(to)}"></div>
+      <div class="bk-bar"><input class="input bk-date" type="date" data-bk="lfrom" aria-label="From" value="${attr(from)}"><span class="muted">to</span><input class="input bk-date" type="date" data-bk="lto" aria-label="To" value="${attr(to)}"><span class="bk-grow"></span>${xlBtn('ledger')}</div>
       <div class="grid">
         ${kpiCard({label:'Opening balance',value:`<span id="bkLOpen" data-raw="${s*d.open||0}">${kpiSigned(s*d.open)}</span>`,sub:from?`Before ${escH(dLong(from))}`:'From the first entry'})}
         ${kpiCard({label:'Debits',value:kpiMoney(d.dr),sub:`${d.lines.filter(x=>x.a>0).length} lines`})}
@@ -707,6 +751,14 @@
     if(ACTIVE_TAB==='journals'){renderAll();window.scrollTo(0,0);}else setTab('journals');
   }
   window.openJournals=openJournals;
+  // Journals with one voucher open (filters cleared), e.g. right after it was posted or edited.
+  function openVoucher(key){
+    BK.jPeriod='all';BK.jFrom=BK.jTo=BK.jAcc=BK.jType=BK.jQ='';BK.jPage=0;BK.jSel=key==null?null:String(key);
+    if(typeof closeAllSheets==='function')closeAllSheets();
+    if(ACTIVE_TAB==='journals')renderAll();else setTab('journals');
+    if(isMobile()&&BK.jSel)setTimeout(()=>openVoucherSheet(BK.jSel),60);
+  }
+  window.openVoucher=openVoucher;
 
   /* ── Events (one delegated listener per type) ── */
   // The month picker on the ledger moves a custom range back to that month's year to date.
@@ -738,10 +790,11 @@
       case'bsview':BK.bsView=el.dataset.v==='market'?'market':'book';renderAll();return;
       case'col':if(el.dataset.p==='bs')BK.bsCol=Number(el.dataset.i);else BK.plCol=Number(el.dataset.i);renderAll();return;
       case'tbmonth':BK.month=el.dataset.m;renderAll();return;
-      case'xl':{const f={bs:xlBS,pl:xlPL,tb:xlTB}[el.dataset.r];if(f&&idx()){el.disabled=true;Promise.resolve(f()).finally(()=>{el.disabled=false;});}return;}
+      case'jvoid':BK.jVoid=el.checked;renderAll();return;
+      case'xl':{const f={bs:xlBS,pl:xlPL,tb:xlTB,journals:xlJournals,ledger:xlLedger}[el.dataset.r];if(f&&idx()){el.disabled=true;Promise.resolve(f()).finally(()=>{el.disabled=false;});}return;}
     }
   }
-  const CHANGE=new Set(['month','coa-all','jperiod','jfrom','jto','jacc','jtype','lacc','lfrom','lto']);
+  const CHANGE=new Set(['month','coa-all','jperiod','jfrom','jto','jacc','jtype','lacc','lfrom','lto','jvoid']);
   const onPage=()=>PAGE_KEYS.includes(ACTIVE_TAB)||ACTIVE_TAB==='accounts';
   document.addEventListener('click',e=>{
     const el=e.target.closest('[data-bk]');if(!el||CHANGE.has(el.dataset.bk)||el.dataset.bk==='coa-q'||el.dataset.bk==='jq')return;
