@@ -9,7 +9,7 @@ v3 the app keeps its own permanent ledger and is the source of truth. The Accura
 an optional feed: new entries are offered, differing ones are only flagged, the app is never
 overwritten, and nothing is ever deleted.
 
-`js/ledger.js` loads after the core script and before the other modules (ledger, books, home,
+`js/ledger.js` loads after the core script and before the other modules (ledger, books, entry, home,
 statements, extras).
 
 ## 1. `ledger.json` (schema `et-ledger/1`)
@@ -144,11 +144,18 @@ their imported copy (it stays in the Drive main file and books.json as before) a
   an Accurate voucher no longer in the export → `flags[id] = missing` (*Take Accurate's version*
   voids it); an app voucher matching a new Accurate voucher by signature (date | debit total |
   sorted account set, as `sigOf` in js/books.js) → `links[appId] = accId` and the Accurate one is not
-  added. *Dismiss* keeps a flag from coming back for the same Accurate version.
+  added. Fallback for foreign-currency entries: Accurate's file is rupiah-only and leaves out the
+  foreign-currency group (lines with `fx`, and Month-end's difference line on them — core
+  `meFxGroup`), so an app voucher that has such lines (or comes from Month-end) also links to an
+  Accurate voucher on the same date whose lines are exactly its other lines (same accounts and
+  amounts). Each app voucher links once. *Dismiss* keeps a flag from coming back for the same
+  Accurate version.
 - Wealth: market values and closes merged per month by `at`; account side/group/investment/active
   and the P&L kind filled only where the ledger has none; groups added; `wealthFrom/AsOf` widened.
 - Cash: statements and lines unioned by id (a newer file refreshes an entry, a line missing from it
-  is kept). A line that has no id match but equals an existing line on account | date | amount |
+  is kept). A statement's `receivedAt` (the day it arrived) is kept through `applyCash`, the ledger's
+  cash record and `CM()`, so the statement calendar learns each account's lag from it; a newer file
+  without `receivedAt` keeps the day already known. A line that has no id match but equals an existing line on account | date | amount |
   description (one-to-one, file order) is the same line: it moves to the new id, `alias` records it,
   `match` references follow, and the owner's decisions move with it (`STATE.stmtFix.match[].line`,
   `stmtFix.added`, `cashTypeOverrides`, and the `stmt:<id>` row's `catOverrides`, `txEdits`, `splits`,
@@ -342,10 +349,9 @@ posting.
   (`entryPosted`); the manual "Posted in Accurate" tick stays for an unseeded book.
 - In `posted` state `meJournal` leaves `lines`/`fx` empty, so Journals' "prepared, not in Accurate
   yet" list (js/books.js `preparedAll`) shows nothing for it.
-- Known limit: a month with foreign-currency lines has a voucher the rupiah-only Accurate file cannot
-  equal, so a later Accurate import of that file is not linked by signature (date | debit total |
-  account set) and arrives as "new" in Your book's review. Dismiss it (the book already has the
-  entry), or skip the optional download for such months.
+- A month with foreign-currency lines has a voucher the rupiah-only Accurate file cannot equal by
+  signature; a later Accurate import of that file still links to it through the foreign-currency
+  fallback in §3 (same date, the same non-fx lines), so it does not arrive as "new".
 
 **Income › Post to book** (`incPost(id)`, `incPostAll(M)`). One voucher per receipt: `origin:
 'income'`, `ref` = the receipt id, Dr the receiving account / Cr the income account;

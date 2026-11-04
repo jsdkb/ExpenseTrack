@@ -270,7 +270,7 @@
       if(at<atOf(cur))return;const a={...cur};delete a.n;delete a.at;if(JSON.stringify(a)!==JSON.stringify(val))store[id]={...val,n:cur.n,at};};
     for(const a of c.accounts||[])if(a&&a.id)put(C.accounts,a.id,{id:a.id,label:a.label,kind:a.kind,currency:a.currency||'IDR'},'accounts');
     for(const s of c.statements||[]){if(!s)continue;const id=s.id||(s.account+'|'+s.date);
-      put(C.statements,id,{id,account:s.account,date:s.date,periodStart:s.periodStart||null,dueDate:s.dueDate||null,minPayment:s.minPayment!=null?s.minPayment:null,receivedAt:s.receivedAt||null,
+      put(C.statements,id,{id,account:s.account,date:s.date,periodStart:s.periodStart||null,dueDate:s.dueDate||null,minPayment:s.minPayment!=null?s.minPayment:null,receivedAt:s.receivedAt||(C.statements[id]&&C.statements[id].receivedAt)||null,   // a file without it never wipes a known arrival day
         opening:s.opening,closing:s.closing,tieOk:!!s.tieOk,notes:Array.isArray(s.notes)?s.notes.map(t=>cut(t,200)):[]},'statements');}
     const inc=(c.txns||[]).filter(t=>t&&t.id);
     const map=cashIdRemap(Object.values(C.txns).sort((p,q)=>(p.n||0)-(q.n||0)),inc);
@@ -296,6 +296,17 @@
     const appBySig=new Map();
     for(const v of Object.values(x.vouchers))if(v&&v.origin!=='accurate'&&v.status==='posted'&&!x.links[v.id]){const s=sigOf(v);(appBySig.get(s)||appBySig.set(s,[]).get(s)).push(v.id);}
     for(const q of appBySig.values())q.sort();
+    // Fallback for foreign-currency entries: Accurate's file is rupiah-only and leaves the
+    // foreign-currency group out (lines with fx, and Month-end's difference line on them — core
+    // meFxGroup), so its signature differs. An app voucher with such lines (or from Month-end) also
+    // links to an Accurate voucher on the same date whose lines are exactly its other lines.
+    const fxGroup=l=>!!l.fx||(typeof meFxGroup==='function'&&meFxGroup(l));
+    const appByRp=new Map(),used=new Set();
+    for(const v of Object.values(x.vouchers))if(v&&v.origin!=='accurate'&&v.status==='posted'&&!x.links[v.id]&&(v.origin==='month-end'||(v.lines||[]).some(l=>l&&l.fx))){
+      const rp=(v.lines||[]).filter(l=>l&&!fxGroup(l));if(!rp.length||rp.length===(v.lines||[]).length)continue;
+      const k=contentSig({date:v.date,lines:rp});(appByRp.get(k)||appByRp.set(k,[]).get(k)).push(v.id);}
+    for(const q of appByRp.values())q.sort();
+    const take=q=>{while(q&&q.length){const id=q.shift();if(!used.has(id)){used.add(id);return id;}}return null;};
     for(const[id,y]of incoming){
       const cur=x.vouchers[id],f=x.flags[id];
       if(cur){
@@ -307,8 +318,8 @@
       if(linkedTo.has(id))continue;
       const p=x.pending[id];
       if(p&&p.status==='accepted')continue;
-      const q=appBySig.get(sigOf(y));
-      if(q&&q.length){const appId=q.shift();x.links[appId]=id;linkedTo.add(id);r.linked++;continue;}
+      const appId=take(appBySig.get(sigOf(y)))||take(appByRp.get(contentSig(y)));
+      if(appId){x.links[appId]=id;linkedTo.add(id);r.linked++;continue;}
       if(p&&p.status==='pending'){if(contentSig(p.voucher||{})!==contentSig(y))x.pending[id]={...p,voucher:y,importedAt:at,at:t};continue;}
       x.pending[id]={status:'pending',at:t,importedAt:at,voucher:y};r.new++;
     }
