@@ -329,7 +329,8 @@
       const inWin=cards.filter(c=>c.last<l.date&&l.date<=addDays(c.due.date,PAY_GRACE));
       let to=inWin.filter(c=>c.l4&&new RegExp('(^|\\D)'+c.l4+'(\\D|$)').test(digits));
       if(!to.length)to=inWin.filter(c=>[c.due.amount,c.due.min].some(v=>v!=null&&v>0&&Math.abs(v-amt)<1));
-      if(!to.length){const byName=inWin.filter(c=>c.base&&nt.includes(c.base));if(byName.length===1)to=byName;}
+      // The paying account's own bank name in its text says nothing about which card was paid.
+      if(!to.length){const own=srcBase(accById.get(l.account)),byName=inWin.filter(c=>c.base&&c.base!==own&&nt.includes(c.base));if(byName.length===1)to=byName;}
       if(to.length===1){const g=got.get(to[0].a.id);g.amount+=amt;g.lines.push(l.id);}
     }
     return{got,coveredTo};
