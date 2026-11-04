@@ -302,39 +302,73 @@
     const mo=/^\d+$/.test(m[2])?+m[2]:MON[m[2].slice(0,3).toLowerCase()];let y=+m[3];if(y<100)y+=2000;
     return mo>=1&&mo<=12&&+m[1]>=1&&+m[1]<=dim(y,mo)?`${y}-${pad(mo)}-${pad(+m[1])}`:null;
   }
-  // Rupiah owed on a card statement. The sign convention is read from the statement itself:
-  // if opening + lines = closing, charges are negative and a negative closing is owed.
-  function owedOf(p,lines){
-    const s=p.s,c=s.closing;if(c==null)return null;
-    const sum=lines.filter(l=>l.account===s.account&&p.start<=l.date&&l.date<=p.end).reduce((a,l)=>a+l.amount,0);
-    if(s.opening!=null&&Math.abs(s.opening+sum-c)<1)return Math.max(0,-c);
-    if(s.opening!=null&&Math.abs(s.opening-sum-c)<1)return Math.max(0,c);
-    return Math.abs(c);
+  // Rupiah owed on a card statement. Cards tie as opening − lines = closing (the Bank Statements
+  // pipeline), so a positive closing is owed and a negative one is in credit (core cardOwed).
+  function owedOf(p){const c=p.s.closing;return c==null?null:cardOwed(c);}
+
+  /* ── Was a card's due paid? A card's own payment line only arrives with its NEXT statement, so the
+     evidence is on the bank side: bank-account lines typed card-payment between the card statement
+     date and the due date + PAY_GRACE days. A bank line belongs to a card when its text carries the
+     card's last four digits; else when its amount is that card's due amount or minimum; else when
+     its text names the card's bank and only one card of that bank is due. Without bank statements
+     covering the due date + grace (every bank account that pays cards), the payment is
+     "not confirmed yet" — never "overdue". ── */
+  const PAY_GRACE=3;
+  const last4=id=>{const m=String(id).match(/(\d{4})(?!.*\d{4})/);return m?m[1]:null;};
+  const srcBase=a=>norm(String(a.source||String(a.id).split(':')[0]).replace(/-?(cc|account)$/i,''));
+  function bankPayments(cash,cards,today){
+    const accById=new Map(cash.accounts.map(a=>[a.id,a])),isBank=id=>{const a=accById.get(id);return!!a&&(a.kind||'account')==='account';};
+    const payLines=(cash.txns||[]).filter(l=>isBank(l.account)&&l.amount<0&&typeOf(l)==='card-payment');
+    // Bank accounts that pay cards (all bank accounts when none has yet) and how far their statements go.
+    const payers=new Set(payLines.map(l=>l.account)),banks=cash.accounts.filter(a=>(a.kind||'account')==='account'&&(!payers.size||payers.has(a.id)));
+    const upTo=new Map();for(const st of cash.statements||[])if(banks.some(b=>b.id===st.account)&&(!upTo.has(st.account)||st.date>upTo.get(st.account)))upTo.set(st.account,st.date);
+    const coveredTo=banks.length&&banks.every(b=>upTo.has(b.id))?banks.map(b=>upTo.get(b.id)).sort()[0]:null;
+    const got=new Map(cards.map(c=>[c.a.id,{amount:0,lines:[]}]));
+    for(const l of payLines){
+      const amt=-l.amount,txt=String(l.desc||'')+' '+String(l.counterparty||''),digits=txt.replace(/\D/g,' '),nt=norm(txt);
+      const inWin=cards.filter(c=>c.last<l.date&&l.date<=addDays(c.due.date,PAY_GRACE));
+      let to=inWin.filter(c=>c.l4&&new RegExp('(^|\\D)'+c.l4+'(\\D|$)').test(digits));
+      if(!to.length)to=inWin.filter(c=>[c.due.amount,c.due.min].some(v=>v!=null&&v>0&&Math.abs(v-amt)<1));
+      if(!to.length){const byName=inWin.filter(c=>c.base&&nt.includes(c.base));if(byName.length===1)to=byName;}
+      if(to.length===1){const g=got.get(to[0].a.id);g.amount+=amt;g.lines.push(l.id);}
+    }
+    return{got,coveredTo};
   }
   function calendar(o){
     o=o||{};const cash=o.cash,today=o.today||todayISO(),fix=o.fix||{},rows=[];
     if(!cash||!Array.isArray(cash.accounts)||!Array.isArray(cash.statements))return rows;
     const per=periodsOf(cash,today),lines=cash.txns||[],man=fix.manual||{};
+    const base=[];
     for(const a of cash.accounts){
       const P=per[a.id]||[];if(!P.length)continue;
-      const lastP=P[P.length-1],last=lastP.end,cd=cycleDay(P.map(p=>p.end)),expected=expectedNext(last,cd);
-      const manual=live(man[a.id])&&!!man[a.id].on;
+      const lastP=P[P.length-1],last=lastP.end;
       let due=null;
       if(a.kind==='card'){
-        if(lastP.s.dueDate)due={date:lastP.s.dueDate,amount:owedOf(lastP,lines),min:lastP.s.minPayment!=null?lastP.s.minPayment:null,from:'statement'};
+        if(lastP.s.dueDate)due={date:lastP.s.dueDate,amount:owedOf(lastP),min:lastP.s.minPayment!=null?lastP.s.minPayment:null,from:'statement'};
         else{const b=(o.billing||[]).filter(x=>x.account===a.id&&x.date&&x.date>last).sort((x,y)=>cmp(y.date,x.date))[0];
           if(b)due={date:b.date,amount:null,min:null,from:'email'};}
       }
-      let paid=false,overdue=false;
+      base.push({a,P,lastP,last,due,l4:last4(a.id),base:srcBase(a)});
+    }
+    const bp=bankPayments(cash,base.filter(x=>x.due),today);
+    for(const{a,P,last,due}of base){
+      const cd=cycleDay(P.map(p=>p.end)),expected=expectedNext(last,cd),manual=live(man[a.id])&&!!man[a.id].on;
+      let paid=false,overdue=false,unconfirmed=false,payment=null;
       if(due){
-        const pay=lines.filter(l=>l.account===a.id&&l.amount>0&&l.date>last&&typeOf(l)==='card-payment').reduce((s,l)=>s+l.amount,0);
+        // The card's own payment lines after the statement (if the file already has them) also count.
+        const own=lines.filter(l=>l.account===a.id&&l.amount>0&&l.date>last&&typeOf(l)==='card-payment').reduce((s,l)=>s+l.amount,0);
+        const bank=bp.got.get(a.id)||{amount:0,lines:[]},pay=own+bank.amount;
         const need=due.min!=null?due.min:due.amount;
-        paid=due.amount===0||(need!=null&&need>0&&pay>=need);
-        overdue=!paid&&due.date<today&&!!cash.asOf&&cash.asOf>=due.date;
+        paid=due.amount===0||(need!=null&&need>0&&pay>=need)||(need==null&&pay>0);
+        payment={amount:pay,lines:bank.lines,from:bank.amount?'bank':own?'card':null};
+        if(!paid&&due.date<today){
+          const covered=!!bp.coveredTo&&bp.coveredTo>=addDays(due.date,PAY_GRACE);
+          if(covered)overdue=true;else unconfirmed=true;
+        }
       }
       const tn=dn(today),late=tn>dn(expected)+3,dueIn=due?dn(due.date)-tn:null;
-      const status=overdue?'overdue':manual&&tn>=dn(expected)?'manual':late?'late':due&&!paid&&dueIn>=0&&dueIn<=7?'due-soon':'on-time';
-      rows.push({id:a.id,label:a.label||a.id,kind:a.kind||'account',last,cycleDay:cd,expected,due,paid,overdue,manual,status,dueIn,
+      const status=overdue?'overdue':manual&&tn>=dn(expected)?'manual':late?'late':due&&!paid&&dueIn>=0&&dueIn<=7?'due-soon':unconfirmed?'unconfirmed':'on-time';
+      rows.push({id:a.id,label:a.label||a.id,kind:a.kind||'account',last,cycleDay:cd,expected,due,paid,overdue,unconfirmed,payment,manual,status,dueIn,
         daysLate:late?tn-dn(expected):0,minPayment:due?due.min:null});
     }
     return rows.sort((x,y)=>cmp(x.kind==='card'?1:0,y.kind==='card'?1:0)||cmp(x.label,y.label));
@@ -366,7 +400,8 @@
     const rows=calendar({cash:c,today:todayISO(),fix:STATE.stmtFix||{},billing});
     CAL={sig:s,rows};return rows;
   }
-  const STATUS={'on-time':['good','On time'],'due-soon':['warn','Due soon'],late:['bad','Statement late'],manual:['warn','Download due'],overdue:['bad','Payment not found']};
+  const STATUS={'on-time':['good','On time'],'due-soon':['warn','Due soon'],late:['bad','Statement late'],manual:['warn','Download due'],overdue:['bad','Payment not found'],
+    unconfirmed:['','Payment not confirmed yet']};
   function statusBadge(r){
     const[cls,txt]=STATUS[r.status]||['',''];
     const label=r.status==='due-soon'?(r.dueIn===0?'Due today':`Due in ${r.dueIn} day${r.dueIn===1?'':'s'}`):r.status==='late'?`Late ${r.daysLate} days`:txt;

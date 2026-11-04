@@ -440,7 +440,15 @@ Disabled: 40% opacity, no hover. Loading: label stays, spinner replaces the icon
 - **Statement calendar status** (Credit cards › History, Accounts column, Home "Coming up"):
   `On time` good · `Due soon` / `Due in n days` / `Due today` warn · `Download due` warn (a source the
   owner downloads by hand) · `Late n days` bad (statement > 3 days past its expected date) ·
-  `Payment not found` bad (due date passed, no card payment ≥ the minimum in the data).
+  `Payment not found` bad (due date passed and the bank statements covering it show no card
+  payment ≥ the minimum) · `Payment not confirmed yet` neutral (due date passed, but the bank
+  statements don't reach it yet — never shown as overdue).
+- **Flag badge on a figure that is right but misleading** (`Mostly equity moves`, warn): the
+  figure keeps its definition; the row gets the badge, its chart mark a 2px `--warn` outline with a
+  legend entry, and every summary it feeds (averages, best/worst, year-to-date) gets a `*` and the
+  footnote "Includes N month(s) that are mostly equity moves — not saved from income" (§9.3a).
+  Home uses it for real-savings months where the bridge's Other is more than half the month's
+  change and more than twice the median month's change.
 
 ### 8.5 Inputs
 
@@ -997,6 +1005,10 @@ the imported `books.json`; each shows its own import step until a file exists.
 - **Ledger links** everywhere (§8.8); Accounts rows get a "Ledger" link (hook `accountsExtraCol`).
 - Trial balance shows `Balanced` (good) / `Unbalanced` (bad); a tie difference against the
   snapshot shows `Check` (bad) on that account.
+- **Sides differ from Home:** Home and the SPT pack put an account on the side its balance sits on
+  (a card kept under Bank is a debt, an asset in credit a liability); the Balance sheet keeps the
+  book's account types. When they differ for the month, one `help` line under the totals says how
+  many accounts Home shows on the other side and names them (masked names from the data).
 - Exports: Balance sheet, Income statement and Trial balance download Excel with the as-of date in
   the title.
 
@@ -1027,7 +1039,9 @@ Home                                       [Book | Market]  [hide]
   income. Their bars are drawn at 25% fill with a 1.5px outline in the same colour, labelled
   `Provisional` (warn) on the card and in the legend; typed income drops out once ticked Posted.
 - **Savings chart:** monthly real savings (= net-worth change) as bars, `--good` up / `--bad` down,
-  provisional months outlined; 3/6/12-month averages as facts above it.
+  provisional months outlined; 3/6/12-month averages, best and worst month as facts under it.
+  Months that are mostly equity moves get the flag badge (§8.4): outlined in `--warn`, badged in
+  the table, and a `*` footnote on every fact and on "real savings this year" that includes one.
 - **Liquidity:** cash + deposits and months of runway at the average spend. **Debts:** cards and
   loans with the next due date and amount (from the statement calendar).
 - **Coming up:** statements and dues in the next 14 days plus anything late or overdue, sorted by

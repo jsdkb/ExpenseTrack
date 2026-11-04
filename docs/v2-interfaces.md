@@ -224,13 +224,15 @@ Both are written by `tests/fixtures/make_v2_fixtures.py` (deterministic; re-run 
 it). As built: books-demo has 41 accounts (10 parents), 23 months (2024-12 to 2026-10), 340
 vouchers, a USD bank account and one suspended account. cash-demo-v2 has one bank account and three
 cards, two of them on the same bank (`Bank-Alpha-CC`), with three card cycles each; every
-statement ties (opening + its transactions = closing). `tests/test_foundation.py` checks all of it.
+statement ties with the pipeline's rule (below). `tests/test_foundation.py` checks all of it.
 
-Sign note: the real Bank Statements pipeline ties a card as opening − transactions = closing, so
-a card's closing is what is owed (positive) and a negative closing is in credit ("CR"), which is
-how the Cash movements page labels it. The fixture's cards use the account rule instead (negative
-closing = owed). Code that reads a card closing must not assume either: `js/statements.js`
-(`owedOf`) works the rule out from each statement.
+**Card sign (one rule everywhere).** The Bank Statements pipeline ties a bank account as
+opening + transactions = closing and a card as opening − transactions = closing (charges are
+negative lines, payments and refunds positive). So a card's closing is what is owed when positive
+and in credit ("CR") when negative. Every reader of a card closing uses the core helpers
+`cardOwed(closing)` = max(0, closing) and `cardCredit(closing)` = max(0, −closing): Cash movements
+("Owed" / "In credit"), the statement calendar's due amount (`owedOf`) and Home's next card due. The
+fixture follows the same rule.
 
 ## 6. Statements module (C, `js/statements.js`)
 
@@ -267,8 +269,21 @@ from `STATE.cash` and `STATE.stmtFix`.
 a month's last day counting as 31; expected next = the month after the last statement, day clamped
 to the month's length. Card due = latest statement `dueDate` / owed closing / `minPayment`, else the
 newest billing reminder in `BILLING` for that card (linked like the alerts) dated after the last
-statement (date only, no amount). Status: `overdue` (no card payment line ≥ minimum after the statement, and the cash file's
-`asOf` is past the due date), `manual` (owner-flagged source and the expected date has come),
-`late` (> 3 days past expected), `due-soon` (due within 7 days, unpaid), else `on-time`.
+statement (date only, no amount).
+
+**Was it paid?** A card's own payment line only arrives with its next statement, so the evidence is
+on the bank side: bank-account lines typed `card-payment` dated after the card statement and up to
+the due date + 3 days (`PAY_GRACE`). A line belongs to a card when its text has the card's last four
+digits; else when its amount equals that card's due amount or minimum; else when its text names
+the card's bank and only one card of that bank is due. The card's own payment lines after the
+statement count too. Paid = payments ≥ the minimum (or the amount owed when there is no minimum),
+or nothing owed. When the due date has passed unpaid, the bank statements decide: only when every
+bank account that pays cards (every bank account if none has yet) has a statement dated on or after
+the due date + 3 days is it `overdue`; otherwise it is `unconfirmed` ("Payment not confirmed yet",
+neutral). Rows carry `paid, overdue, unconfirmed, payment: {amount, lines, from: 'bank'|'card'|null}`.
+
+Status, first that applies: `overdue`, `manual` (owner-flagged source and the expected date has
+come), `late` (> 3 days past expected), `due-soon` (due within 7 days, unpaid), `unconfirmed`,
+else `on-time`.
 `homeComingUp()` items: `{date, kind, account (label), accountId, label, amount?}` for the next 14
 days plus late/overdue/manual, sorted by date then kind (missing, manual, due, statement).

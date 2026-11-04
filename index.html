@@ -882,6 +882,7 @@
     .h-note{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:18px;padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:12px;background:var(--warn-soft);color:var(--text-1)}
     .h-note svg.i{color:var(--warn);flex-shrink:0;width:16px;height:16px;margin-top:1px}
     .h-note.info{background:var(--info-soft)} .h-note.info svg.i{color:var(--info)}
+    .h-foot{margin-top:10px;font-size:12px;line-height:16px;color:var(--text-2)}
     .h-big{font-size:28px;line-height:32px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .h-due{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
     .h-sel{width:auto;height:36px;max-width:190px}
@@ -4799,6 +4800,10 @@ function cashTotals(m){
   }
   r.net=r.in-r.out;return r;
 }
+// Card statements tie as opening − lines = closing (the Bank Statements pipeline): a positive card
+// closing is owed, a negative one is in credit. Every reader of a card closing goes through these.
+function cardOwed(closing){return Math.max(0,+closing||0);}
+function cardCredit(closing){return Math.max(0,-(+closing||0));}
 function cashMoney(n,ccy){return!ccy||ccy==='IDR'?fmtIDR(Math.abs(n)):`${ccy} ${Math.abs(n).toLocaleString('en-GB',{maximumFractionDigits:2})}`;}
 
 /* ── Import (same folder and file picker as the wealth snapshot) ── */
@@ -4892,7 +4897,7 @@ function cashAccountsHTML(txs){
   return`<div class="list">${accs.map(a=>{
     const mine=txs.filter(t=>t.account===a.id),inn=mine.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0),out=mine.filter(t=>t.amount<0).reduce((s,t)=>s-t.amount,0);
     const st=c.statements.filter(s=>s.account===a.id&&(s.date||'').slice(0,7)===CM_MONTH).sort((x,y)=>String(y.date).localeCompare(String(x.date)))[0];
-    const bal=st&&st.closing!=null?(a.kind==='card'?(st.closing<0?`In credit <span class="amt">${cashMoney(st.closing,a.currency)}</span>`:`Owed <span class="amt">${cashMoney(st.closing,a.currency)}</span>`)
+    const bal=st&&st.closing!=null?(a.kind==='card'?(cardCredit(st.closing)>0?`In credit <span class="amt">${cashMoney(cardCredit(st.closing),a.currency)}</span>`:`Owed <span class="amt">${cashMoney(cardOwed(st.closing),a.currency)}</span>`)
       :`Closing <span class="amt">${st.closing<0?'−':''}${cashMoney(st.closing,a.currency)}</span>`):'';
     return`<div class="list-item"><span class="li-body"><span class="li-title" style="display:block">${escH(a.label)}${a.currency!=='IDR'?' <span class="badge">'+escH(a.currency)+'</span>':''}</span>
       <span class="li-sub" style="display:block">In <span class="amt">${cashMoney(inn,a.currency)}</span> · Out <span class="amt">${cashMoney(out,a.currency)}</span>${bal?` · ${bal}${st.date?` (${fmtDay(new Date(st.date+'T00:00:00'))})`:''}`:''}</span></span>

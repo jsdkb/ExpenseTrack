@@ -574,6 +574,21 @@
   }
 
   /* ── Balance sheet ── */
+  // Home and the SPT pack put an account on the side its balance sits on (the wealth snapshot's
+  // side: a card kept under Bank is a debt, an asset in credit a liability); this sheet keeps the
+  // book's account type. One line says which accounts Home shows on the other side this month.
+  function sideDiff(M){
+    if(typeof wAccounts!=='function'||!W())return[];
+    return wAccounts().filter(a=>{const b=I.acc.get(String(a.id));if(!b||b.unknown||(b.kind!=='asset'&&b.kind!=='liability'))return false;
+      return(a.side==='asset'?'asset':'liability')!==b.kind&&Math.round(rawAt(String(a.id),M))!==0;})
+      .map(a=>({code:String(a.id),name:a.name||I.acc.get(String(a.id)).name||String(a.id),book:I.acc.get(String(a.id)).kind,home:a.side==='asset'?'asset':'liability'}));
+  }
+  function sideNoteHTML(M){
+    const d=sideDiff(M);if(!d.length)return'';
+    const what=x=>`${escH(x.name)} (${x.book==='asset'?'an asset in the book, a debt on Home':'a liability in the book, an asset on Home'})`;
+    const shown=d.slice(0,3).map(what).join('; ')+(d.length>3?`; and ${d.length-3} more`:'');
+    return`<p class="help bk-sidenote" id="bkBSSide">Home shows ${d.length} account${d.length===1?'':'s'} on the other side because of ${d.length===1?'its':'their'} balance: ${shown}. This sheet keeps the book’s account types, so its totals differ from Home’s.</p>`;
+  }
   function renderBS(){
     const g=gateHTML('Balance sheet');if(g)return g;
     idx();const M=syncMonth(),d=bsData(M,BK.bsView);
@@ -593,7 +608,7 @@
       </div>
       <div class="grid"><section class="card flush span-12" id="bkBS">${cardHead('scale',`As at ${escH(dLong(meMonthEnd(M)))}`,`${BK.bsView==='market'?'Market value where recorded, book value elsewhere':'Book value'} · liabilities and equity shown credit-positive · click a row for its ledger`,colSeg('bs',['This month','Prev.','Start of year'],BK.bsCol))}
         ${stmtTableHTML(d,BK.bsCol,{from:yearStart(M),to:meMonthEnd(M)})}
-        <div style="padding:4px var(--card-pad) var(--card-pad)">${check}</div></section></div>`;
+        <div style="padding:4px var(--card-pad) var(--card-pad)">${check}${sideNoteHTML(M)}</div></section></div>`;
   }
 
   /* ── Income statement ── */

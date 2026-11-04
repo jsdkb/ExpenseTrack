@@ -125,12 +125,26 @@
       if(ms.length)return{v:ms.reduce((s,m)=>s+cashTotals(m).out,0)/ms.length,n:ms.length,src:'statements'};}
     return null;
   }
+  // A month whose change is mostly equity moves (the bridge's Other): |Other| > half the month's
+  // |change| and > twice the median month's |change|. It still counts as real savings (= net-worth
+  // change, the owner's rule); it is only flagged, so a capital injection isn't read as saving.
+  const EQ_SHARE=0.5,EQ_VS_MEDIAN=2;
+  function markEquity(sav,bridges){
+    const by=new Map(bridges.map(b=>[b.month,b])),xs=sav.filter(r=>r.v!=null).map(r=>Math.abs(r.v)).sort((a,b)=>a-b);
+    const med=xs.length?xs[Math.floor((xs.length-1)/2)]:0;
+    for(const r of sav){const b=by.get(r.month),o=b?Math.abs(b.other):0;
+      r.eq=!!(b&&r.v!=null&&o>=1&&o>EQ_SHARE*Math.abs(b.change)&&o>EQ_VS_MEDIAN*med);}
+  }
   function model(){
     const pts=buildPoints(),L=pts.length-1;
     const sav=pts.map((p,i)=>({month:p.month,kind:p.kind,v:p.missing?null:delta(pts,i),val:linked(pts,i)?pairVal(pts,i):null}));
     const bridges=pts.map((_,i)=>bridgeAt(pts,i)).filter(Boolean);
+    markEquity(sav,bridges);
     return{pts,L,sav,bridges};
   }
+  const EQ_TXT='mostly equity moves — not saved from income';
+  const eqBadge='<span class="badge warn" title="Most of this month\u2019s change came from equity moves (Other), not from income less spending">Mostly equity moves</span>';
+  const eqFoot=n=>`Includes ${n} month${n===1?'':'s'} that ${n===1?'is':'are'} mostly equity moves — not saved from income.`;
 
   /* ── Coming up, card dues, freshness ── */
   function comingRaw(){return runHooks('homeComingUp').filter(x=>x&&typeof x.date==='string'&&/^\d{4}-\d{2}-\d{2}/.test(x.date)).map(x=>({...x,date:x.date.slice(0,10)}));}
@@ -154,9 +168,10 @@
     for(const x of raw)if(x.kind==='due')out.push({date:x.date,label:x.label||x.account||'Card',amount:x.amount!=null&&!isNaN(+x.amount)?+x.amount:null,src:'hook'});
     const c=CM();
     if(!out.length&&c){const last={};for(const s of c.statements){if(!s.dueDate||cashAcc(s.account).kind!=='card')continue;if(!last[s.account]||s.date>last[s.account].date)last[s.account]=s;}
-      for(const s of Object.values(last))out.push({date:s.dueDate,label:cashAcc(s.account).label,amount:s.closing<0?-s.closing:0,src:'statement'});}
-    if(!out.length&&typeof ALL_TRANSACTIONS_RAW!=='undefined'){const seen=new Set();
-      for(const t of ALL_TRANSACTIONS_RAW){if(!t||t.type!=='billing'||!t.dueDate)continue;const d=parseDue(t.dueDate,t.msgDate);if(!d||seen.has(d))continue;seen.add(d);
+      // A card's closing is what is owed (positive); a negative closing is in credit (cardOwed, core).
+      for(const s of Object.values(last))out.push({date:s.dueDate,label:cashAcc(s.account).label,amount:cardOwed(s.closing),src:'statement'});}
+    if(!out.length&&typeof BILLING!=='undefined'){const seen=new Set();
+      for(const t of BILLING){if(!t||t.type!=='billing'||!t.dueDate)continue;const d=parseDue(t.dueDate,t.msgDate);if(!d||seen.has(d))continue;seen.add(d);
         out.push({date:d,label:(t.bank||'Card')+' billing email',amount:t.amount>0?t.amount:null,src:'email'});}}
     return out;
   }
@@ -194,8 +209,8 @@
   }
   function ytd(M){
     const p=M.pts[M.L],y=+p.month.slice(0,4),anchor=`${y-1}-12`,ai=M.pts.findIndex(x=>x.month===anchor);
-    if(ai<0)return null;let s=0;for(let i=ai+1;i<=M.L;i++){const d=M.sav[i].v;if(d==null)return null;s+=d;}
-    return{v:s,anchor,base:M.pts[ai].tot[viewName()].net};
+    if(ai<0)return null;let s=0,eq=0;for(let i=ai+1;i<=M.L;i++){const d=M.sav[i].v;if(d==null)return null;s+=d;if(M.sav[i].eq)eq++;}
+    return{v:s,anchor,base:M.pts[ai].tot[viewName()].net,eq};
   }
   function nwCardHTML(M){
     const p=M.pts[M.L],t=p.tot[viewName()],d=M.sav[M.L],y=ytd(M),prov=p.kind==='prov';
@@ -205,7 +220,8 @@
       ${cardHead('trending-up','Net worth',`${monthLabel(p.month,true)} · ${NW_VIEW==='market'?'market value where recorded':'book value'}`,`${prov?'<span class="badge warn">Provisional</span>':''}<button class="btn btn-ghost btn-sm" onclick="setTab('networth')">Details</button>`)}
       <div class="display"><span class="amt"><span class="cur">Rp</span>${fmtNum(t.net)}</span></div>
       ${deltaLine(d.v,prevNet,`vs ${monthLabel(M.pts[M.L-1]?M.pts[M.L-1].month:p.month)}${basis}`)}
-      ${y?deltaLine(y.v,y.base,`since ${dayLong(mEnd(y.anchor))} · real savings this year`):''}
+      ${y?deltaLine(y.v,y.base,`since ${dayLong(mEnd(y.anchor))} · real savings this year${y.eq?'*':''}`):''}
+      ${y&&y.eq?`<p class="h-foot" id="homeNWEq">* Real savings this year: ${escH(eqFoot(y.eq).replace(/^I/,'i'))}</p>`:''}
       ${prov?`<p class="help" style="margin-top:6px">Provisional — book not posted yet. From your ${escH(monthLabel(p.month,true))} month-end figures${p.carried.length?`; ${p.carried.length} account${p.carried.length===1?'':'s'} kept at last month’s figure`:''}.</p>`:''}
       <dl class="facts"><div><dt class="eyebrow">Assets</dt><dd class="amt">${fmtIDRShort(t.assets)}</dd></div><div><dt class="eyebrow">Liabilities</dt><dd class="amt">${fmtIDRShort(t.liab)}</dd></div></dl>
     </section>`;
@@ -213,9 +229,10 @@
   function savRows(M){return M.sav.slice(-12);}
   function savingsCardHTML(M){
     const rows=savRows(M),vals=rows.filter(r=>r.v!=null);
-    const avg=k=>{const xs=rows.slice(-k).filter(r=>r.v!=null);return xs.length?{v:xs.reduce((s,r)=>s+r.v,0)/xs.length,n:xs.length}:null;};
+    const avg=k=>{const xs=rows.slice(-k).filter(r=>r.v!=null);return xs.length?{v:xs.reduce((s,r)=>s+r.v,0)/xs.length,n:xs.length,eq:xs.filter(r=>r.eq).length}:null;};
     const best=vals.length?vals.reduce((a,b)=>b.v>a.v?b:a):null,worst=vals.length?vals.reduce((a,b)=>b.v<a.v?b:a):null;
-    const stat=(label,o,sub)=>`<div><dt class="eyebrow">${label}</dt><dd class="${o?(o.v>=0?'good':'bad'):''}">${o?signed(o.v,true):'—'}</dd>${sub?`<div class="h-sub">${sub}</div>`:''}</div>`;
+    const nEq=vals.filter(r=>r.eq).length,eqOf=o=>!!o&&(o.eq===true||o.eq>0);
+    const stat=(label,o,sub)=>`<div><dt class="eyebrow">${label}${eqOf(o)?'*':''}</dt><dd class="${o?(o.v>=0?'good':'bad'):''}">${o?signed(o.v,true):'—'}</dd>${sub?`<div class="h-sub">${sub}</div>`:''}</div>`;
     const a3=avg(3),a6=avg(6),a12=avg(12),nTxt=(o,k)=>o&&o.n<k?`${o.n} mo so far`:'';
     const basis=NW_VIEW==='market'?'market value where both month-ends have one, else book value':'book value';
     const anyProv=rows.some(r=>r.kind==='prov'&&r.v!=null);
@@ -224,9 +241,10 @@
       ${cardHead('piggy-bank','Real savings',`Net worth change each month · ${basis}`,vals.length?tableToggle('homeSavings'):'')}
       ${vals.length?`<div class="chart-readout" id="homeSavReadout" aria-live="polite"></div>
       <div class="chart-box"><canvas id="homeSavChart" role="img" aria-label="${escH(amountsHidden()?'Net worth change per month':label)}"></canvas></div>
-      <div class="legend"><span class="legend-item"><i style="background:var(--good)"></i>Net worth up</span><span class="legend-item"><i style="background:var(--bad)"></i>Net worth down</span>${anyProv?'<span class="legend-item"><i style="background:transparent;border:1.5px solid var(--text-3)"></i>Provisional</span>':''}</div>
-      <div class="chart-table"><table class="data"><thead><tr><th scope="col">Month</th><th scope="col" class="num">Change</th><th scope="col">Basis</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${monthLabel(r.month)}</td><td class="num amt">${r.v==null?'—':signedText(r.v)}</td><td>${r.v==null?'—':(r.kind==='prov'?'Provisional · ':'')+(r.val==='market'?'Market':'Book')}</td></tr>`).join('')}</tbody></table></div>
-      <dl class="h-stats">${stat('3-mo average',a3,nTxt(a3,3))}${stat('6-mo average',a6,nTxt(a6,6))}${stat('12-mo average',a12,nTxt(a12,12))}${stat('Best month',best,best?monthLabel(best.month):'')}${stat('Worst month',worst,worst?monthLabel(worst.month):'')}</dl>`
+      <div class="legend"><span class="legend-item"><i style="background:var(--good)"></i>Net worth up</span><span class="legend-item"><i style="background:var(--bad)"></i>Net worth down</span>${anyProv?'<span class="legend-item"><i style="background:transparent;border:1.5px solid var(--text-3)"></i>Provisional</span>':''}${nEq?'<span class="legend-item"><i style="background:transparent;border:2px solid var(--warn)"></i>Mostly equity moves</span>':''}</div>
+      <div class="chart-table"><table class="data"><thead><tr><th scope="col">Month</th><th scope="col" class="num">Change</th><th scope="col">Basis</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${monthLabel(r.month)}</td><td class="num amt">${r.v==null?'—':signedText(r.v)}</td><td>${r.v==null?'—':(r.kind==='prov'?'Provisional · ':'')+(r.val==='market'?'Market':'Book')}${r.eq?' '+eqBadge:''}</td></tr>`).join('')}</tbody></table></div>
+      <dl class="h-stats">${stat('3-mo average',a3,nTxt(a3,3))}${stat('6-mo average',a6,nTxt(a6,6))}${stat('12-mo average',a12,nTxt(a12,12))}${stat('Best month',best,best?monthLabel(best.month):'')}${stat('Worst month',worst,worst?monthLabel(worst.month):'')}</dl>
+      ${nEq?`<p class="h-foot" id="homeSavEq">* ${escH(eqFoot(nEq))}</p>`:''}`
       :emptyHTML('piggy-bank','Two month-ends are needed to show a change')}
     </section>`;
   }
@@ -383,20 +401,20 @@
       <div class="grid">${bridgeCardHTML(M)}${comingHTML(raw)}</div>
       <div class="grid">${liquidityHTML(M)}${debtsHTML(M,raw)}${freshHTML()}</div>`;
   }
-  function savReadout(r){const el=$('homeSavReadout');if(el&&r)el.innerHTML=`${escH(monthLabel(r.month))}${r.kind==='prov'?' · provisional':''} · <b class="amt">${amountsHidden()?'•••':signedText(r.v,true)}</b>`;}
+  function savReadout(r){const el=$('homeSavReadout');if(el&&r)el.innerHTML=`${escH(monthLabel(r.month))}${r.kind==='prov'?' · provisional':''} · <b class="amt">${amountsHidden()?'•••':signedText(r.v,true)}</b>${r.eq?' '+eqBadge:''}`;}
   function afterRender(){
     const el=$('homeSavChart');if(!el||!LAST)return;
     if(CHARTS.homeSav){try{CHARTS.homeSav.destroy();}catch(_){}}
-    const rows=savRows(LAST),mobile=isMobile(),good=cssVar('--good'),bad=cssVar('--bad');
+    const rows=savRows(LAST),mobile=isMobile(),good=cssVar('--good'),bad=cssVar('--bad'),warn=cssVar('--warn');
     const col=r=>r.v>=0?good:bad,last=[...rows].reverse().find(r=>r.v!=null);
     savReadout(last);
     CHARTS.homeSav=new Chart(el,{type:'bar',data:{labels:rows.map(r=>monthLabel(r.month).replace(/ \d{4}$/,'')),datasets:[{data:rows.map(r=>r.v),
-        backgroundColor:rows.map(r=>r.v==null?'transparent':r.kind==='prov'?hexA(col(r),0.25):col(r)),borderColor:rows.map(r=>r.v==null?'transparent':col(r)),
-        borderWidth:rows.map(r=>r.kind==='prov'?1.5:0),borderRadius:6,borderSkipped:false,maxBarThickness:mobile?18:28}]},
+        backgroundColor:rows.map(r=>r.v==null?'transparent':r.kind==='prov'?hexA(col(r),0.25):col(r)),borderColor:rows.map(r=>r.v==null?'transparent':r.eq?warn:col(r)),
+        borderWidth:rows.map(r=>r.eq?2:r.kind==='prov'?1.5:0),borderRadius:6,borderSkipped:false,maxBarThickness:mobile?18:28}]},
       options:{responsive:true,maintainAspectRatio:false,...animOnce(),
         onClick:(e,els)=>{if(els.length){const r=rows[els[0].index];if(r&&r.v!=null)H.month(r.month);}},
         onHover:(e,els)=>{if(els.length){const r=rows[els[0].index];if(r&&r.v!=null)savReadout(r);}},
-        plugins:{tooltip:{enabled:!mobile,displayColors:false,callbacks:{title:it=>monthLabel(rows[it[0].dataIndex].month,true)+(rows[it[0].dataIndex].kind==='prov'?' · provisional':''),
+        plugins:{tooltip:{enabled:!mobile,displayColors:false,callbacks:{title:it=>monthLabel(rows[it[0].dataIndex].month,true)+(rows[it[0].dataIndex].kind==='prov'?' · provisional':'')+(rows[it[0].dataIndex].eq?' · '+EQ_TXT:''),
           label:c=>amountsHidden()?'•••':signedText(c.parsed.y)}}},
         scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:mobile?6:12,maxRotation:0}},y:{border:{display:false},ticks:{maxTicksLimit:5,callback:moneyTick}}}}});
   }
@@ -415,7 +433,7 @@
     cash(month,g){CM_MONTH=month;CM_FILTER=g==='in'||g==='out'?g:'all';CM_TYPE=null;CM_LIMIT=50;setTab('cash');},
     // For tests and other modules: plain data, no HTML.
     model(){const M=model();return{points:M.pts.filter(p=>!p.missing).map(p=>({month:p.month,kind:p.kind,market:p.mk,book:R(p.tot.book.net),marketNet:R(p.tot.market.net),carried:p.carried.length})),
-      savings:M.sav.map(s=>({month:s.month,kind:s.kind,v:s.v,val:s.val})),
+      savings:M.sav.map(s=>({month:s.month,kind:s.kind,v:s.v,val:s.val,eq:!!s.eq})),
       bridges:M.bridges.map(b=>({month:b.month,prev:b.prev,kind:b.kind,val:b.val,open:b.open,close:b.close,change:b.change,income:b.income,expense:b.expense,reval:b.reval,other:b.other,src:b.pl.src,
         typedIn:b.pl.typedIn,stmtIn:b.pl.stmtIn,equity:b.pl.eq?sumV(b.pl.eq):null}))};},
     fresh(){return freshRows();},
