@@ -319,7 +319,68 @@ Models (Settings › AI): Claude Sonnet 5.5 `claude-sonnet-5-5` (default), Claud
 - Tests mock api.anthropic.com inside the page and use a fake `sk-ant-test-0000`; no real key and no
   real call.
 
-## 9. Deviations (entry builder, 2026-11-04)
+## 9. Posting from Month-end and Income (index.html)
+
+Once the book is seeded (`ledgerSeeded()`), the Accurate import files become an optional extra (the
+buttons say so) and the two pages post into the app's own book. The app never writes to Accurate.
+
+**Month-end › Post to book** (`mePost(M)`). Posts `meJournal(M)` as one voucher: `origin: 'month-end'`,
+dated the month-end, `ref: 'month-end:YYYY-MM'`. The foreign-currency lines (kept out of the Accurate
+file, which can't carry rates) are in the voucher with `fx: {ccy, amount, rate}`: the rate is the
+month-end rate typed for the account and `amount` is the rupiah change divided by it (so the
+validator's "amount x rate = line" holds); the position itself is in the memo and the positions
+table. The id is stored in `STATE.monthEnd[M].postedId` (+ `postedAt`); `mergeStates` keeps the later
+posting.
+- State of a month (`meJournal(M).state`): `new` (not posted), `posted` (the live voucher exists and
+  every figure still matches the book), `update` (a figure changed after posting). The positions
+  table compares your figures with the live book, which holds the posted voucher, so right after
+  posting every difference is zero. After a later change the page shows the posted voucher's lines
+  merged with the change; **Update posted entry** calls `ledgerEdit` on the same voucher (history
+  kept). A month never gets a second live voucher. Void only through the ledger; a voided month is
+  `new` again and posts a fresh voucher (the voided one stays in the book).
+- The close's "Journal entries" step and the J entry's posted state come from the ledger when seeded
+  (`entryPosted`); the manual "Posted in Accurate" tick stays for an unseeded book.
+- In `posted` state `meJournal` leaves `lines`/`fx` empty, so Journals' "prepared, not in Accurate
+  yet" list (js/books.js `preparedAll`) shows nothing for it.
+- Known limit: a month with foreign-currency lines has a voucher the rupiah-only Accurate file cannot
+  equal, so a later Accurate import of that file is not linked by signature (date | debit total |
+  account set) and arrives as "new" in Your book's review. Dismiss it (the book already has the
+  entry), or skip the optional download for such months.
+
+**Income › Post to book** (`incPost(id)`, `incPostAll(M)`). One voucher per receipt: `origin:
+'income'`, `ref` = the receipt id, Dr the receiving account / Cr the income account;
+`STATE.income[id].postedId`. The status comes from the ledger (`incBook()`, cached per change): `own`
+(its voucher is posted) or `accurate` (a receipt saved or ticked Posted earlier whose Accurate
+voucher, same date, total and account set, has come in); otherwise "To post". This replaces the
+timestamp guess `incBookState` and the "In this snapshot?" question when seeded. Editing a posted
+receipt edits its voucher (`ledgerEdit`, history kept); removing it voids the voucher. Month-end
+never counts a posted receipt twice: it is in the book balances, and only unposted typed income is
+added to what the book "will hold" (as before). `mergeStates` keeps a `postedId` that a stale copy
+lacks.
+
+**Later Accurate import.** If the owner also imports the same entries into Accurate, the next books
+import links them (`links[appId] = accId`, nothing added) by `ledgerLib.sigOf`.
+
+## 10. Backup and restore (Settings › Data)
+
+`et-backup/1`: `{schema, createdAt, ledger: ledgerExport() | null, state}`. `state` is `STATE`
+without `wealth`, `wealthMeta`, `cash`, `cashMeta` (the book holds those; only before the book is set
+up are they included, since then they exist nowhere else) and without anything secret: properties
+named like keys, tokens, secrets or passwords, and values shaped like an API key, are dropped
+(`backupStripSecrets`; the AI key lives in its own file and never in STATE). File name
+`expensetrack-backup-YYYY-MM-DD.json`. Before building: `ensureLedger()`, then `ledgerFlush()`.
+
+**Restore from backup…** validates the file (schema, book schema), merges the book with
+`ledgerMergeIn` (a bad book stops before anything changes), then the rest with `mergeStates`
+(backup as the remote side, this device's choices win a tie). It only adds; a sheet lists what was
+added (vouchers, accounts, card transactions, payments, income receipts, month-end closes, ...).
+
+**Reminder.** `STATE.lastBackupAt` (set by every download) and `STATE.backupRemindAfter` (snooze,
+merged as the latest of both devices). When the book is seeded and the last backup (or, if none yet,
+the book's set-up date) is older than 31 days, a quiet banner offers **Back up now** or **Remind me
+in 7 days** (`showBanner` takes an optional fourth action `{label, action}`).
+
+## 11. Deviations (entry builder, 2026-11-04)
 
 - `chartOfAccounts` includes parent accounts (flagged `isParent: true`), not only posting accounts,
   so Claude can place a proposed account under the right parent.

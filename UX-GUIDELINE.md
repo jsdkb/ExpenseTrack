@@ -932,6 +932,22 @@ Question: *"Has my income gone into the book?"*
 - After a download, the same next-step note as month-end. A `--warn` banner names any account in
   the month that isn't in Accurate yet.
 
+#### 11.9a Posting to the app's own book (v3, 2026-11-04)
+
+Once the book is seeded, Month-end and Income gain a primary **Post to book** action and the Accurate
+download turns secondary, labelled **(optional)**.
+- Month-end journal card: primary **Post to book**; after posting the entry shows a `good` badge
+  **Posted to your book**, a ghost **View voucher** (opens Journals on that date) and no tick. If a
+  figure changes, an info banner and a primary **Update posted entry**. Foreign-currency lines show
+  "USD 100 at 16.350" under their memo and are part of the same voucher.
+- Income: the Status badge reads **To post** / **Posted** + "in your book" / **In your book** + "from
+  Accurate"; the last column is a small secondary **Post** button instead of the tick; KPIs **To post**
+  and **In your book**; card tool primary **Post all to-post receipts (n)** (disabled when none).
+- Backup (Settings > Data): setting rows **Full backup** (secondary **Download full backup**, with the
+  last-backup age) and **Restore from backup...** (ghost). A restore ends in a sheet that says what was
+  added. The monthly reminder is a quiet `info` banner with **Back up now** and a ghost **Remind me in
+  7 days** (banners take an optional second ghost action).
+
 ### 11.8 Cash Movements (shipped 2026-10-22)
 
 Question: *"Where did my money come from and where did it go?"*
