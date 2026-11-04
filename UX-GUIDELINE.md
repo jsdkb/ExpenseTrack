@@ -1077,7 +1077,25 @@ Sections as a left sub-nav (web) / grouped list (mobile):
    with add/edit in a sheet/modal.
 4. **Currencies** — FX rate defaults.
 5. **Data** — Sync now, last sync, Export to Excel, Sign out.
-6. **About** — version, privacy note ("Your data lives in your private Google Drive app folder").
+6. **Your book** (v3, 2026-11-04; its own section card `#set-book` after Data, sub-nav "Your book") —
+   the app's own ledger (docs/v3-ledger.md):
+   - Before it is set up: one setting row saying what is missing ("Import the wealth snapshot
+     first"), or a secondary **Set up my book** button; when the imported files don't tie, the row
+     reads "Not set up: the files don't tie" with **Check again**, and a list of the differences
+     (month · account, "your book Rp x · the file Rp y"; first 50, then "…and n more"). The pages keep
+     showing the imported files meanwhile; nothing is alarming, so no banner.
+   - Once set up: "Set up <date>" with the counts (vouchers, accounts, statement lines) and a `good`
+     badge **In use**; **Last import** (kind, time, n new / differ / missing); then the review list:
+     **New from Accurate (n)** with a secondary **Add all** and a ghost **Add** per row (title =
+     description, sub-line = date · number · amount), and **Differs from Accurate (n)** rows with a
+     `warn` badge **Differs** or **Missing in Accurate** and two ghost buttons **Take Accurate's
+     version** (tooltip says the earlier version stays in its history / it is voided) and
+     **Dismiss**. Empty: "Nothing to review."
+   - After an import that brings new, differing or missing vouchers, an `info` banner
+     "n new from Accurate · n differs · n missing" with **Review** (opens this section). Quiet
+     otherwise: the only toast about the book itself is the one-time "Your book is set up · n
+     vouchers".
+7. **About** — version, privacy note ("Your data lives in your private Google Drive app folder").
 
 The theme choice is stored in `localStorage` (a per-device convenience, not personal data);
 everything else stays in the Drive appData file as today.
