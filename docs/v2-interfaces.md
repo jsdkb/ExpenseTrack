@@ -62,12 +62,20 @@ What the app accepts (`validBooks`): `schema === 'et-books/1'`, a parseable `gen
 - `periodStart` — now also for cards;
 - `dueDate` — "YYYY-MM-DD", cards;
 - `minPayment` — rupiah, cards;
-- `notes` — already in the file, now kept by the app.
+- `notes` — already in the file, now kept by the app;
+- `receivedAt` — "YYYY-MM-DD", the day the statement arrived (added 2026-11-04; the statement
+  calendar learns each account's arrival lag from it).
+
+Line ids (`txns[].id`) are stable content ids since 2026-11-04 (`t-` + 12 hex), and every statement
+carries `id` = `account|statement_date`. A line whose id changed between two files but whose
+account, date, amount and description are equal is the same line: the app moves the owner's
+decisions on it (`stmtFix`, `cashTypeOverrides`, the `stmt:<id>` row's edits) to the new id
+(`ledgerCashIdRemap` / `ledgerRemapCashRefs`, docs/v3-ledger.md §3).
 
 The app's `applyCash` keeps, per statement in `STATE.cash.statements[]`:
-`id, account, date, periodStart, dueDate, minPayment, opening, closing, tieOk, notes`, and `kind`
+`id, account, date, periodStart, dueDate, minPayment, receivedAt, opening, closing, tieOk, notes`, and `kind`
 per account. `id` is the file's own `id` when present, otherwise `account + '|' + date` (this is
-the `stmtId` used in §3). `periodStart`, `dueDate` and `minPayment` are `null` when missing;
+the `stmtId` used in §3). `periodStart`, `dueDate`, `minPayment` and `receivedAt` are `null` when missing;
 `notes` is always an array (`[]` when missing, each note cut to 200 characters). Older files
 without these fields still load.
 

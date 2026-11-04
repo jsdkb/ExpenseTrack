@@ -1172,7 +1172,13 @@ let driveRevisionId = null;
 let saveTimer = null;
 
 function loadStateMirror(){ try{ return JSON.parse(localStorage.getItem(STATE_MIRROR_KEY) || 'null'); }catch(_){ return null; } }
-function saveStateMirror(state){ try{ localStorage.setItem(STATE_MIRROR_KEY, JSON.stringify(state)); }catch(_){} }
+// Once the app's own book holds the wealth and cash data (js/ledger.js), the mirror leaves out the
+// imported copies: they stay in the Drive file, and a restore from the mirror (mergeStates) keeps
+// Drive's copy whenever the mirror has none.
+function saveStateMirror(state){ try{
+  const own = typeof ledgerSeeded === 'function' && ledgerSeeded();
+  localStorage.setItem(STATE_MIRROR_KEY, JSON.stringify(own && state ? { ...state, wealth: null, cash: null } : state));
+}catch(_){} }
 
 // The mirror is marked "unsaved" from the moment of an edit until Drive confirms the save, so a
 // failed save or a tab closed too early can be folded back in on the next sign-in. The marker
@@ -2149,8 +2155,8 @@ function pageByKey(k){return PAGES.find(p=>p.key===k)||null;}
 // and top pages (Home) always show and render their own empty state instead.
 function pageVisible(p){
   if(p.group==='top'||p.group==='books')return true;
-  if(p.needs==='wealth')return!!STATE.wealth;
-  if(p.needs==='cash')return!!STATE.cash;
+  if(p.needs==='wealth')return!!W();
+  if(p.needs==='cash')return!!CM();
   return true;
 }
 function registerHook(name,fn){if(typeof fn==='function')(HOOKS[name]||(HOOKS[name]=[])).push(fn);}
@@ -2208,7 +2214,7 @@ const SECTIONS=[
 // once a snapshot exists.
 function wealthSections(){
   const s=[{key:'networth',label:'Net worth',icon:'trending-up',order:10},{key:'cash',label:'Cash movements',icon:'arrow-left-right',order:20}];
-  if(STATE.wealth){s.push({key:'income',label:'Income',icon:'chart-column',order:30},{key:'accounts',label:'Accounts',icon:'landmark',order:40});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check',order:50});}
+  if(W()){s.push({key:'income',label:'Income',icon:'chart-column',order:30},{key:'accounts',label:'Accounts',icon:'landmark',order:40});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check',order:50});}
   return s;
 }
 // One menu group: the built-in pages plus registered ones, by order (a stable sort keeps ties in place).
@@ -3061,7 +3067,7 @@ function renderOverview(txns){
   const unpaid=cc.filter(c=>!c.lastPayDate&&c.all.length);
   const ap=avgPerMonth();
   const top=categoryTotals(idr)[0];
-  const nw=STATE.wealth?wTotals(wMonths().length-1,'book'):null;
+  const nw=W()?wTotals(wMonths().length-1,'book'):null;
   const strip=`<section class="card strip span-12" aria-label="Key figures" style="${nw?'grid-template-columns:repeat(4,minmax(0,1fr))':''}">
     ${nw?`<button class="strip-cell" onclick="setTab('networth')"><span class="eyebrow">Net worth</span><span class="strip-val">${kpiMoney(nw.net)}</span><span class="strip-sub">As of ${escH(asOfLabel())}</span></button>`:''}
     <button class="strip-cell" onclick="setTab('cards')"><span class="eyebrow">Cards owed</span><span class="strip-val">${kpiMoney(ccTotal)}</span>
@@ -3192,7 +3198,7 @@ function renderSpending(txns){
         <div class="chart-box"><canvas id="spStack" role="img" aria-label="Spend per month split by top five categories"></canvas></div><div class="legend" id="spStackLegend"></div><div class="chart-table" id="spStackTable"></div></section>
     </div>
     ${showPace?`<div class="grid">${paceCard()}</div>`:''}
-    ${STATE.wealth?`<div class="grid">${cashFlowCardHTML()}</div>`:''}
+    ${W()?`<div class="grid">${cashFlowCardHTML()}</div>`:''}
     <div class="grid">
       <section class="card span-6">${cardHead('chart-pie','Where it went',escH(pl)+' · click a category to filter')}${rankedCategoriesHTML(idr,isMobile()?8:0)}</section>
       <section class="card span-6">${cardHead('credit-card','Split by bank',escH(pl))}${bankBar}</section>
@@ -3211,7 +3217,7 @@ function renderSpendingCharts(){
   drawMonthlyBars('spMonthly','spMonthlyReadout',s.keys,s.vals);
   const tb=$('spMonthlyTable');if(tb)tb.innerHTML=seriesTable(s.keys,s.vals);
   drawCategoryStack('spStack','spStackLegend',base,s.keys);
-  if(STATE.wealth)drawCashFlow();
+  if(W())drawCashFlow();
   const st=$('spStackTable');
   if(st&&CHARTS.spStack){const ds=CHARTS.spStack.data.datasets;st.innerHTML=`<table class="data"><thead><tr><th scope="col">Month</th>${ds.map(d=>`<th scope="col" class="num">${escH(d.label)}</th>`).join('')}</tr></thead><tbody>${s.keys.map((k,i)=>`<tr><td>${monthLabel(k)}</td>${ds.map(d=>`<td class="num amt">${fmtIDRShort(d.data[i])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;}
 }
@@ -3477,7 +3483,7 @@ function renderSettings(){
   const theme=themeName(),hid=amountsHidden();
   return`${pageHead('Settings','Appearance, rules and your data')}
   <div class="settings-grid">
-    <nav class="subnav" aria-label="Settings sections"><a href="#set-appearance">Appearance</a><a href="#set-rules">Rules</a><a href="#set-data">Data</a><a href="#set-about">About</a></nav>
+    <nav class="subnav" aria-label="Settings sections"><a href="#set-appearance">Appearance</a><a href="#set-rules">Rules</a><a href="#set-data">Data</a>${typeof ledgerSettingsHTML==='function'?'<a href="#set-book">Your book</a>':''}<a href="#set-about">About</a></nav>
     <div class="settings-sections">
       <section class="card" id="set-appearance">${cardHead('sun','Appearance','Saved on this device only')}
         <div class="setting-row"><div><div class="li-title">Theme</div><div class="li-sub">Dark is the default</div></div>
@@ -3511,7 +3517,7 @@ function renderSettings(){
       </section>
       <section class="card" id="set-data">${cardHead('refresh-cw','Data','Gmail is read-only; everything you change is saved to your private Google Drive app folder')}
         <div class="setting-row"><div><div class="li-title">Sync</div><div class="li-sub">${escH($('hmeta')?.textContent||'')}</div></div><button class="btn btn-secondary" onclick="load(true)">${ic('refresh-cw')}Sync now</button></div>
-        <div class="setting-row"><div><div class="li-title">Wealth snapshot</div><div class="li-sub">${STATE.wealth?escH(wealthSourceLine()):'Not connected yet'}${WEALTH_FOLDER?' · folder connected on this device':''}</div></div>
+        <div class="setting-row"><div><div class="li-title">Wealth snapshot</div><div class="li-sub">${W()?escH(wealthSourceLine()):'Not connected yet'}${WEALTH_FOLDER?' · folder connected on this device':''}</div></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${fsSupported()?(WEALTH_FOLDER?`<button class="btn btn-secondary" onclick="reconnectWealthFolder()">${ic('refresh-cw')}Check folder</button><button class="btn btn-ghost" onclick="disconnectWealthFolder()">Disconnect</button>`:`<button class="btn btn-secondary" onclick="connectWealthFolder()">${ic('download')}Connect folder</button>`):''}<button class="btn btn-ghost" onclick="importWealthFile()">Import file…</button></div></div>
         <div class="setting-row"><div><div class="li-title">Cash movements</div><div class="li-sub">${CM()?escH(cashSourceLine()):'Not imported yet'}${cashRuleCount()?` · ${cashRuleCount()} type change${cashRuleCount()===1?'':'s'} you made`:''}</div></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${CM()?`<button class="btn btn-secondary" onclick="setTab('cash')">Open${ic('chevron-right','s16')}</button>`:''}<button class="btn btn-ghost" onclick="importWealthFile()">Import file…</button></div></div>
@@ -3519,6 +3525,7 @@ function renderSettings(){
         <div class="setting-row"><div><div class="li-title">Export</div><div class="li-sub">All transactions as a CSV file that opens in Excel</div></div><button class="btn btn-secondary" onclick="exportToExcel()">${ic('download')}Export</button></div>
         <div class="setting-row"><div><div class="li-title">Account</div><div class="li-sub">${escH(USER_EMAIL||'Signed in')}</div></div><button class="btn btn-danger" onclick="signOut()">${ic('log-out')}Sign out</button></div>
       </section>
+      ${typeof ledgerSettingsHTML==='function'?ledgerSettingsHTML():''}
       <section class="card" id="set-about">${cardHead('info','About')}
         <p class="muted">ExpenseTrack reads your bank notification emails and keeps your notes, rules and edits in a private file in your own Google Drive app folder. Nothing personal is stored in the app itself.</p>
       </section>
@@ -3594,9 +3601,12 @@ function renderAll(){
    ══════════════════════════════════════════════════════════════════ */
 let NW_VIEW='book', NW_RANGE=12, ACC_FILTER='active', ACC_SEL=null, CLOSE_SEL=null;
 const WEALTH_SCHEMA='et-wealth/1';
-function W(){return STATE.wealth||null;}
+// Once the app's own book (js/ledger.js, docs/v3-ledger.md) is seeded, W(), BOOKS() and CM() return
+// views computed from it; until then the imported copies, unchanged.
+function LEDGER_VIEW(k){return typeof ledgerView==='function'?ledgerView(k):null;}
+function W(){return LEDGER_VIEW('wealth')||STATE.wealth||null;}
 // Includes accounts added in the app that the book doesn't have yet (pending:true, book 0).
-function wAccounts(){const w=W();if(!w)return[];const x=STATE.newAccounts&&Object.keys(STATE.newAccounts).length?naBalance():[];return x.length?[...w.accounts,...x]:w.accounts;}
+function wAccounts(){const w=W();if(!w)return[];const x=STATE.newAccounts&&Object.keys(STATE.newAccounts).length?naBalance().filter(a=>!w.accounts.some(b=>b.id===a.id)):[];return x.length?[...w.accounts,...x]:w.accounts;}
 function wAcc(id){return wAccounts().find(a=>a.id===id);}
 function wMonths(){const w=W();return w?w.months:[];}
 function wGroup(id){const w=W();return(w&&w.groups.find(g=>g.id===id))||{id,label:id,side:'asset'};}
@@ -3623,13 +3633,17 @@ function asOfLabel(){const w=W();if(!w)return'';const[y,m]=w.source.asOf.split('
 function validWealth(s){return s&&s.schema===WEALTH_SCHEMA&&Array.isArray(s.months)&&s.months.length&&Array.isArray(s.accounts)&&s.source&&s.source.asOf;}
 function applyWealth(snap,from,quiet){
   if(!validWealth(snap)){toast('That file is not an ExpenseTrack wealth snapshot');return false;}
-  const cur=W();
+  const cur=STATE.wealth;   // the imported copy (W() may be the book's view)
   if(cur&&Date.parse(cur.generatedAt)>=Date.parse(snap.generatedAt)){if(!quiet)toast('Wealth data is already up to date');return false;}
   STATE.wealth=snap;STATE.wealthMeta={importedAt:new Date().toISOString(),from};
   scheduleDriveSave();renderAll();
   toast(`Wealth data updated · as of ${asOfLabel()}`);
+  ledgerFeed('wealth',snap,from,quiet);
   return true;
 }
+// Every accepted import also feeds the app's own book: merged into it once it is seeded (new
+// vouchers wait for review, differing ones are flagged), otherwise it may complete the seed.
+function ledgerFeed(kind,data,from,quiet){if(typeof ledgerOnImport==='function')ledgerOnImport(kind,data,from,quiet);}
 // One Import button for every file the PC pipeline makes: picked by its schema.
 function applyImported(d,from){
   if(d&&d.schema===CASH_SCHEMA)return applyCash(d,from);
@@ -3700,8 +3714,8 @@ async function autoImportWealth(){
    ══════════════════════════════════════════════════════════════════ */
 const BOOKS_SCHEMA='et-books/1',BOOKS_FILE_NAME='books.json';
 let BOOKS_DATA=null,BOOKS_STATUS='idle',BOOKS_ERROR=null,BOOKS_LOCAL=null,BOOKS_LOCAL_FOR="",BOOKS_DRIVE_TRIED=false,BOOKS_BUSY=null,booksFileId=null,booksRevisionId=null;
-function BOOKS(){return BOOKS_DATA;}
-function booksStatus(){return BOOKS_STATUS;}   // idle | loading | ready | none | error
+function BOOKS(){return LEDGER_VIEW('books')||BOOKS_DATA;}
+function booksStatus(){return LEDGER_VIEW('books')?'ready':BOOKS_STATUS;}   // idle | loading | ready | none | error
 function validBooks(b){return!!(b&&b.schema===BOOKS_SCHEMA&&b.generatedAt&&!isNaN(Date.parse(b.generatedAt))&&b.source&&Array.isArray(b.accounts)&&Array.isArray(b.vouchers)&&Array.isArray(b.months)&&b.balances&&typeof b.balances==='object');}
 function booksNewer(a,b){return!b||Date.parse(a.generatedAt)>Date.parse(b.generatedAt);}
 // IndexedDB cache. Every call is guarded and times out: a private window, blocked storage or a
@@ -3757,6 +3771,7 @@ function ensureBooks(){
     }catch(e){BOOKS_ERROR=String(e&&e.message||e);}
     BOOKS_STATUS=BOOKS_DATA?'ready':BOOKS_ERROR?'error':'none';BOOKS_BUSY=null;
     const pg=pageByKey(ACTIVE_TAB);if(pg&&(pg.needs==='books'||pg.key==='home'))renderAll();
+    if(typeof ledgerAfterBooksLoad==='function')ledgerAfterBooksLoad();   // may complete the book's seed
     return BOOKS_DATA;
   })();
   return BOOKS_BUSY;
@@ -3779,6 +3794,7 @@ async function applyBooks(b,from,quiet){
   if(accessToken)booksDriveSave(b).catch(e=>{BOOKS_ERROR=String(e&&e.message||e);BOOKS_DRIVE_TRIED=false;});
   renderAll();
   toast(`Books updated${b.source.glAsOf?' · to '+fmtDayLong(new Date(b.source.glAsOf+'T00:00:00')):''}`);
+  ledgerFeed('books',b,from,quiet);
   return true;
 }
 function wealthSourceLine(){
@@ -4056,7 +4072,7 @@ function meIncAfter(M,code,bi){return incOn(code,bi>=0?meMonthEnd(wMonths()[bi].
 // it can't tell whether the book already has them.
 function meIncUnsure(M,bi){const be=bi>=0?meMonthEnd(wMonths()[bi].month):'';return incList().filter(x=>x.date<=be&&x.date<=meMonthEnd(M)&&incBookState(x,be)!=='in'&&(!x.posted||incBookState(x,be)==='unsure'));}
 function meExpected(M,code,bi){return meBook(code,bi)+meIncAfter(M,code,bi);}
-function meLedger(){const w=W(),l=w&&Array.isArray(w.ledger)?w.ledger:[];const x=STATE.newAccounts&&Object.keys(STATE.newAccounts).length?naLedger():[];return x.length?[...l,...x]:l;}
+function meLedger(){const w=W(),l=w&&Array.isArray(w.ledger)?w.ledger:[];const x=STATE.newAccounts&&Object.keys(STATE.newAccounts).length?naLedger().filter(a=>!l.some(b=>b.id===a.id)):[];return x.length?[...l,...x]:l;}
 function meName(id){const a=wAcc(id);if(a)return a.name;const l=meLedger().find(x=>x.id===id);return l?l.name:id;}
 function meAccounts(M){
   const st=meClose0(M),order=W().groups.map(g=>g.id);
@@ -4354,7 +4370,7 @@ function allCloses(){
    you create it there yourself; the app gives you the code, name and type to use. ── */
 const NA_KINDS={asset:'Asset',liability:'Liability',income:'Income',expense:'Expense'};
 function naStore(){return STATE.newAccounts||(STATE.newAccounts={});}
-function naInBook(code){const w=W();return!!w&&(w.accounts.some(a=>a.id===code)||(w.ledger||[]).some(l=>l.id===code));}
+function naInBook(code){if(typeof ledgerSeeded==='function'&&ledgerSeeded())return ledgerInAccurate(code);const w=W();return!!w&&(w.accounts.some(a=>a.id===code)||(w.ledger||[]).some(l=>l.id===code));}
 function naList(){return Object.values(STATE.newAccounts||{}).filter(a=>a&&a.id&&!a.deleted&&!naInBook(a.id)).sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true}));}
 function naBalance(){return naList().filter(a=>a.kind==='asset'||a.kind==='liability').map(a=>({id:a.id,name:a.name,group:a.group,side:a.kind,ccy:a.ccy||'IDR',investment:!!a.investment,active:true,type:a.type||'',pending:true}));}
 function naLedger(){return naList().filter(a=>a.kind==='income'||a.kind==='expense').map(a=>({id:a.id,name:a.name,kind:a.kind,type:a.type||'',pending:true}));}
@@ -4417,12 +4433,20 @@ function naSave(){
   if(NA_EDIT&&NA_EDIT!==code)s[NA_EDIT]={id:NA_EDIT,deleted:true,at};
   s[code]={id:code,name,kind:k,group:bs?($('naGroup').value||W().groups.find(g=>g.side===k).id):'',ccy:bs?(String($('naCcy').value||'IDR').toUpperCase().slice(0,3)||'IDR'):'IDR',
     investment:k==='asset'&&$('naInv').checked,type:nearA?nearA.type||'':'',near,at};
-  const after=NA_AFTER,was=NA_EDIT;closeTopSheet(true);scheduleDriveSave();renderAll();toast(was?`${code} · ${name} saved`:`${code} · ${name} added — create it in Accurate too`);
+  const after=NA_AFTER,was=NA_EDIT;closeTopSheet(true);scheduleDriveSave();if(was&&was!==code)naToLedger(was,true);naToLedger(code);renderAll();toast(was?`${code} · ${name} saved`:`${code} · ${name} added — create it in Accurate too`);
   if(after)after(code);
 }
 function naRemove(){
   const id=NA_EDIT;if(!id||!confirm('Remove this account from the app? Figures typed for it stay in the Drive file.'))return;
-  naStore()[id]={id,deleted:true,at:meStamp()};closeTopSheet(true);scheduleDriveSave();renderAll();toast(`${id} removed`);
+  naStore()[id]={id,deleted:true,at:meStamp()};closeTopSheet(true);scheduleDriveSave();naToLedger(id,true);renderAll();toast(`${id} removed`);
+}
+// Once the app keeps its own book, an account added here is an account of that book too (so vouchers
+// can post to it); removing it here suspends it there (the book never deletes anything).
+function naToLedger(id,suspend){
+  if(!(typeof ledgerSeeded==='function'&&ledgerSeeded())||ledgerInAccurate(id))return;
+  const a=suspend?(LEDGER().accounts[id]||null):naStore()[id];if(!a||(!suspend&&a.deleted))return;
+  try{ledgerAddAccount({id,name:a.name||id,kind:a.kind,group:a.group||null,ccy:a.ccy,investment:a.investment,type:a.type,parent:suspend?a.parent:(naParent(id)||null),suspended:!!suspend});}
+  catch(e){console.error('Adding the account to your book failed',e);}
 }
 function naCopy(){
   const t=naList().map(a=>[a.id,a.name,NA_KINDS[a.kind],a.type||'',naParent(a.id),a.ccy||'IDR'].join('\t')).join('\n');
@@ -4777,7 +4801,7 @@ const CASH_GROUP={
   invest:{label:'Investments',color:'var(--accent-text)',soft:'var(--accent-soft)'},
   internal:{label:'Internal moves',color:'var(--text-3)',soft:'var(--surface-2)'},
 };
-function CM(){return STATE.cash||null;}
+function CM(){return LEDGER_VIEW('cash')||STATE.cash||null;}
 function cashMeta(type){return CASH_TYPES[type]||{g:'out',label:type,icon:'circle-ellipsis'};}
 function cashPayerKey(t){return String(t.counterparty||t.desc||'').toUpperCase().replace(/\s+/g,' ').trim().slice(0,60);}
 // A type you set on the row wins, then a payer rule, then the pipeline's own classification.
@@ -4810,22 +4834,28 @@ function cashMoney(n,ccy){return!ccy||ccy==='IDR'?fmtIDR(Math.abs(n)):`${ccy} ${
 function validCash(s){return s&&s.schema===CASH_SCHEMA&&Array.isArray(s.txns)&&Array.isArray(s.accounts)&&Array.isArray(s.statements);}
 function applyCash(d,from,quiet){
   if(!validCash(d)){if(!quiet)toast('That file is not an ExpenseTrack cash-movements file');return false;}
-  const cur=CM();
+  const cur=STATE.cash;   // the imported copy (CM() may be the book's view)
   if(cur&&Date.parse(cur.generatedAt)>=Date.parse(d.generatedAt)){if(!quiet)toast('Cash movements are already up to date');return false;}
   const cut=(s,n)=>String(s||'').slice(0,n);
+  // Line ids can change between files (the pipeline now gives each line a content id): a line that
+  // only changed its id keeps the owner's decisions on it. Once the book is seeded it does this
+  // against its own lines instead (ledgerOnImport).
+  if(cur&&Array.isArray(cur.txns)&&typeof ledgerRemapCashRefs==='function'&&!(typeof ledgerSeeded==='function'&&ledgerSeeded()))
+    ledgerRemapCashRefs(ledgerCashIdRemap(cur.txns,d.txns.map(t=>({...t,desc:cut(t.desc,120)}))));
   // Only the fields this page uses, with descriptions trimmed, to keep the synced Drive file small.
   STATE.cash={schema:d.schema,generatedAt:d.generatedAt,asOf:d.asOf||null,
     accounts:d.accounts.map(a=>({id:a.id,label:a.label,kind:a.kind,currency:a.currency||'IDR'})),
     // id is the file's own when it has one, else account|date. periodStart, dueDate, minPayment and
-    // notes are null/[] when a statement (or an older file) doesn't carry them.
+    // notes are null/[] when a statement (or an older file) doesn't carry them; so is receivedAt (the day it arrived).
     statements:d.statements.map(s=>({id:s.id||(s.account+'|'+s.date),account:s.account,date:s.date,periodStart:s.periodStart||null,
-      dueDate:s.dueDate||null,minPayment:s.minPayment!=null?s.minPayment:null,opening:s.opening,closing:s.closing,tieOk:!!s.tieOk,
+      dueDate:s.dueDate||null,minPayment:s.minPayment!=null?s.minPayment:null,receivedAt:s.receivedAt||null,opening:s.opening,closing:s.closing,tieOk:!!s.tieOk,
       notes:Array.isArray(s.notes)?s.notes.map(n=>cut(n,200)):[]})),
     txns:d.txns.map(t=>({id:t.id,account:t.account,currency:t.currency||'IDR',date:t.date,amount:t.amount,type:t.type,
       desc:cut(t.desc,120),counterparty:cut(t.counterparty,60),match:t.match||null}))};
   STATE.cashMeta={importedAt:new Date().toISOString(),from};
   scheduleDriveSave();renderAll();
   toast(`Cash movements updated · as of ${cashAsOfLabel()}`);
+  ledgerFeed('cash',STATE.cash,from,quiet);
   return true;
 }
 function cashAsOfLabel(){const c=CM();return c&&c.asOf?fmtDayLong(new Date(c.asOf+'T00:00:00')):'';}
@@ -5194,6 +5224,7 @@ async function onSignedIn(){
   await bootFromDrive(unsaved);
   load();
   autoImportWealth();
+  if(typeof ensureLedger==='function')ensureLedger();   // the app's own book (js/ledger.js)
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -5362,7 +5393,7 @@ window.addEventListener('online',()=>{hideBanner('offline');toast('Back online')
 function signOut(){
   clearTimeout(refreshTimer);
   if(accessToken)google.accounts.oauth2.revoke(accessToken,()=>{});
-  accessToken=null;DATA_READY=false;resetBooks();
+  accessToken=null;DATA_READY=false;resetBooks();if(typeof resetLedger==='function')resetLedger();hideBanner('ledger');
   closeAllSheets();closeMenus();destroyCharts();
   document.body.classList.add('gated');
   $('authGate').style.display='flex';
@@ -5388,6 +5419,7 @@ window.addEventListener('load', initAuth);
 </script>
 <!-- v2 modules (docs/v2-interfaces.md): each adds its pages and hooks through registerPage and
      registerHook above. Plain scripts in a fixed order, no build step. -->
+<script src="js/ledger.js"></script>
 <script src="js/books.js"></script>
 <script src="js/home.js"></script>
 <script src="js/statements.js"></script>
