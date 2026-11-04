@@ -437,6 +437,11 @@ Disabled: 40% opacity, no hover. Loading: label stays, spinner replaces the icon
   | `Provisional` | warn | Filled in from statements/typed income after the book's last month-end (§11.11) |
   | `Stale` / `Missing` | warn / neutral | Data freshness (§11.11) |
 
+- **Origin badges (v3)** — on a voucher in the book (Journals panel, voucher sheet), beside the
+  date line: `From Accurate` neutral · `Manual` neutral · `AI` accent · `Month-end` neutral ·
+  `Income` neutral; a voided voucher adds `Void` (bad). The accent is reserved for `AI` so an entry
+  Claude drafted is easy to spot; the badge never implies the entry is wrong.
+
 - **Statement calendar status** (Credit cards › History, Accounts column, Home "Coming up"):
   `On time` good · `Due soon` / `Due in n days` / `Due today` warn · `Download due` warn (a source the
   owner downloads by hand) · `Late n days` bad (statement > 3 days past its expected date) ·
@@ -1015,7 +1020,32 @@ the imported `books.json`; each shows its own import step until a file exists.
   book's account types. When they differ for the month, one `help` line under the totals says how
   many accounts Home shows on the other side and names them (masked names from the data).
 - Exports: Balance sheet, Income statement and Trial balance download Excel with the as-of date in
-  the title.
+  the title; Journals (the filtered set, one row per line) and General ledger (the account and
+  range shown) too. File names carry the period, never an account name.
+- **v3 — the app's own book (2026-11-04).** Once the book is set up, Books pages say "Your own
+  book" instead of "read-only", and:
+  - **New entry** is the Journals header's primary button; Home's header has a secondary
+    **Tell me what happened** (sparkles icon). Both open the **draft form** below.
+  - **Draft form** (wide sheet / phone bottom sheet): optional "Tell me what happened" box with a
+    secondary **Draft with Claude** and a `help` line saying what is sent; a note strip
+    (info / warn / bad) for status and errors; date + description; one block per line — account
+    (text field with a searchable list; the account name, or "Not in your book" in `--bad`, under
+    it), Debit and Credit (`Rp` prefix, numeric keypad, thousands separators), memo, and a globe
+    icon button that opens the foreign-currency row (currency · foreign amount · rate · "= Rp x");
+    **Add line**; a totals row (Debits · Credits · `Balanced` good / `Off by Rp x` bad); the live
+    checks as `help err` lines (or one good line "Ready to post"); then, from an AI draft, the
+    proposed new accounts (editable code · name · kind · currency · parent, **Add**) and "Claude
+    assumed" / "Claude asks" lists. Footer: Cancel · primary **Post** (**Save changes** when
+    editing), disabled while any check fails. Without a key, offline or on an API error the same
+    form opens empty with a note saying what happened and to fill it in by hand — never a dead end.
+  - **Edit** adds a required "Why the change" field; an Accurate voucher gets a warn note "your
+    book differs from Accurate from now on". **Void** is a small sheet with a required reason and a
+    destructive **Void voucher** button (the one confirm-style step: voiding is permanent in the
+    record, though nothing is deleted). Journals gets a "Show void (n)" check listing void vouchers.
+  - **History list** under the voucher lines: newest first, one row per change — title
+    "Changed / Voided / Accurate's version taken · <why>", sub-line "By you · <when>", and a
+    `<details>` "Before: <date> · <total>" with the earlier lines; the last row says how it was
+    created (with the owner's sentence for an AI entry).
 
 ### 11.11 Home (v2, 2026-11-03)
 
@@ -1095,6 +1125,14 @@ Sections as a left sub-nav (web) / grouped list (mobile):
      "n new from Accurate · n differs · n missing" with **Review** (opens this section). Quiet
      otherwise: the only toast about the book itself is the one-time "Your book is set up · n
      vouchers".
+6a. **AI** (v3, 2026-11-04; section `#set-ai` after Your book, sub-nav "AI") — the owner's own
+   Anthropic API key: a key row ("Not set" with a neutral `Off` badge, or the masked key
+   `sk-…••••1234` in monospace with when it was saved, **Test** secondary and **Remove** ghost in
+   `--bad` with an Undo toast); a password field "Paste your API key" with primary **Save key**; a
+   Model select (Sonnet 5.5 default, Opus 5.5, Haiku 5.5, one-line description); the `help` note
+   "Your key is stored in your private Google Drive app folder and this device; set a spend limit on
+   it at console.anthropic.com; your sentence and your chart of accounts are sent to Anthropic when
+   you ask the AI."; and a status line for Test results and errors. The full key is never shown.
 7. **About** — version, privacy note ("Your data lives in your private Google Drive app folder").
 
 The theme choice is stored in `localStorage` (a per-device convenience, not personal data);
