@@ -197,8 +197,14 @@
     else if(booksStatus()==='loading')rows.push({key:'gl',label:'General ledger',date:null,age:null,stale:false,sub:'Loading the books…'});
     const c=CM();
     if(c){const last={};for(const s of c.statements)if(!last[s.account]||s.date>last[s.account])last[s.account]=s.date;
-      for(const a of c.accounts){const d=last[a.id]||null,age=d?daysBetween(d,t):null;
-        rows.push({key:'stmt',account:a.id,label:a.label||a.id,date:d,age,stale:d?age>STALE_STMT:true,sub:d?(a.kind==='card'?'Last card statement':'Last statement'):'No statement yet'});}}
+      // The statement calendar (js/statements.js) knows when each one should arrive.
+      const cal={};try{if(window.ETStatements)for(const r of window.ETStatements.calendarRows())cal[r.id]=r;}catch(e){console.error('Home: statement calendar failed',e);}
+      for(const a of c.accounts){const d=last[a.id]||null,age=d?daysBetween(d,t):null,k=cal[a.id]||null;
+        // An account that only sends a statement in months it was used is not "stale" for going quiet.
+        rows.push({key:'stmt',account:a.id,label:a.label||a.id,date:d,age,stale:d?age>STALE_STMT&&!(k&&k.whenUsed):true,sub:d?(a.kind==='card'?'Last card statement':'Last statement'):'No statement yet',
+          next:k?k.nextText:null,nextStatus:k&&['late','manual','when-used'].includes(k.status)?k.status:null,
+          nextLabel:k?(k.status==='late'?`Late ${k.daysLate} days`:k.status==='manual'?'Download due':k.status==='when-used'?'Only when used':null):null,
+          hint:!!(k&&k.suggestWhenUsed)});}}
     else rows.push({key:'stmt',label:'Bank and card statements',date:null,age:null,stale:false,sub:'Not imported yet'});
     const g=(typeof SYNC!=='undefined'&&SYNC.lastSynced)||STATE.cachedAt||null;
     if(g){const d=dKey(new Date(g)),age=daysBetween(d,t);rows.push({key:'gmail',label:'Gmail alerts',date:d,age,stale:age>STALE_GMAIL,sub:'Last sync '+relTime(g)});}
@@ -370,6 +376,7 @@
     const when=x=>{const n=daysBetween(t,x.date);
       if(x.kind==='due'&&x.status==='unconfirmed')return`Payment not confirmed yet · was due ${escH(dayShort(x.date))}`;
       if(x.kind==='due'&&x.status==='overdue')return`<span class="warn">Overdue · was due ${escH(dayShort(x.date))}</span>`;
+      if(x.kind==='statement'&&x.window)return`Expected ${escH(x.window)}${n>0?` · in ${n} day${n===1?'':'s'}`:''}`;
       if(n<0)return`<span class="warn">${-n} day${n===-1?'':'s'} late · ${escH(dayShort(x.date))}</span>`;
       const s=n===0?'Today':n===1?'Tomorrow':`In ${n} days · ${dayShort(x.date)}`;return x.kind==='due'&&n<=7?`<span class="warn">${escH(s)}</span>`:escH(s);};
     return`<section class="card span-5" id="homeComing" aria-label="Coming up">
@@ -385,9 +392,11 @@
     return`<section class="card span-4" id="homeFresh" aria-label="Data freshness">
       ${cardHead('clock','Data freshness','How current each source is')}
       <div class="list">${rows.map(r=>`<div class="list-item" data-key="${r.key}"${r.stale?' data-stale="1"':''}><span class="li-body"><span class="li-title" style="display:block">${escH(r.label)}</span>
-        <span class="li-sub" style="display:block">${escH(r.sub)}${r.date&&r.key!=='gmail'?` · ${escH(dayLong(r.date))}${r.age!=null?` · ${r.age} d ago`:''}`:''}</span></span>
+        <span class="li-sub" style="display:block">${escH(r.sub)}${r.date&&r.key!=='gmail'?` · ${escH(dayLong(r.date))}${r.age!=null?` · ${r.age} d ago`:''}`:''}</span>
+        ${r.next?`<span class="li-sub h-next" style="display:block">Next ${escH(r.next)}</span>`:''}</span>
+        ${r.nextLabel&&r.nextStatus?`<span class="badge ${r.nextStatus==='late'?'bad':r.nextStatus==='manual'?'warn':''}" data-next-status="${escH(r.nextStatus)}">${escH(r.nextLabel)}</span>`:''}${r.hint?'<span class="badge stmt-hint" title="Statements have skipped 2 or more months more than once. Switch it on under Credit cards › History if this account only sends a statement in months it was used.">Only when used?</span>':''}
         ${r.stale?'<span class="badge warn">Stale</span>':r.date?'':'<span class="badge">Missing</span>'}</div>`).join('')}</div>
-      <p class="help" style="margin-top:8px">Stale: book over ${STALE_BOOK} days old, a statement over ${STALE_STMT} days, Gmail over ${STALE_GMAIL} days.</p>
+      <p class="help" style="margin-top:8px">Stale: book over ${STALE_BOOK} days old, a statement over ${STALE_STMT} days (not for accounts marked “only when used”), Gmail over ${STALE_GMAIL} days.</p>
     </section>`;
   }
   function connectHTML(){
