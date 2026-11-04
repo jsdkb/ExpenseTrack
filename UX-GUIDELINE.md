@@ -439,7 +439,7 @@ Disabled: 40% opacity, no hover. Loading: label stays, spinner replaces the icon
 
 - **Statement calendar status** (Credit cards › History, Accounts column, Home "Coming up"):
   `On time` good · `Due soon` / `Due in n days` / `Due today` warn · `Download due` warn (a source the
-  owner downloads by hand) · `Late n days` bad (statement > 3 days past its expected date) ·
+  owner downloads by hand) · `Late n days` bad (statement > 3 days past the end of its expected arrival window; never for an "Only when used" account) · `Only when used` neutral (an account that sends a statement only in months it was used) · `Only when used?` neutral hint (suggested after repeated gaps, never switched on by itself) ·
   `Payment not found` bad (due date passed and the bank statements covering it show no card
   payment ≥ the minimum) · `Payment not confirmed yet` neutral (due date passed, but the bank
   statements don't reach it yet — never shown as overdue). A card row also gets a payment badge
@@ -1053,7 +1053,12 @@ Home                                       [Book | Market]  [hide]
   date; empty state "Nothing due in the next 14 days".
 - **Freshness badges:** book as-of, last statement per account, last Gmail sync. A book older than
   40 days, a statement older than 35 days or a Gmail sync older than 7 days is `Stale` (warn); no
-  data is `Missing`.
+  data is `Missing`. Every statement row also has a second sub-line `Next ~5–8 Nov` (the expected
+  arrival, a window when it varies; manual: `Next early Dec · you download this from the bank’s
+  app`; when used: `Next ~2 Dec, only if the card was used`) and a badge for late (bad), manual
+  download (warn) or only-when-used (neutral); an only-when-used account is never `Stale`.
+  The same wording is used in the Accounts column and the Statement calendar card, which adds a
+  reason line (learned from n statements / default lag).
 - Hide amounts (§20) blurs every figure on Home, details included.
 
 ### 11.12 Plan and wealth extras (v2, 2026-11-03)

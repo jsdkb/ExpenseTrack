@@ -10,7 +10,9 @@
       review list. Matching is recomputed from the data every time (it is deterministic); only the
       owner's decisions (undo a fix, exclude/keep an alert, card links, manual sources) are stored.
    2. Statement calendar: last statement, learned cycle day, expected next statement, card due date
-      and amount, and late / due-soon / manual-download flags for every statement account.
+      and amount, and late / due-soon / manual-download / only-when-used flags for every statement
+      account. "Expected" is arrival-aware: a statement is dated at its period end but reaches the
+      owner a few days later (learned from `receivedAt`, else a default lag per kind).
 
    Loaded by index.html after the core script, in this fixed order: books, home, statements,
    extras. Everything here runs in the page's global scope, so keep it inside the function below
@@ -33,6 +35,10 @@
   const txISO=t=>{const d=txDateOf(t);return isNaN(d.getTime())?null:isoOf(d);};
   const dayLabel=iso=>iso?fmtDay(new Date(iso+'T00:00:00')):'—';
   const cmp=(a,b)=>a<b?-1:a>b?1:0;
+
+  /* ── Statement arrival constants (the only place they live; see "Arrival-aware expected date") ── */
+  const LAG_DEFAULT={bank:7,card:1,other:3};     // days from statement date to arrival; bank = account dated on a month end
+  const LATE_GRACE=3, WINDOW_PERIODS=6, LAG_MAX=45;
 
   const live=v=>!!v&&typeof v==='object'&&!v.deleted;
   const gross=t=>t.splitInfo?t.splitInfo.originalAmount:t.amount;
@@ -279,9 +285,10 @@
     setLink(bank,v){STATE.cardMap=STATE.cardMap||{};STATE.cardMap[bank]=v==='__none'?'':v;
       commit(v==='__none'?`${bank} alerts are no longer checked against a statement`:`${bank} alerts now checked against ${accLabel(v)}`);},
     setManual(id,on){put('manual',id,on?{on:true}:{deleted:true});commit(on?'Download reminder on':'Download reminder off');},
+    setWhenUsed(id,on){put('whenUsed',id,on?{on:true}:{deleted:true});commit(on?'Marked as only sending a statement when used':'Back to a statement every month');},
     openStmt,
     // For tests and other modules (read-only).
-    reconcile,strip,unapply,apply,calendar,calendarRows:()=>calRows(),cycleDay,expectedNext,comingUp,last:()=>LAST,refresh,
+    reconcile,strip,unapply,apply,calendar,calendarRows:()=>calRows(),cycleDay,expectedNext,comingUp,LAG_DEFAULT,LATE_GRACE,WINDOW_PERIODS,last:()=>LAST,refresh,
   };
   window.ETStatements=API;
 
@@ -335,10 +342,65 @@
     }
     return{got,coveredTo};
   }
+  /* ── Arrival-aware expected date ──
+     A statement is dated at its period end but arrives later: bank-account statements about a week
+     after a month-end, card statements about a day after theirs. Expected ARRIVAL = expected statement
+     date + the account's lag. Lag = median(receivedAt − statement date) when the history carries
+     receivedAt, else the default for the account kind (all constants here, nowhere else). When the
+     history varies, the expectation is a window (earliest–latest over the last WINDOW_PERIODS
+     periods), and a statement is late only LATE_GRACE days after the window ends. */
+  const defaultLag=(kind,cd)=>kind==='card'?LAG_DEFAULT.card:kind==='account'&&cd===31?LAG_DEFAULT.bank:LAG_DEFAULT.other;
+  const validIso=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}/.test(v);
+  const lagOf=p=>{const r=p.s&&p.s.receivedAt;if(!validIso(r))return null;const v=dn(r)-dn(p.end);return v>=0&&v<=LAG_MAX?v:null;};
+  function median(v){const a=[...v].sort((x,y)=>x-y),n=a.length;return n%2?a[(n-1)/2]:Math.round((a[n/2-1]+a[n/2])/2);}
+  const nominalDay=iso=>{const[y,m,d]=ymd(iso);return d===dim(y,m)?31:d;};
+  const dateIn=(y,m,day)=>`${y}-${pad(m)}-${pad(Math.min(day,dim(y,m)))}`;
+  // Expected arrival window for the statement dated `stmtDate`, from the account's last periods.
+  function arrivalFor(P,kind,cd,stmtDate){
+    const got=P.map(lagOf).filter(v=>v!=null),learned=got.length>0,lag=learned?median(got):defaultLag(kind,cd);
+    const[y,m]=ymd(stmtDate);let from=addDays(stmtDate,lag),to=from;
+    for(const p of P.slice(-WINDOW_PERIODS)){
+      const l=lagOf(p),a=addDays(dateIn(y,m,nominalDay(p.end)),l!=null?l:lag);
+      if(a<from)from=a;if(a>to)to=a;}
+    return{from,to,lag,learned,n:got.length,fixed:from===to};
+  }
+  const monthsBetween=(a,b)=>{const[ya,ma]=ymd(a),[yb,mb]=ymd(b);return(yb*12+mb)-(ya*12+ma);};
+  // Two or more gaps of 2+ cycles between statements (the stretch up to now counts as one): a hint
+  // that the account only sends a statement in months it was used. Never switched on automatically.
+  function looksWhenUsed(P,today,lag){
+    let gaps=0;for(let i=1;i<P.length;i++)if(monthsBetween(P[i-1].end,P[i].end)>=2)gaps++;
+    if(monthsBetween(P[P.length-1].end,addDays(today,-(lag+LATE_GRACE)))>=2)gaps++;
+    return gaps>=2;
+  }
+  const MONTH_NAME=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function rangeText(from,to,today){
+    const[y1,m1,d1]=ymd(from),[y2,m2,d2]=ymd(to),yr=y=>y!==ymd(today)[0]?' '+y:'';
+    if(from===to)return`${d1} ${MONTH_NAME[m1-1]}${yr(y1)}`;
+    if(y1===y2&&m1===m2)return`${d1}–${d2} ${MONTH_NAME[m1-1]}${yr(y1)}`;
+    return`${d1} ${MONTH_NAME[m1-1]}${yr(y1)} – ${d2} ${MONTH_NAME[m2-1]}${yr(y2)}`;
+  }
+  const roughText=(iso,today)=>{const[y,m,d]=ymd(iso);return`${d<=10?'early':d<=20?'mid':'late'} ${MONTH_NAME[m-1]}${y!==ymd(today)[0]?' '+y:''}`;};
+  // The wording used wherever the next statement is shown (the caller adds "Next").
+  function nextTextOf(r,today){
+    if(r.whenUsed)return`~${rangeText(r.arrival.from,r.arrival.to,today)}, only if the ${r.kind==='card'?'card':'account'} was used`;
+    if(r.manual)return`${roughText(r.arrival.from,today)} · you download this from the bank’s app`;
+    return`~${rangeText(r.arrival.from,r.arrival.to,today)}`;
+  }
+  const plural=(n,w)=>`${n} ${w}${n===1?'':'s'}`;
+  function reasonOf(r){
+    const a=r.arrival,days=plural(a.lag,'day');
+    const base=a.learned?`Arrival learned from ${plural(a.n,'statement')}: about ${days} after the statement date`
+      :`No arrival dates on file yet: assuming ${days} after the statement date`;
+    const spread=a.fixed?'':` · window from the last ${Math.min(r.statements,WINDOW_PERIODS)} statements`;
+    const tail=r.whenUsed?' · only sends a statement in months it was used, so never flagged late'
+      :r.manual?' · you download this one yourself'
+      :` · flagged late ${LATE_GRACE} days after the window`;
+    return base+spread+tail;
+  }
   function calendar(o){
     o=o||{};const cash=o.cash,today=o.today||todayISO(),fix=o.fix||{},rows=[];
     if(!cash||!Array.isArray(cash.accounts)||!Array.isArray(cash.statements))return rows;
-    const per=periodsOf(cash,today),lines=cash.txns||[],man=fix.manual||{};
+    const per=periodsOf(cash,today),lines=cash.txns||[],man=fix.manual||{},wu=fix.whenUsed||{};
     const base=[];
     for(const a of cash.accounts){
       const P=per[a.id]||[];if(!P.length)continue;
@@ -353,7 +415,12 @@
     }
     const bp=bankPayments(cash,base.filter(x=>x.due),today);
     for(const{a,P,last,due}of base){
-      const cd=cycleDay(P.map(p=>p.end)),expected=expectedNext(last,cd),manual=live(man[a.id])&&!!man[a.id].on;
+      const cd=cycleDay(P.map(p=>p.end)),kind=a.kind||'account',tn=dn(today);
+      let expected=expectedNext(last,cd),arrival=arrivalFor(P,kind,cd,expected);
+      const manual=live(man[a.id])&&!!man[a.id].on,whenUsed=live(wu[a.id])&&!!wu[a.id].on;
+      // An account that only sends a statement in months it was used: look ahead to the next cycle
+      // that can still arrive instead of the next one in line.
+      if(whenUsed)for(let i=0;i<36&&dn(arrival.to)<tn;i++){expected=expectedNext(expected,cd);arrival=arrivalFor(P,kind,cd,expected);}
       let paid=false,overdue=false,unconfirmed=false,payment=null;
       if(due){
         // The card's own payment lines after the statement (if the file already has them) also count.
@@ -367,12 +434,15 @@
           if(covered)overdue=true;else unconfirmed=true;
         }
       }
-      const tn=dn(today),late=tn>dn(expected)+3,dueIn=due?dn(due.date)-tn:null;
-      const status=overdue?'overdue':manual&&tn>=dn(expected)?'manual':late?'late':due&&!paid&&dueIn>=0&&dueIn<=7?'due-soon':unconfirmed?'unconfirmed':'on-time';
+      const late=!whenUsed&&tn>dn(arrival.to)+LATE_GRACE,dueIn=due?dn(due.date)-tn:null;
+      const status=overdue?'overdue':manual&&!whenUsed&&tn>=dn(expected)?'manual':late?'late':due&&!paid&&dueIn>=0&&dueIn<=7?'due-soon':unconfirmed?'unconfirmed':whenUsed?'when-used':'on-time';
       // pay: the card payment's own state, whatever the statement timing says (status may be 'late').
       const pay=!due?null:due.amount===0?'nothing-owed':paid?'paid':overdue?'overdue':unconfirmed?'unconfirmed':'due';
-      rows.push({id:a.id,label:a.label||a.id,kind:a.kind||'account',last,cycleDay:cd,expected,due,paid,overdue,unconfirmed,payment,pay,manual,status,dueIn,
-        daysLate:late?tn-dn(expected):0,minPayment:due?due.min:null});
+      const row={id:a.id,label:a.label||a.id,kind,last,cycleDay:cd,expected,arrival,statements:P.length,due,paid,overdue,unconfirmed,payment,pay,manual,whenUsed,
+        suggestWhenUsed:!whenUsed&&looksWhenUsed(P,today,arrival.lag),status,dueIn,
+        daysLate:late?tn-dn(arrival.to):0,minPayment:due?due.min:null};
+      row.nextText=nextTextOf(row,today);row.reason=reasonOf(row);
+      rows.push(row);
     }
     return rows.sort((x,y)=>cmp(x.kind==='card'?1:0,y.kind==='card'?1:0)||cmp(x.label,y.label));
   }
@@ -382,10 +452,13 @@
   function comingUp(rows,today){
     today=today||todayISO();const tn=dn(today),end=tn+14,out=[];
     for(const r of rows||[]){
-      const e=dn(r.expected),it=(date,kind,label,amount)=>{const x={date,kind,account:r.label,accountId:r.id,label};if(amount!=null)x.amount=amount;out.push(x);};
-      if(r.manual){if(e<=end)it(r.expected,'manual',`Download the ${r.label} statement`);}
-      else if(tn>e+3)it(r.expected,'missing',`${r.label} statement is late`);
-      else if(e>=tn&&e<=end)it(r.expected,'statement',`${r.label} statement expected`);
+      const e=dn(r.expected),w=r.arrival||{from:r.expected,to:r.expected},wf=dn(w.from),wt=dn(w.to);
+      const it=(date,kind,label,amount,extra)=>{const x={date,kind,account:r.label,accountId:r.id,label,...(extra||{})};if(amount!=null)x.amount=amount;out.push(x);};
+      // An account that only sends a statement in months it was used has nothing to chase; a due date still shows below.
+      if(r.whenUsed){/* nothing to expect */}
+      else if(r.manual){if(e<=end)it(r.expected,'manual',`Download the ${r.label} statement`);}
+      else if(tn>wt+LATE_GRACE)it(w.to,'missing',`${r.label} statement is late`);
+      else if(wf<=end)it(wf>tn?w.from:today,'statement',`${r.label} statement expected`,null,{window:rangeText(w.from,w.to,today),until:w.to});
       // A passed due that isn't paid stays listed (overdue / not confirmed yet) until it is paid or
       // the next statement brings a new due date; a paid or nothing-owed one drops out.
       if(r.due&&!r.paid){const d=dn(r.due.date),st=r.overdue?'overdue':r.unconfirmed?'unconfirmed':'due';
@@ -408,12 +481,14 @@
     CAL={sig:s,rows};return rows;
   }
   const STATUS={'on-time':['good','On time'],'due-soon':['warn','Due soon'],late:['bad','Statement late'],manual:['warn','Download due'],overdue:['bad','Payment not found'],
-    unconfirmed:['','Payment not confirmed yet']};
+    unconfirmed:['','Payment not confirmed yet'],'when-used':['','Only when used']};
   function statusBadge(r){
     const[cls,txt]=STATUS[r.status]||['',''];
     const label=r.status==='due-soon'?(r.dueIn===0?'Due today':`Due in ${r.dueIn} day${r.dueIn===1?'':'s'}`):r.status==='late'?`Late ${r.daysLate} days`:txt;
     return`<span class="badge ${cls}">${escH(label)}</span>`;
   }
+  // Hint (never applied on its own): the history has repeated gaps, so the account may only send a statement in months it was used.
+  const hintBadge=r=>r.suggestWhenUsed?`<span class="badge stmt-hint" title="Statements have skipped 2 or more months more than once. Switch this on under Credit cards › History › Statement links if this account only sends a statement in months it was used.">Only when used?</span>`:'';
   // The card payment's state, shown beside the timing badge when that one doesn't already say it.
   const PAY={paid:['good','Paid'],'nothing-owed':['','Nothing owed'],overdue:['bad','Payment not found'],unconfirmed:['','Payment not confirmed yet']};
   function payBadge(r){
@@ -440,7 +515,7 @@
     const today=todayISO();
     return calRows().filter(r=>ids.has(r.id)).map(r=>{
       const due=r.due&&!r.paid&&r.due.date>=today?` · Due ${dayLabel(r.due.date)}${r.due.amount!=null?` <span class="amt">${fmtIDR(r.due.amount)}</span>`:''}`:'';
-      return`<span class="stmt-next">Next statement ${dayLabel(r.expected)}${due}</span>${r.status!=='on-time'?statusBadge(r):''}${payBadge(r)}`;
+      return`<span class="stmt-next">Next statement ${escH(r.nextText)}${due}</span>${r.status!=='on-time'?statusBadge(r):''}${payBadge(r)}${hintBadge(r)}`;
     }).join('')||null;
   });
 
@@ -489,9 +564,10 @@
     const rows=calRows();if(!rows.length)return'';
     const list=rows.map(r=>{
       const due=r.due?` · Due ${dayLabel(r.due.date)}${r.due.amount!=null?` ${money(r.due.amount)}`:''}${r.due.min!=null?` (min ${money(r.due.min)})`:''}${r.paid?' · paid':''}`:'';
-      return`<div class="list-item"><span class="li-body"><span class="li-title" style="display:block">${escH(r.label)}${r.manual?' <span class="badge">Manual</span>':''}</span>
-        <span class="li-sub" style="display:block">Last ${dayLabel(r.last)} · Next expected ${dayLabel(r.expected)}${due}</span></span>${statusBadge(r)}${payBadge(r)}</div>`;}).join('');
-    return section(cardHead('calendar','Statement calendar','Next statement learned from each account’s history · late when 3 days past the expected date'),`<div class="list" id="stmtCal">${list}</div>`);
+      return`<div class="list-item"><span class="li-body"><span class="li-title" style="display:block">${escH(r.label)}${r.manual?' <span class="badge">Manual</span>':''}${r.whenUsed?' <span class="badge">Only when used</span>':''}</span>
+        <span class="li-sub" style="display:block">Last ${dayLabel(r.last)} · Next expected ${escH(r.nextText)}${due}</span>
+        <span class="li-sub stmt-reason" style="display:block">${escH(r.reason)}</span></span>${statusBadge(r)}${payBadge(r)}${hintBadge(r)}</div>`;}).join('');
+    return section(cardHead('calendar','Statement calendar',`When each statement should arrive, learned from the account’s history · late ${LATE_GRACE} days after the expected window`),`<div class="list" id="stmtCal">${list}</div>`);
   }
 
   function setupCard(R){
@@ -506,11 +582,16 @@
         <select class="input" style="width:260px;max-width:100%" aria-label="Statement for ${escH(b)} alerts" onchange="ETStatements.setLink('${bq}',this.value)">${opts}</select></div>`;}).join('');
     const man=(STATE.stmtFix||{}).manual||{};
     const manual=accs.filter(a=>c.statements.some(s=>s.account===a.id)).map(a=>`<label class="check" style="padding:6px 0"><input type="checkbox"${live(man[a.id])&&man[a.id].on?' checked':''} onchange="ETStatements.setManual('${escAttr(a.id)}',this.checked)"> ${escH(a.label||a.id)}</label>`).join('');
+    const wuMap=(STATE.stmtFix||{}).whenUsed||{},sug=new Set(calRows().filter(r=>r.suggestWhenUsed).map(r=>r.id));
+    const whenUsed=accs.filter(a=>c.statements.some(s=>s.account===a.id)).map(a=>`<label class="check" style="padding:6px 0"><input type="checkbox"${live(wuMap[a.id])&&wuMap[a.id].on?' checked':''} onchange="ETStatements.setWhenUsed('${escAttr(a.id)}',this.checked)"> ${escH(a.label||a.id)}${sug.has(a.id)?' <span class="badge stmt-hint">Only when used?</span>':''}</label>`).join('');
     return section(cardHead('settings','Statement links','Which statement each bank’s email alerts are checked against, and which statements you download yourself'),
       `${banks?`<div id="stmtLinks">${banks}</div>`:`<p class="help">No email alerts yet.</p>`}
       <div class="eyebrow" style="margin:16px 0 4px">Statements you download yourself</div>
       <p class="help" style="margin-bottom:4px">These get a download reminder instead of a “late” flag.</p>
-      <div style="display:flex;flex-direction:column" id="stmtManual">${manual}</div>`);
+      <div style="display:flex;flex-direction:column" id="stmtManual">${manual}</div>
+      <div class="eyebrow" style="margin:16px 0 4px">Only sends a statement when used</div>
+      <p class="help" style="margin-bottom:4px">Some cards issue a statement only in months they were used. These are never flagged late or missing, and show nothing under Coming up. We suggest it when a statement has skipped 2 or more months more than once, but never switch it on for you.</p>
+      <div style="display:flex;flex-direction:column" id="stmtWhenUsed">${whenUsed}</div>`);
   }
 
   /* ── Statement detail sheet (every fix with its own undo, plus undo all) ── */

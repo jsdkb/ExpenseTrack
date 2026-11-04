@@ -88,7 +88,7 @@ imported by an older app version gains the new fields only when the next (newer)
 |---|---|---|
 | books (separate appData file `books.json`, IndexedDB cache `et-books`) | F1 loader, read by A/B/D | §1 as imported. Read it with `BOOKS()`; never copy it into `STATE` or localStorage |
 | `STATE.booksMeta` | F1 | `{importedAt, from: 'file'\|'folder', generatedAt}` |
-| `STATE.stmtFix` | C | Only the owner's decisions; matches themselves are recomputed every run (§6). `{match: {[emailTxKey]: {stmtId, line, amount, off: true, at}}` (an undone fix: the alert keeps its own amount and stays paired with cash line `line`), `added: {[cashTxnId]: {stmtId, excluded: true, at}}` (a statement-only line removed from spending), `review: {[emailTxKey]: {decision: 'exclude'\|'keep', at}}`, `manual: {[statementAccountId]: {on: true, at}}` (statements the owner downloads by hand)}. "Apply again" / "undo" write a dated tombstone `{deleted: true, at}`. `emailTxKey` = the transaction `id` (the key used by catOverrides, txEdits, hiddenIds) |
+| `STATE.stmtFix` | C | Only the owner's decisions; matches themselves are recomputed every run (§6). `{match: {[emailTxKey]: {stmtId, line, amount, off: true, at}}` (an undone fix: the alert keeps its own amount and stays paired with cash line `line`), `added: {[cashTxnId]: {stmtId, excluded: true, at}}` (a statement-only line removed from spending), `review: {[emailTxKey]: {decision: 'exclude'\|'keep', at}}`, `manual: {[statementAccountId]: {on: true, at}}` (statements the owner downloads by hand), `whenUsed: {[statementAccountId]: {on: true, at}}` (accounts that only send a statement in months they were used; merged per account like `manual`, a removal is a dated tombstone)}. "Apply again" / "undo" write a dated tombstone `{deleted: true, at}`. `emailTxKey` = the transaction `id` (the key used by catOverrides, txEdits, hiddenIds) |
 | `STATE.cardMap` | C | `{[emailBank]: statementAccountId \| ''}` — which statement account a bank's email alerts are checked against. Needed when a bank has several cards (or to link a bank whose name doesn't match); `''` = not linked. Unset = automatic by name |
 | `STATE.budgets` | D | `{[category]: {monthly: number, since: 'YYYY-MM', at}}` |
 | `STATE.goals` | D | `[{id, name, kind: 'networth'\|'liquid'\|'saving'\|'account', target, by: 'YYYY-MM', accounts?: [code], since: 'YYYY-MM', at}]`. `since` = the month the goal was created; set once and kept on every edit (`at` changes on every edit, so it can't date the goal). A `saving` goal counts net-worth change from the end of the month before `since`. Older goals without `since` fall back to `at`'s month |
@@ -275,7 +275,29 @@ from `STATE.cash` and `STATE.stmtFix`.
 
 **Calendar** (every statement account): cycle day = lower median of statement days, a statement on
 a month's last day counting as 31; expected next = the month after the last statement, day clamped
-to the month's length. Card due = latest statement `dueDate` / owed closing / `minPayment`, else the
+to the month's length (`row.expected`, the statement DATE).
+
+**Expected arrival** (2026-11-04). A statement is dated at its period end but reaches the owner
+later, so what the owner sees is the arrival, not the date. Statements may carry `receivedAt`
+("YYYY-MM-DD" or null; the Bank Statements pipeline adds it, older files lack it). Per account:
+lag = median(`receivedAt` − statement date) over the statements that have it (0–45 days; `arrival.learned = true`,
+`arrival.n` = how many), else a default by kind from one constant `LAG_DEFAULT` in `statements.js`:
+bank account whose cycle day is a month end → 7 days, card → 1, anything else → 3. Window = earliest–latest
+of (that month's cycle day + each of the last 6 periods' own lag) for the expected statement; the
+expected statement date + lag is always inside it. `row.arrival = {from, to, lag, learned, n, fixed}`
+(`fixed` = a single date); `row.nextText` is the wording every place uses after "Next": `~5 Nov`,
+`~5–8 Nov`, `early Dec · you download this from the bank’s app` (manual) or `~2 Dec, only if the
+card was used` (when used); `row.reason` explains it (learned from n statements / default lag).
+`late` only when today > `arrival.to` + 3 (`LATE_GRACE`); `daysLate` = days past `arrival.to`.
+The `ETStatements` API exposes `LAG_DEFAULT`, `LATE_GRACE`, `WINDOW_PERIODS` for tests.
+
+**Only when used.** `stmtFix.whenUsed[accountId]` (Credit cards › History › Statement links, next to the
+manual-download toggles; `ETStatements.setWhenUsed(id, on)`). Such an account is never `late` and never
+`missing`; its expected date rolls forward to the next cycle that has not yet passed; status
+`when-used`; Coming up lists nothing for it except a pending card due. The app only SUGGESTS it
+(`row.suggestWhenUsed`, shown as an "Only when used?" hint, never switched on by itself) when the
+history has at least two gaps of 2 or more cycles between statements, the stretch from the last
+statement to now counting as one. Card due = latest statement `dueDate` / owed closing / `minPayment`, else the
 newest billing reminder in `BILLING` for that card (linked like the alerts) dated after the last
 statement (date only, no amount).
 
@@ -294,8 +316,12 @@ and `pay` ∈ `nothing-owed | paid | overdue | unconfirmed | due` (null without 
 overdue due stays in the list after its date until it is paid or the next statement replaces it.
 `ETStatements.calendarRows()` returns the live rows.
 
-Status, first that applies: `overdue`, `manual` (owner-flagged source and the expected date has
-come), `late` (> 3 days past expected), `due-soon` (due within 7 days, unpaid), `unconfirmed`,
-else `on-time`.
+Status, first that applies: `overdue`, `manual` (owner-flagged source and the expected statement date has
+come; not for a when-used account), `late` (> 3 days past the end of the arrival window; never for a
+when-used account), `due-soon` (due within 7 days, unpaid), `unconfirmed`, `when-used`, else `on-time`.
 `homeComingUp()` items: `{date, kind, account (label), accountId, label, amount?}` for the next 14
-days plus late/overdue/manual, sorted by date then kind (missing, manual, due, statement).
+days plus late/overdue/manual, sorted by date then kind (missing, manual, due, statement). A
+`statement` ("expected") item is dated the window start (today when the window has begun) and carries
+`window` ("5–8 Nov") and `until`; it stays until the statement turns late. A `missing` item is dated
+the window end. Home › Data freshness reads `calendarRows()` and shows `Next <nextText>` on every statement
+account, with a badge for `late`, `manual` and `when-used` (a when-used account is never `Stale`).
