@@ -281,7 +281,7 @@
     setManual(id,on){put('manual',id,on?{on:true}:{deleted:true});commit(on?'Download reminder on':'Download reminder off');},
     openStmt,
     // For tests and other modules (read-only).
-    reconcile,strip,unapply,apply,calendar,cycleDay,expectedNext,comingUp,last:()=>LAST,refresh,
+    reconcile,strip,unapply,apply,calendar,calendarRows:()=>calRows(),cycleDay,expectedNext,comingUp,last:()=>LAST,refresh,
   };
   window.ETStatements=API;
 
@@ -368,13 +368,16 @@
       }
       const tn=dn(today),late=tn>dn(expected)+3,dueIn=due?dn(due.date)-tn:null;
       const status=overdue?'overdue':manual&&tn>=dn(expected)?'manual':late?'late':due&&!paid&&dueIn>=0&&dueIn<=7?'due-soon':unconfirmed?'unconfirmed':'on-time';
-      rows.push({id:a.id,label:a.label||a.id,kind:a.kind||'account',last,cycleDay:cd,expected,due,paid,overdue,unconfirmed,payment,manual,status,dueIn,
+      // pay: the card payment's own state, whatever the statement timing says (status may be 'late').
+      const pay=!due?null:due.amount===0?'nothing-owed':paid?'paid':overdue?'overdue':unconfirmed?'unconfirmed':'due';
+      rows.push({id:a.id,label:a.label||a.id,kind:a.kind||'account',last,cycleDay:cd,expected,due,paid,overdue,unconfirmed,payment,pay,manual,status,dueIn,
         daysLate:late?tn-dn(expected):0,minPayment:due?due.min:null});
     }
     return rows.sort((x,y)=>cmp(x.kind==='card'?1:0,y.kind==='card'?1:0)||cmp(x.label,y.label));
   }
   // Home "Coming up": the next 14 days, plus what is already overdue.
   const KIND_ORDER={missing:0,manual:1,due:2,statement:3};
+  const mk=(r,date,kind,label,amount)=>{const x={date,kind,account:r.label,accountId:r.id,label};if(amount!=null)x.amount=amount;return x;};
   function comingUp(rows,today){
     today=today||todayISO();const tn=dn(today),end=tn+14,out=[];
     for(const r of rows||[]){
@@ -382,9 +385,12 @@
       if(r.manual){if(e<=end)it(r.expected,'manual',`Download the ${r.label} statement`);}
       else if(tn>e+3)it(r.expected,'missing',`${r.label} statement is late`);
       else if(e>=tn&&e<=end)it(r.expected,'statement',`${r.label} statement expected`);
-      if(r.due&&!r.paid){const d=dn(r.due.date);
-        if(r.overdue)it(r.due.date,'due',`${r.label} payment not found`,r.due.amount);
-        else if(d>=tn&&d<=end)it(r.due.date,'due',`${r.label} payment due`,r.due.amount);}
+      // A passed due that isn't paid stays listed (overdue / not confirmed yet) until it is paid or
+      // the next statement brings a new due date; a paid or nothing-owed one drops out.
+      if(r.due&&!r.paid){const d=dn(r.due.date),st=r.overdue?'overdue':r.unconfirmed?'unconfirmed':'due';
+        if(st==='overdue')out.push({...mk(r,r.due.date,'due',`${r.label} payment overdue`,r.due.amount),status:st});
+        else if(st==='unconfirmed')out.push({...mk(r,r.due.date,'due',`${r.label} payment not confirmed yet`,r.due.amount),status:st});
+        else if(d>=tn&&d<=end)out.push({...mk(r,r.due.date,'due',`${r.label} payment due`,r.due.amount),status:st});}
     }
     return out.sort((a,b)=>cmp(a.date,b.date)||KIND_ORDER[a.kind]-KIND_ORDER[b.kind]||cmp(a.label,b.label));
   }
@@ -407,6 +413,12 @@
     const label=r.status==='due-soon'?(r.dueIn===0?'Due today':`Due in ${r.dueIn} day${r.dueIn===1?'':'s'}`):r.status==='late'?`Late ${r.daysLate} days`:txt;
     return`<span class="badge ${cls}">${escH(label)}</span>`;
   }
+  // The card payment's state, shown beside the timing badge when that one doesn't already say it.
+  const PAY={paid:['good','Paid'],'nothing-owed':['','Nothing owed'],overdue:['bad','Payment not found'],unconfirmed:['','Payment not confirmed yet']};
+  function payBadge(r){
+    if(!r.pay||!PAY[r.pay]||r.status===r.pay)return'';
+    const[cls,txt]=PAY[r.pay];return`<span class="badge${cls?' '+cls:''} stmt-pay" data-pay="${escH(r.pay)}">${escH(txt)}</span>`;
+  }
 
   /* ── Hooks ── */
   const badge=(cls,text,title)=>`<span class="badge${cls?' '+cls:''}" style="margin-left:4px" title="${escH(title)}">${escH(text)}</span>`;
@@ -427,7 +439,7 @@
     const today=todayISO();
     return calRows().filter(r=>ids.has(r.id)).map(r=>{
       const due=r.due&&!r.paid&&r.due.date>=today?` · Due ${dayLabel(r.due.date)}${r.due.amount!=null?` <span class="amt">${fmtIDR(r.due.amount)}</span>`:''}`:'';
-      return`<span class="stmt-next">Next statement ${dayLabel(r.expected)}${due}</span>${r.status!=='on-time'?statusBadge(r):''}`;
+      return`<span class="stmt-next">Next statement ${dayLabel(r.expected)}${due}</span>${r.status!=='on-time'?statusBadge(r):''}${payBadge(r)}`;
     }).join('')||null;
   });
 
@@ -477,7 +489,7 @@
     const list=rows.map(r=>{
       const due=r.due?` · Due ${dayLabel(r.due.date)}${r.due.amount!=null?` ${money(r.due.amount)}`:''}${r.due.min!=null?` (min ${money(r.due.min)})`:''}${r.paid?' · paid':''}`:'';
       return`<div class="list-item"><span class="li-body"><span class="li-title" style="display:block">${escH(r.label)}${r.manual?' <span class="badge">Manual</span>':''}</span>
-        <span class="li-sub" style="display:block">Last ${dayLabel(r.last)} · Next expected ${dayLabel(r.expected)}${due}</span></span>${statusBadge(r)}</div>`;}).join('');
+        <span class="li-sub" style="display:block">Last ${dayLabel(r.last)} · Next expected ${dayLabel(r.expected)}${due}</span></span>${statusBadge(r)}${payBadge(r)}</div>`;}).join('');
     return section(cardHead('calendar','Statement calendar','Next statement learned from each account’s history · late when 3 days past the expected date'),`<div class="list" id="stmtCal">${list}</div>`);
   }
 

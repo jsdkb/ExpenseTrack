@@ -280,7 +280,11 @@ statement count too. Paid = payments ≥ the minimum (or the amount owed when th
 or nothing owed. When the due date has passed unpaid, the bank statements decide: only when every
 bank account that pays cards (every bank account if none has yet) has a statement dated on or after
 the due date + 3 days is it `overdue`; otherwise it is `unconfirmed` ("Payment not confirmed yet",
-neutral). Rows carry `paid, overdue, unconfirmed, payment: {amount, lines, from: 'bank'|'card'|null}`.
+neutral). Rows carry `paid, overdue, unconfirmed, payment: {amount, lines, from: 'bank'|'card'|null}`
+and `pay` ∈ `nothing-owed | paid | overdue | unconfirmed | due` (null without a due date).
+`homeComingUp()` due items carry `status` (`due | unconfirmed | overdue`); an unconfirmed or
+overdue due stays in the list after its date until it is paid or the next statement replaces it.
+`ETStatements.calendarRows()` returns the live rows.
 
 Status, first that applies: `overdue`, `manual` (owner-flagged source and the expected date has
 come), `late` (> 3 days past expected), `due-soon` (due within 7 days, unpaid), `unconfirmed`,

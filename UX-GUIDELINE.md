@@ -442,7 +442,12 @@ Disabled: 40% opacity, no hover. Loading: label stays, spinner replaces the icon
   owner downloads by hand) · `Late n days` bad (statement > 3 days past its expected date) ·
   `Payment not found` bad (due date passed and the bank statements covering it show no card
   payment ≥ the minimum) · `Payment not confirmed yet` neutral (due date passed, but the bank
-  statements don't reach it yet — never shown as overdue).
+  statements don't reach it yet — never shown as overdue). A card row also gets a payment badge
+  beside its timing badge when that one doesn't already say it: `Paid` good · `Nothing owed`
+  neutral · `Payment not confirmed yet` neutral · `Payment not found` bad (Credit cards › History
+  and the Accounts column alike). A passed, unpaid due stays in Home's Coming up — neutral "Payment
+  not confirmed yet" or warn "Overdue" — until it is paid or the next statement replaces it; Home's
+  "Next card due" skips cards that owe nothing or are paid and otherwise says "No card payment due".
 - **Flag badge on a figure that is right but misleading** (`Mostly equity moves`, warn): the
   figure keeps its definition; the row gets the badge, its chart mark a 2px `--warn` outline with a
   legend entry, and every summary it feeds (averages, best/worst, year-to-date) gets a `*` and the

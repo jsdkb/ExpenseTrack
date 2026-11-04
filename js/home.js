@@ -150,7 +150,7 @@
   function comingRaw(){return runHooks('homeComingUp').filter(x=>x&&typeof x.date==='string'&&/^\d{4}-\d{2}-\d{2}/.test(x.date)).map(x=>({...x,date:x.date.slice(0,10)}));}
   // Next 14 days; a missing statement stays listed until it arrives.
   function comingItems(raw){const t=today(),hi=addDays(t,AHEAD);
-    return raw.filter(x=>x.date<=hi&&(x.date>=t||x.kind==='missing')).sort((a,b)=>a.date.localeCompare(b.date)||String(a.label||'').localeCompare(String(b.label||'')));}
+    return raw.filter(x=>x.date<=hi&&(x.date>=t||x.kind==='missing'||(x.kind==='due'&&(x.status==='unconfirmed'||x.status==='overdue')))).sort((a,b)=>a.date.localeCompare(b.date)||String(a.label||'').localeCompare(String(b.label||'')));}
   const MON={jan:1,feb:2,mar:3,apr:4,may:5,mei:5,jun:6,jul:7,aug:8,agu:8,agt:8,ags:8,sep:9,oct:10,okt:10,nov:11,dec:12,des:12};
   // Due dates in billing emails come as free text: 25-10-2026, 25/10/26, 2026-10-25, 25 Okt 2026, 25-Oct.
   function parseDue(s,ref){
@@ -165,12 +165,16 @@
   }
   function dueItems(raw){
     const out=[];
-    for(const x of raw)if(x.kind==='due')out.push({date:x.date,label:x.label||x.account||'Card',amount:x.amount!=null&&!isNaN(+x.amount)?+x.amount:null,src:'hook'});
-    const c=CM();
-    if(!out.length&&c){const last={};for(const s of c.statements){if(!s.dueDate||cashAcc(s.account).kind!=='card')continue;if(!last[s.account]||s.date>last[s.account].date)last[s.account]=s;}
+    for(const x of raw)if(x.kind==='due'){const amount=x.amount!=null&&!isNaN(+x.amount)?+x.amount:null;
+      if(amount===0)continue;   // nothing owed
+      out.push({date:x.date,label:x.label||x.account||'Card',amount,status:x.status||'due',src:'hook'});}
+    // Without the statement calendar (js/statements.js), read the latest card statements directly.
+    // With it, a card missing from its items is paid or owes nothing, so it must not come back here.
+    const c=CM(),cal=!!window.ETStatements;
+    if(!out.length&&c&&!cal){const last={};for(const s of c.statements){if(!s.dueDate||cashAcc(s.account).kind!=='card')continue;if(!last[s.account]||s.date>last[s.account].date)last[s.account]=s;}
       // A card's closing is what is owed (positive); a negative closing is in credit (cardOwed, core).
-      for(const s of Object.values(last))out.push({date:s.dueDate,label:cashAcc(s.account).label,amount:cardOwed(s.closing),src:'statement'});}
-    if(!out.length&&typeof BILLING!=='undefined'){const seen=new Set();
+      for(const s of Object.values(last))if(cardOwed(s.closing)>0)out.push({date:s.dueDate,label:cashAcc(s.account).label,amount:cardOwed(s.closing),src:'statement'});}
+    if(!out.length&&!cal&&typeof BILLING!=='undefined'){const seen=new Set();
       for(const t of BILLING){if(!t||t.type!=='billing'||!t.dueDate)continue;const d=parseDue(t.dueDate,t.msgDate);if(!d||seen.has(d))continue;seen.add(d);
         out.push({date:d,label:(t.bank||'Card')+' billing email',amount:t.amount>0?t.amount:null,src:'email'});}}
     return out;
@@ -178,7 +182,8 @@
   function nextDue(raw){
     const xs=dueItems(raw),t=today(),fut=xs.filter(x=>x.date>=t).sort((a,b)=>a.date.localeCompare(b.date));
     const pick=(list,past)=>{const d=list[0].date,items=list.filter(x=>x.date===d),known=items.filter(x=>x.amount!=null);
-      return{date:d,items,amount:known.length?R(known.reduce((s,x)=>s+x.amount,0)):null,past,src:items[0].src};};
+      const st=items.some(x=>x.status==='overdue')?'overdue':items.some(x=>x.status==='unconfirmed')?'unconfirmed':'due';
+      return{date:d,items,amount:known.length?R(known.reduce((s,x)=>s+x.amount,0)):null,past,status:st,src:items[0].src};};
     if(fut.length)return pick(fut,false);
     const past=xs.filter(x=>x.date<t&&daysBetween(x.date,t)<=31).sort((a,b)=>b.date.localeCompare(a.date));
     return past.length?pick(past,true):null;
@@ -337,9 +342,12 @@
     </section>`;
   }
   function dueHTML(raw){
-    const d=nextDue(raw);if(!d)return`<div class="h-due"><div class="eyebrow">Next card due</div><p class="help">No due date from statements or billing emails yet.</p></div>`;
-    const n=daysBetween(today(),d.date),when=d.past?`was due ${dayShort(d.date)}`:n===0?'due today':`due ${dayShort(d.date)} · in ${n} day${n===1?'':'s'}`;
-    const cls=d.past?'faint':n<=7?'warn':'';
+    const d=nextDue(raw);
+    if(!d){const c=CM(),any=!!c&&c.statements.some(s=>s.dueDate&&cashAcc(s.account).kind==='card');
+      return`<div class="h-due" id="homeNextDue" data-none="1"><div class="eyebrow">Next card due</div><p class="help">${any?'No card payment due.':'No due date from statements or billing emails yet.'}</p></div>`;}
+    const n=daysBetween(today(),d.date);
+    const when=d.status==='overdue'?`overdue · was due ${dayShort(d.date)}`:d.status==='unconfirmed'?`was due ${dayShort(d.date)} · payment not confirmed yet`:d.past?`was due ${dayShort(d.date)}`:n===0?'due today':`due ${dayShort(d.date)} · in ${n} day${n===1?'':'s'}`;
+    const cls=d.status==='overdue'?'bad':d.past?'faint':n<=7?'warn':'';
     return`<div class="h-due" id="homeNextDue"><div class="eyebrow">Next card due</div>
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-top:6px"><span class="${cls}" style="font-weight:600">${escH(when)}</span>${d.amount!=null?`<span style="font-weight:600">${money(d.amount)}</span>`:''}</div>
       <div class="li-sub">${escH(d.items.map(x=>x.label).join(' · '))} · ${d.src==='hook'?'statement calendar':d.src==='statement'?'from the statement':'from the billing email'}</div></div>`;
@@ -359,7 +367,10 @@
   const KIND_ICON={statement:'receipt',due:'calendar',missing:'triangle-alert',manual:'download'};
   function comingHTML(raw){
     const xs=comingItems(raw),t=today();
-    const when=x=>{const n=daysBetween(t,x.date);if(n<0)return`<span class="warn">${-n} day${n===-1?'':'s'} late · ${escH(dayShort(x.date))}</span>`;
+    const when=x=>{const n=daysBetween(t,x.date);
+      if(x.kind==='due'&&x.status==='unconfirmed')return`Payment not confirmed yet · was due ${escH(dayShort(x.date))}`;
+      if(x.kind==='due'&&x.status==='overdue')return`<span class="warn">Overdue · was due ${escH(dayShort(x.date))}</span>`;
+      if(n<0)return`<span class="warn">${-n} day${n===-1?'':'s'} late · ${escH(dayShort(x.date))}</span>`;
       const s=n===0?'Today':n===1?'Tomorrow':`In ${n} days · ${dayShort(x.date)}`;return x.kind==='due'&&n<=7?`<span class="warn">${escH(s)}</span>`:escH(s);};
     return`<section class="card span-5" id="homeComing" aria-label="Coming up">
       ${cardHead('calendar','Coming up','Statements and dues in the next 14 days')}
