@@ -34,6 +34,8 @@
   /* ── State ── */
   let L=null,LFOR='',STATUS='idle',ERROR=null,LOCAL_DONE=false,DRIVE_TRIED=false,BUSY=null,fileId=null,revId=null;
   let VER=0,VIEWS={ver:-1},GATE=null,SAVE_T=null,SAVING=null,AUTO_SIG=null,SEEDING=null;
+  // Drive holds a ledger.json this version can't read (damaged, or a newer schema): never save over it.
+  let BLOCKED=null;
 
   /* ── Small helpers ── */
   const cp=o=>o==null?o:JSON.parse(JSON.stringify(o));
@@ -398,7 +400,7 @@
   }
   // Quiet seed attempt, once per combination of imported files.
   function autoSeed(){
-    if(live()||!owner())return;
+    if(BLOCKED||live()||!owner())return;
     const{w,b,c}=seedInputs();if(!w||!b)return;
     const sig=[w.generatedAt,b.generatedAt,c?c.generatedAt:''].join('|');
     if(sig===AUTO_SIG)return;AUTO_SIG=sig;
@@ -414,7 +416,15 @@
     o.vouchers=byAt(r.vouchers,l.vouchers);
     for(const id of Object.keys(o.vouchers)){const a=r.vouchers[id],b=l.vouchers[id];if(!a||!b)continue;
       const seen=new Set(),h=[];for(const e of[...(a.history||[]),...(b.history||[])]){const k=e.at+'|'+e.why;if(!seen.has(k)){seen.add(k);h.push(e);}}
-      o.vouchers[id]={...o.vouchers[id],history:h.sort((p,q)=>cmp(p.at,q.at))};}
+      // Edited on both devices: the newer version wins, and the other one goes into the history.
+      // "Both": the losing copy has a change the winner doesn't know about, its content differs, and
+      // it isn't just an earlier state the winner already records.
+      const win=o.vouchers[id],lose=win===a?b:a,lc=JSON.stringify(vContent(lose));
+      const known=new Set((win.history||[]).map(e=>e.at+'|'+e.why)),edited=(lose.history||[]).some(e=>e&&!known.has(e.at+'|'+e.why));
+      if(edited&&lc!==JSON.stringify(vContent(win))&&!h.some(e=>e&&e.before&&JSON.stringify(vContent(e.before))===lc))
+        h.push({at:atOf(lose)||now(),why:CONCURRENT,before:vContent(lose)});
+      o.vouchers[id]={...win,history:h.sort((p,q)=>cmp(p.at,q.at))};}
+    healDuplicatePosts(o);
     for(const m of new Set([...Object.keys(r.market),...Object.keys(l.market)]))o.market[m]=byAt(r.market[m],l.market[m]);
     const cl=byAt(Object.fromEntries(r.closes.map(c=>[c.month,c])),Object.fromEntries(l.closes.map(c=>[c.month,c])));
     o.closes=Object.values(cl).sort((p,q)=>cmp(p.month,q.month));
@@ -430,6 +440,26 @@
     o.source.wealthFrom=minS(rs.wealthFrom,ls.wealthFrom);
     return o;
   }
+  const CONCURRENT='edited on another device at the same time',DUPLICATE='duplicate post from another device';
+  function vContent(v){return{date:v.date,description:v.description||'',status:v.status||'posted',
+    lines:(v.lines||[]).map(l=>({account:String(l.account),amount:Math.round(l.amount||0),memo:l.memo||'',...(l.fx?{fx:{ccy:l.fx.ccy,amount:l.fx.amount,rate:l.fx.rate}}:{})}))};}
+  // Income and month-end vouchers carry the receipt id / 'month-end:YYYY-MM' as ref; only one may be
+  // posted per ref. Two devices posting at once leave two: keep the newest, void the other (history
+  // kept), so the book heals itself on the next merge.
+  const REF_ORIGINS=['income','month-end'];
+  function healDuplicatePosts(x){
+    const by=new Map();let n=0;
+    for(const v of Object.values(x.vouchers||{}))if(v&&v.status==='posted'&&v.ref&&REF_ORIGINS.includes(v.origin)){const k=v.origin+'|'+v.ref;(by.get(k)||by.set(k,[]).get(k)).push(v);}
+    for(const vs of by.values()){if(vs.length<2)continue;
+      vs.sort((p,q)=>cmp(String(q.createdAt||q.at||''),String(p.createdAt||p.at||''))||cmp(q.id,p.id));
+      for(const v of vs.slice(1)){const t=now();
+        x.vouchers[v.id]={...v,status:'void',updatedAt:t,at:t,history:[...(v.history||[]),{at:t,why:DUPLICATE,before:vContent(v)}]};n++;}}
+    return n;
+  }
+  // The posted voucher for a ref (an income receipt id or 'month-end:YYYY-MM'), or null.
+  function findByRef(ref,origin){const x=live();if(!x||!ref)return null;let best=null;
+    for(const v of Object.values(x.vouchers))if(v&&v.status==='posted'&&v.ref===ref&&(!origin||v.origin===origin)&&(!best||String(v.createdAt||v.at||'')>String(best.createdAt||best.at||'')))best=v;
+    return best;}
   // A cheap fingerprint: which entries exist and when each last changed.
   function fp(x){
     const p=[];for(const k of['accounts','vouchers','flags','pending'])for(const[id,v]of Object.entries(x[k]||{}))p.push(k+':'+id+':'+atOf(v));
@@ -452,13 +482,33 @@
       }catch(_){end(null);}
     });
   }
-  function cachePut(){if(L&&L.seededAt)return idb('readwrite',st=>st.put({owner:LFOR,ledger:L},'current'));return Promise.resolve(null);}
+  // One cache entry per account ('current|' + owner), so switching Google accounts never mixes or
+  // loses a book. An older single 'current' entry is read once for its own owner (never deleted).
+  const cacheKey=o=>'current|'+(o||'');
+  function cachePut(){if(L&&L.seededAt)return idb('readwrite',st=>st.put({owner:LFOR,ledger:L},cacheKey(LFOR)));return Promise.resolve(null);}
+  async function cacheGet(me){
+    const c=await idb('readonly',st=>st.get(cacheKey(me)));if(c)return c;
+    const old=await idb('readonly',st=>st.get('current'));return old&&old.owner===me?old:null;
+  }
+  function block(why){
+    BLOCKED=why;ERROR=why;STATUS='error';
+    if(typeof showBanner==='function')showBanner('ledgerfile','warn','triangle-alert','Your book’s file in Google Drive can’t be read by this version of the app, so nothing is saved over it. Reload the app; if it stays, restore from a backup.');
+    return'blocked';
+  }
+  // Every ledger.json in the app folder, oldest first (two devices seeding at once can make two).
+  async function listFiles(){
+    const f=await driveFindFileByName(FILE);if(!f)return[];
+    if(f.more&&typeof driveListFilesByName==='function'){const fs=await driveListFilesByName(FILE);if(Array.isArray(fs)&&fs.length)return fs;}
+    return[f];
+  }
   async function driveSave(){
+    if(BLOCKED)return'blocked';
     if(!accessToken||!L||!L.seededAt)return'skip';
-    if(!fileId){const f=await driveFindFileByName(FILE);if(f){fileId=f.id;revId=null;}}
+    if(!fileId){const f=(await listFiles())[0];if(f){fileId=f.id;revId=null;}}
     if(fileId){const rev=await driveGetRevision(fileId);
-      if(rev!==revId){const remote=await driveReadJson(fileId);revId=rev;
-        if(validLedger(remote)){const before=fp(L);L=mergeLedgers(remote,L);if(fp(L)!==before){VER++;cachePut();afterOutsideChange();}}}}
+      if(rev!==revId){const remote=await driveReadJson(fileId);
+        if(!validLedger(remote))return block('ledger.json in Drive is not a readable book');
+        revId=rev;const before=fp(L);L=mergeLedgers(remote,L);if(fp(L)!==before){VER++;cachePut();afterOutsideChange();}}}
     const saved=await driveUploadJson(fileId,FILE,L);fileId=saved.id;revId=saved.headRevisionId;return'pushed';
   }
   function scheduleSave(){
@@ -473,10 +523,15 @@
     return run;
   }
   async function driveSync(){
-    const f=await driveFindFileByName(FILE);let remote=null;
-    if(f){fileId=f.id;revId=f.headRevisionId;remote=await driveReadJson(f.id);if(!validLedger(remote))remote=null;}
+    const fs=await listFiles(),f=fs[0];let remote=null;
+    if(f){remote=await driveReadJson(f.id);
+      if(!validLedger(remote)){block('ledger.json in Drive is not a readable book');return'blocked';}
+      fileId=f.id;revId=f.headRevisionId;
+      // More than one file: merge every readable one into the oldest; the others stay as they are.
+      let extra=0;for(const g of fs.slice(1)){try{const o=await driveReadJson(g.id);if(validLedger(o)){remote=mergeLedgers(o,remote);extra++;}}catch(_){}}
+      if(extra){remote.imports=[...(remote.imports||[]),{at:now(),kind:'drive-files',files:extra,added:0,differs:0,missing:0,linked:0}];revId=null;}}
     if(remote){const had=L;L=had?mergeLedgers(remote,had):norm(remote);LFOR=owner();VER++;cachePut();
-      if(had&&fp(L)!==fp(norm(remote)))await driveSave();return'pulled';}
+      if((had&&fp(L)!==fp(norm(remote)))||revId===null)await driveSave();return'pulled';}
     if(L&&L.seededAt){await driveSave();return'pushed';}
     return'none';
   }
@@ -492,18 +547,18 @@
     const wasLive=!!live();
     BUSY=(async()=>{
       try{
-        if(needLocal){LOCAL_DONE=true;const c=await idb('readonly',st=>st.get('current'));
+        if(needLocal){LOCAL_DONE=true;const c=await cacheGet(me);
           if(c&&c.owner===me&&validLedger(c.ledger)&&c.ledger.seededAt){L=L?mergeLedgers(c.ledger,L):norm(c.ledger);VER++;}}
         if(needDrive){DRIVE_TRIED=true;try{await driveSync();ERROR=null;}catch(e){ERROR=String(e&&e.message||e);}}
       }catch(e){ERROR=String(e&&e.message||e);}
-      STATUS=live()?'ready':ERROR?'error':'none';BUSY=null;
+      STATUS=BLOCKED?'error':live()?'ready':ERROR?'error':'none';BUSY=null;
       if(live()&&!wasLive)afterOutsideChange();
       else if(!live())autoSeed();
       return L;
     })();
     return BUSY;
   }
-  function resetLedger(){clearTimeout(SAVE_T);SAVE_T=null;L=null;LFOR='';STATUS='idle';ERROR=null;LOCAL_DONE=false;DRIVE_TRIED=false;BUSY=null;fileId=null;revId=null;VER++;GATE=null;AUTO_SIG=null;}
+  function resetLedger(){clearTimeout(SAVE_T);SAVE_T=null;L=null;LFOR='';STATUS='idle';ERROR=null;BLOCKED=null;if(typeof hideBanner==='function')hideBanner('ledgerfile');LOCAL_DONE=false;DRIVE_TRIED=false;BUSY=null;fileId=null;revId=null;VER++;GATE=null;AUTO_SIG=null;}
 
   function changed(o){
     o=o||{};L.updatedAt=now();VER++;cachePut();scheduleSave();
@@ -680,7 +735,7 @@
   /* ── Settings › Your book ── */
   const money=n=>`<span class="amt">${fmtIDR(n)}</span>`;
   const day=d=>d?fmtDayLong(new Date(d+'T00:00:00')):'—';
-  const KIND_WORD={books:'books',wealth:'wealth snapshot',cash:'cash movements',backup:'backup'};
+  const KIND_WORD={books:'books',wealth:'wealth snapshot',cash:'cash movements',backup:'backup','drive-files':'two book files in Drive merged'};
   function diffLine(d){
     const acc=d.account?` · ${escH(d.account)}`:'',mo=d.month?escH(monthLabel(d.month)):'';
     if(d.what==='months')return`<div class="li-title">Month count</div><div class="li-sub">Your book ${d.app} · the file ${d.file}</div>`;
@@ -739,11 +794,11 @@
   // Load the device copy (and Drive's) once someone is signed in, before the first render needs it.
   registerHook('beforeRender',()=>{if(owner()&&STATUS==='idle')ensureLedger();});
 
-  Object.assign(window,{LEDGER:()=>live(),ledgerStatus:()=>live()?'ready':STATUS,ensureLedger,ledgerSeeded:()=>!!live(),ledgerView,
+  Object.assign(window,{LEDGER:()=>live(),ledgerStatus:()=>BLOCKED?'error':live()?'ready':STATUS,ledgerBlocked:()=>BLOCKED,ledgerFindByRef:findByRef,ensureLedger,ledgerSeeded:()=>!!live(),ledgerView,
     ledgerValidate,ledgerPost,ledgerEdit,ledgerVoid,ledgerAddAccount,ledgerPending,ledgerAcceptPending,ledgerFlags,ledgerTakeAccurate,
     ledgerDismissFlag,ledgerExport,ledgerMergeIn,ledgerSeed,ledgerGate:()=>cp(GATE),ledgerOnImport,ledgerImport,ledgerFlush,ledgerCounts,
     ledgerInAccurate,ledgerCashIdRemap:cashIdRemap,ledgerRemapCashRefs:remapCashRefs,ledgerSettingsHTML,resetLedger,
     ledgerAfterBooksLoad:autoSeed,ledgerUi:ui,
     // Pure helpers for tests and the next builders: the views and merges on any ledger object.
-    ledgerLib:{seedFrom,gateDiffs,mergeLedgers,mergeBooks,mergeCash,fillWealth,coreOf,wViewOf,booksViewOf,cashViewOf,sigOf,contentSig}});
+    ledgerLib:{healDuplicatePosts,seedFrom,gateDiffs,mergeLedgers,mergeBooks,mergeCash,fillWealth,coreOf,wViewOf,booksViewOf,cashViewOf,sigOf,contentSig}});
 })();

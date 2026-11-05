@@ -15,7 +15,9 @@ statements, extras).
 ## 1. `ledger.json` (schema `et-ledger/1`)
 
 Own Drive appData file `ledger.json`, plus an IndexedDB cache on each device (database `et-ledger`,
-store `ledger`, key `current`, value `{owner: USER_EMAIL, ledger}`; only read for the same account).
+store `ledger`, key `current|<account e-mail>`, value `{owner: USER_EMAIL, ledger}`; one entry per
+account, so switching Google accounts never mixes or loses a book; an older single `current` entry is
+read once for its own owner and left in place).
 Never in localStorage and never in `STATE`.
 
 ```json
@@ -168,10 +170,28 @@ their imported copy (it stays in the Drive main file and books.json as before) a
 voucher / market entry / close / flag / pending entry / cash entry the newer `at` wins (a tie keeps
 this device's), union of keys; voucher `history` unioned; `imports` unioned by `at|kind`; `links`
 and `alias` unioned (aliased old line ids are dropped after the union); `source` widened.
+- **Edited on both devices:** when the losing copy of a voucher has a change the winner doesn't know
+  (a history entry it lacks) and different content that isn't one of the winner's earlier states,
+  the losing version is appended to the history as `{at, why: 'edited on another device at the same
+  time', before}`, so it never just disappears.
+- **Duplicate posts heal:** only one posted voucher may carry a given `ref` for origin `income`
+  (the receipt id) or `month-end` (`month-end:YYYY-MM`). If a merge leaves two, the newest
+  (`createdAt`) stays and the others are voided with why `duplicate post from another device`
+  (history kept, never deleted). `ledgerFindByRef(ref, origin)` returns the posted one.
 
 **Saving.** Every change: `updatedAt`, the IndexedDB cache, and (signed in) a Drive save 1.5 s
 later with compare-and-swap like `booksDriveSave`, except that a changed revision is MERGED per
 entry, never one copy replacing the other. `ledgerFlush()` saves now.
+- **Unreadable file:** if Drive's `ledger.json` exists but isn't a readable book (damaged, or a schema
+  other than `et-ledger/1`), the app never saves over it: `ledgerStatus()` is `error`,
+  `ledgerBlocked()` says why, a banner tells the owner to reload or restore from a backup, and no seed
+  runs.
+- **Two files:** two devices seeding at once can leave two `ledger.json`. `driveFindFileByName` returns
+  the oldest (`more: true` when there are others; `driveListFilesByName` lists them, oldest first);
+  every readable one is merged per entry into the oldest, which is saved; the others are left
+  untouched (never deleted) and the import log gets `{kind: 'drive-files', files: n}`.
+- **Sign-out** first saves pending changes to Drive (up to 8 s) while the token still works, then
+  resets.
 
 **localStorage mirror.** Once seeded, `saveStateMirror` writes `wealth: null, cash: null` (the copies
 stay in the Drive main file; `mergeStates` keeps Drive's when the mirror has none).
@@ -330,6 +350,12 @@ Models (Settings › AI): Claude Sonnet 5.5 `claude-sonnet-5-5` (default), Claud
 
 Once the book is seeded (`ledgerSeeded()`), the Accurate import files become an optional extra (the
 buttons say so) and the two pages post into the app's own book. The app never writes to Accurate.
+
+**Never twice, across devices.** `mePost`, `incPost` and `incPostAll` first pull Drive's copy
+(`ledgerFlush()`, signed in only) and then treat any posted voucher with the matching `ref` as
+already posted (its id is stored as `postedId`; nothing is posted). The status shown (`mePostedV`,
+`incPostedV`, `incBook`) uses the same ref lookup, so a tab that never posted still shows "Posted".
+A double post that happened anyway heals on the next merge (§3).
 
 **Month-end › Post to book** (`mePost(M)`). Posts `meJournal(M)` as one voucher: `origin: 'month-end'`,
 dated the month-end, `ref: 'month-end:YYYY-MM'`. The foreign-currency lines (kept out of the Accurate

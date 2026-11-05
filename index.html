@@ -1105,14 +1105,20 @@ $('signInBtn').addEventListener('click', () => {
    DRIVE APPDATA — generic JSON read/write + STATE persistence
    ══════════════════════════════════════════════════════════════════ */
 
-async function driveFindFileByName(name){
+// Every file with that name in the app folder, oldest first.
+async function driveListFilesByName(name){
   const listUrl = 'https://www.googleapis.com/drive/v3/files?' + new URLSearchParams({
-    spaces: 'appDataFolder', q: `name='${name}'`, fields: 'files(id,name,headRevisionId)'
+    spaces: 'appDataFolder', q: `name='${name}'`, fields: 'files(id,name,headRevisionId,createdTime)', orderBy: 'createdTime'
   }).toString();
   const r = await fetch(listUrl, { headers: { Authorization: 'Bearer ' + accessToken } });
   if (!r.ok) throw new Error('Drive list ' + r.status + ': ' + (await r.text()).slice(0,300));
   const d = await r.json();
-  return (d.files && d.files[0]) || null;
+  return d.files || [];
+}
+// The oldest file with that name; `more` says another one exists (two devices created it at once).
+async function driveFindFileByName(name){
+  const fs = await driveListFilesByName(name);
+  return fs.length ? { ...fs[0], more: fs.length > 1 } : null;
 }
 async function driveUploadJson(existingId, name, obj){
   const boundary = 'ccTrackerBoundary';
@@ -4322,7 +4328,13 @@ function meJournal(M){
    it into the posted voucher (state 'update'), so the book never gets a second voucher for the month. ── */
 const ME_FXDIFF='Month-end difference, foreign-currency accounts';
 function meOwn(){return typeof ledgerSeeded==='function'&&ledgerSeeded();}
-function mePostedV(M){const st=meStore()[M],id=st&&st.postedId;if(!id||!meOwn())return null;const v=LEDGER().vouchers[id];return v&&v.status==='posted'?v:null;}
+// The month's posted voucher: the one this device posted (postedId), else any posted voucher with
+// ref 'month-end:M' (posted on another device, or the one kept after a duplicate healed).
+function mePostedV(M){if(!meOwn())return null;const st=meStore()[M],id=st&&st.postedId,v=id&&LEDGER().vouchers[id];
+  if(v&&v.status==='posted')return v;return typeof ledgerFindByRef==='function'?ledgerFindByRef('month-end:'+M,'month-end'):null;}
+// Before posting, pull Drive's copy of the book (signed in only), so a voucher posted on another
+// device is seen and never posted twice.
+async function ownBookPull(){if(typeof accessToken!=='undefined'&&accessToken&&typeof ledgerFlush==='function'){try{await ledgerFlush();}catch(_){}}}
 function meFxGroup(l){return!!l.fx||l.memo===ME_FXDIFF;}
 function meApplyPosted(M,j,pv){
   const resid=[...j.lines,...j.fx];
@@ -4343,14 +4355,17 @@ function meApplyPosted(M,j,pv){
   j.lines=out.filter(l=>!meFxGroup(l));j.fx=out.filter(meFxGroup);
 }
 function meLedgerLine(l){const o={account:l.account,amount:l.amount,memo:l.memo||''};if(l.fx)o.fx={ccy:l.fx.ccy,amount:l.fx.amount,rate:l.fx.rate};return o;}
-function mePost(M){
+async function mePost(M){
   if(!meOwn()){toast('Your book isn’t set up yet');return;}
+  await ownBookPull();
   const st=meClose0(M),j=meJournal(M);if(!st)return;
-  if(j.state==='posted'){toast('Already posted to your book');return;}
+  const pv=mePostedV(M);
+  if(pv&&st.postedId!==pv.id){st.postedId=pv.id;st.postedAt=st.postedAt||meStamp();scheduleDriveSave();}
+  if(j.state==='posted'){renderAll();toast('Already posted to your book');return;}
   if(j.issues.length){toast(j.issues[0]);return;}
   const lines=[...j.lines,...j.fx].map(meLedgerLine);
   try{
-    if(j.state==='update')ledgerEdit(st.postedId,{date:j.date,description:j.description,lines},'Updated after the month-end positions changed');
+    if(j.state==='update'&&pv)ledgerEdit(pv.id,{date:j.date,description:j.description,lines},'Updated after the month-end positions changed');
     else st.postedId=ledgerPost({date:j.date,description:j.description,ref:'month-end:'+M,lines},{origin:'month-end',why:'Month-end '+M});
   }catch(e){toast(e.errors&&e.errors[0]||e.message||'Couldn’t post to your book');return;}
   st.postedAt=meStamp();scheduleDriveSave();renderAll();
@@ -4508,7 +4523,7 @@ function meJournalHTML(M,c){
   const fx=j.fx.length&&!(own&&j.state==='posted')?`<div class="entry"><div class="entry-head"><div class="li-title"><span class="badge warn" style="margin-right:8px">FX</span>${own?'Foreign-currency accounts — go into your book with the lines above. The Accurate import file leaves them out (it can’t carry exchange rates)':'Foreign-currency accounts — post by hand in Accurate (the import file can’t carry exchange rates)'}</div></div>${meLinesTable(j.fx)}</div>`:'';
   const can=!j.issues.length||(own&&j.state==='posted');
   const next=st&&st.exportedAt?`<div class="me-next"><div class="li-title">${ic('square-check','s16')} Saved ${escH(fmtDateTime(st.exportedAt))} as <code>${escH(meFileName(M))}</code></div>
-      <p class="help">${own?'Optional: only if you also want this in Accurate. ':''}Next: ask Claude to import it into Accurate, or run <code>accurate-write queue --book ${escH(W().source.book)} --file "%USERPROFILE%\Downloads\${escH(meFileName(M))}" --check-only</code>, then without <code>--check-only</code>, then <code>accurate-write import --book ${escH(W().source.book)}</code>.${own?' The next books import links it to the entry in your book instead of adding it again.':' Tick “Posted in Accurate” once it’s in.'}</p></div>`:'';
+      <p class="help">${own?'Optional: only if you also want this in Accurate. ':''}Next: ask Claude to import it into Accurate, or run <code>accurate-write queue --book ${escH(W().source.book)} --file "%USERPROFILE%\\Downloads\\${escH(meFileName(M))}" --check-only</code>, then without <code>--check-only</code>, then <code>accurate-write import --book ${escH(W().source.book)}</code>.${own?' The next books import links it to the entry in your book instead of adding it again.':' Tick “Posted in Accurate” once it’s in.'}</p></div>`:'';
   const dl=`<button class="btn ${own?'btn-secondary':'btn-primary'} btn-sm" ${can?'':'disabled aria-disabled="true"'} onclick="meExport('${escAttr(M)}')" title="${can?'Download the voucher in the Accurate import format':escH(j.issues[0]||'')}">${ic('download','s16')}${st&&st.exportedAt?'Download again':own?'Download for Accurate import (optional)':'Download for Accurate import'}</button>`;
   const post=own&&j.state!=='posted'?`<button class="btn btn-primary btn-sm" id="mePostBtn" ${j.issues.length?'disabled aria-disabled="true"':''} onclick="mePost('${escAttr(M)}')" title="${j.issues.length?escH(j.issues[0]):'Put this voucher in your own book'}">${ic('book-open','s16')}${j.state==='update'?'Update posted entry':'Post to book'}</button>`:'';
   const tools=post+dl;
@@ -4696,17 +4711,21 @@ function incInBook(x,bookEnd){return incBookState(x,bookEnd)==='in';}
    (x.postedId, origin 'income') or an Accurate voucher with the same date, total and accounts has
    come in since it was saved or ticked. Cached per change of the book or of the receipts. ── */
 function incOwn(){return typeof ledgerSeeded==='function'&&ledgerSeeded();}
-function incPostedV(x){if(!x||!x.postedId||!incOwn())return null;const v=LEDGER().vouchers[x.postedId];return v&&v.status==='posted'?v:null;}
+// A receipt's posted voucher: postedId, else any posted income voucher with ref = the receipt id.
+function incPostedV(x){if(!x||!incOwn())return null;const v=x.postedId&&LEDGER().vouchers[x.postedId];
+  if(v&&v.status==='posted')return v;return typeof ledgerFindByRef==='function'?ledgerFindByRef(x.id,'income'):null;}
 let INC_BK={key:'',map:null};
 function incBook(){
   const L=LEDGER(),xs=incList();
   const key=L.updatedAt+'|'+Object.keys(L.vouchers).length+'|'+xs.map(i=>[i.id,i.postedId||'',i.date,i.amount,i.account,i.incomeAccount,i.posted?1:0,i.exportedAt?1:0].join(':')).join(',');
   if(INC_BK.key===key&&INC_BK.map)return INC_BK.map;
-  const pool=new Map(),map=new Map();
-  for(const v of Object.values(L.vouchers))if(v.origin==='accurate'&&v.status==='posted'){const k=ledgerLib.sigOf(v);pool.set(k,(pool.get(k)||0)+1);}
+  const pool=new Map(),map=new Map(),byRef=new Set();
+  for(const v of Object.values(L.vouchers)){if(v.status!=='posted')continue;
+    if(v.origin==='accurate'){const k=ledgerLib.sigOf(v);pool.set(k,(pool.get(k)||0)+1);}
+    else if(v.origin==='income'&&v.ref)byRef.add(v.ref);}
   for(const i of xs){
     const pv=i.postedId&&L.vouchers[i.postedId];
-    if(pv&&pv.status==='posted'){map.set(i.id,'own');continue;}
+    if((pv&&pv.status==='posted')||byRef.has(i.id)){map.set(i.id,'own');continue;}
     if(!(i.exportedAt||i.posted)||!i.account||!i.incomeAccount||!(i.amount>0))continue;
     const k=ledgerLib.sigOf(incVoucher(i)),n=pool.get(k)||0;
     if(n>0){pool.set(k,n-1);map.set(i.id,'accurate');}
@@ -4791,16 +4810,23 @@ function incPostOne(x){
   const v=incVoucher(x);
   x.postedId=ledgerPost(v,{origin:'income',why:`Income ${x.date}`});x.postedAt=x.at=meStamp();
 }
-function incPost(id){
-  const x=incStore()[id];if(!x||x.deleted)return;
+// The receipt's voucher already in the book (this device's postedId, or found by ref) is adopted.
+function incAdopt(x){const v=incPostedV(x);if(v&&x.postedId!==v.id){x.postedId=v.id;x.postedAt=x.postedAt||meStamp();x.at=meStamp();return true;}return false;}
+async function incPost(id){
   if(!incOwn()){toast('Your book isn’t set up yet');return;}
-  if(incBook().has(x.id)){toast('Already in your book');return;}
+  await ownBookPull();
+  const x=incStore()[id];if(!x||x.deleted)return;
+  if(incAdopt(x))scheduleDriveSave();
+  if(incBook().has(x.id)){renderAll();toast('Already in your book');return;}
   if(!x.account||!x.incomeAccount){toast('Choose both accounts first');return;}
   try{incPostOne(x);}catch(e){toast(e.errors&&e.errors[0]||e.message||'Couldn’t post to your book');return;}
   scheduleDriveSave();renderAll();toast(`Posted to your book · ${fmtIDR(Math.round(x.amount))}`);
 }
-function incPostAll(M){
+async function incPostAll(M){
   if(!incOwn()){toast('Your book isn’t set up yet');return;}
+  await ownBookPull();
+  let adopted=0;for(const x of incList())if(x.date.slice(0,7)===M&&incAdopt(x))adopted++;
+  if(adopted)scheduleDriveSave();
   const xs=incList().filter(x=>x.date.slice(0,7)===M&&!incBook().has(x.id));
   if(!xs.length){toast('Nothing left to post');return;}
   let n=0,bad=null;
@@ -5650,7 +5676,18 @@ function offlineBanner(){
 window.addEventListener('offline',offlineBanner);
 window.addEventListener('online',()=>{hideBanner('offline');toast('Back online');if(DATA_READY&&accessToken)scheduleDriveSave();});
 
+let SIGNING_OUT=false;
 function signOut(){
+  // Unsaved changes to the app's own book go to Drive first (at most a few seconds), so signing out
+  // or switching accounts never loses them.
+  if(!SIGNING_OUT&&accessToken&&typeof ledgerFlush==='function'&&typeof ledgerSeeded==='function'&&ledgerSeeded()){
+    SIGNING_OUT=true;$('authStatus').textContent='Saving your book…';
+    Promise.race([ledgerFlush().catch(()=>null),new Promise(r=>setTimeout(r,8000))]).finally(()=>{signOutNow();SIGNING_OUT=false;});
+    return;
+  }
+  signOutNow();
+}
+function signOutNow(){
   clearTimeout(refreshTimer);
   if(accessToken)google.accounts.oauth2.revoke(accessToken,()=>{});
   accessToken=null;DATA_READY=false;resetBooks();if(typeof resetLedger==='function')resetLedger();hideBanner('ledger');
