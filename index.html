@@ -4792,7 +4792,8 @@ function incSave(){
   const nx={...old,id,date,payer,amount:Math.round(amount),account,incomeAccount,note:meText($('incNote').value,60),at:meStamp(),...(changed?{exportedAt:null,exportFile:null,posted:false,postedAt:null,inBookAt:null,notInBookAt:null}:{})};
   // A receipt posted to the book: its voucher is edited in place (the earlier version stays in the voucher's history).
   const pv=incPostedV(old);
-  if(pv){try{const v=incVoucher(nx);ledgerEdit(old.postedId,{date:v.date,description:v.description,lines:v.lines},'Edited on the Income page');}
+  // Edit the voucher actually in the book (found by ref), which may differ from a stale postedId.
+  if(pv){try{const v=incVoucher(nx);ledgerEdit(pv.id,{date:v.date,description:v.description,lines:v.lines},'Edited on the Income page');nx.postedId=pv.id;}
     catch(e){toast(e.errors&&e.errors[0]||e.message||'Couldn’t update the voucher in your book');return;}}
   s[id]=nx;
   const was=INC_EDIT;INC_MONTH=date.slice(0,7);closeTopSheet(true);scheduleDriveSave();renderAll();
@@ -4802,7 +4803,7 @@ function incRemove(){
   const id=INC_EDIT,x=id&&incStore()[id];if(!x)return;
   const pv=incPostedV(x);
   if(!confirm(pv?'This income is posted in your book. Remove it here and void its voucher? The voucher stays in the book’s history; nothing is deleted.':x.exportedAt?'This income was already saved for import. Remove it from the app anyway? (It stays in the file you downloaded.)':'Remove this income?'))return;
-  if(pv){try{ledgerVoid(x.postedId,'Income removed on the Income page');}catch(e){toast(e.errors&&e.errors[0]||e.message||'Couldn’t void the voucher');return;}}
+  if(pv){try{ledgerVoid(pv.id,'Income removed on the Income page');}catch(e){toast(e.errors&&e.errors[0]||e.message||'Couldn’t void the voucher');return;}}
   incStore()[id]={id,deleted:true,at:meStamp()};closeTopSheet(true);scheduleDriveSave();renderAll();toast(pv?'Income removed and its voucher voided':'Income removed');
 }
 // Post receipts to the app's own book: one voucher per receipt, origin 'income', ref = the receipt's id.

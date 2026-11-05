@@ -49,7 +49,7 @@ Never in localStorage and never in `STATE`.
                 {"account": "1100.11", "amount": -16350000, "memo": "USD purchase"}],
       "prompt": "I just bought USD 1,000 at 16,350 from Bank B", "history": []}
   },
-  "market":  {"2026-10": {"1200.01": {"v": 550000000, "at": "...", "src": "snapshot"}}},
+  "market":  {"2026-10": {"1900.99": {"v": 550000000, "at": "...", "src": "snapshot"}}},
   "closes":  [{"month": "2026-10", "label": "Oct 2026", "status": "closed", "...": "as in the snapshot", "at": "..."}],
   "groups":  [{"id": "cash", "label": "Cash & bank", "side": "asset"}],
   "cash":    {"accounts": {"<id>": {"id": "...", "label": "...", "kind": "card", "currency": "IDR", "n": 1, "at": "..."}},

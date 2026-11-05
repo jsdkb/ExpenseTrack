@@ -495,6 +495,9 @@
     if(typeof showBanner==='function')showBanner('ledgerfile','warn','triangle-alert','Your book’s file in Google Drive can’t be read by this version of the app, so nothing is saved over it. Reload the app; if it stays, restore from a backup.');
     return'blocked';
   }
+  // A file that isn't JSON at all is damaged, like a wrong schema: block. Network errors still throw.
+  const BAD={};
+  async function readJson(id){try{return await driveReadJson(id);}catch(e){if(e instanceof SyntaxError)return BAD;throw e;}}
   // Every ledger.json in the app folder, oldest first (two devices seeding at once can make two).
   async function listFiles(){
     const f=await driveFindFileByName(FILE);if(!f)return[];
@@ -506,8 +509,8 @@
     if(!accessToken||!L||!L.seededAt)return'skip';
     if(!fileId){const f=(await listFiles())[0];if(f){fileId=f.id;revId=null;}}
     if(fileId){const rev=await driveGetRevision(fileId);
-      if(rev!==revId){const remote=await driveReadJson(fileId);
-        if(!validLedger(remote))return block('ledger.json in Drive is not a readable book');
+      if(rev!==revId){const remote=await readJson(fileId);
+        if(remote===BAD||!validLedger(remote))return block('ledger.json in Drive is not a readable book');
         revId=rev;const before=fp(L);L=mergeLedgers(remote,L);if(fp(L)!==before){VER++;cachePut();afterOutsideChange();}}}
     const saved=await driveUploadJson(fileId,FILE,L);fileId=saved.id;revId=saved.headRevisionId;return'pushed';
   }
@@ -524,12 +527,14 @@
   }
   async function driveSync(){
     const fs=await listFiles(),f=fs[0];let remote=null;
-    if(f){remote=await driveReadJson(f.id);
-      if(!validLedger(remote)){block('ledger.json in Drive is not a readable book');return'blocked';}
+    if(f){remote=await readJson(f.id);
+      if(remote===BAD||!validLedger(remote)){block('ledger.json in Drive is not a readable book');return'blocked';}
       fileId=f.id;revId=f.headRevisionId;
       // More than one file: merge every readable one into the oldest; the others stay as they are.
       let extra=0;for(const g of fs.slice(1)){try{const o=await driveReadJson(g.id);if(validLedger(o)){remote=mergeLedgers(o,remote);extra++;}}catch(_){}}
-      if(extra){remote.imports=[...(remote.imports||[]),{at:now(),kind:'drive-files',files:extra,added:0,differs:0,missing:0,linked:0}];revId=null;}}
+      // Logged once: the other files never change, so later loads would otherwise log them again.
+      if(extra){const im=remote.imports||[],last=im[im.length-1];
+        if(!(last&&last.kind==='drive-files'&&last.files===extra))remote.imports=[...im,{at:now(),kind:'drive-files',files:extra,added:0,differs:0,missing:0,linked:0}];revId=null;}}
     if(remote){const had=L;L=had?mergeLedgers(remote,had):norm(remote);LFOR=owner();VER++;cachePut();
       if((had&&fp(L)!==fp(norm(remote)))||revId===null)await driveSave();return'pulled';}
     if(L&&L.seededAt){await driveSave();return'pushed';}
