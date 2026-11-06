@@ -1049,11 +1049,29 @@ the imported `books.json`; each shows its own import step until a file exists.
     it), Debit and Credit (`Rp` prefix, numeric keypad, thousands separators), memo, and a globe
     icon button that opens the foreign-currency row (currency · foreign amount · rate · "= Rp x");
     **Add line**; a totals row (Debits · Credits · `Balanced` good / `Off by Rp x` bad); the live
-    checks as `help err` lines (or one good line "Ready to post"); then, from an AI draft, the
-    proposed new accounts (editable code · name · kind · currency · parent, **Add**) and "Claude
-    assumed" / "Claude asks" lists. Footer: Cancel · primary **Post** (**Save changes** when
-    editing), disabled while any check fails. Without a key, offline or on an API error the same
-    form opens empty with a note saying what happened and to fill it in by hand — never a dead end.
+    checks as `help err` lines (or one good line "Ready to post"). Footer: Cancel · primary
+    **Post** (**Save changes** when editing), disabled while any check fails. Without a key,
+    offline or on an API error the same form opens empty with a note saying what happened and to
+    fill it in by hand — never a dead end.
+  - **AI drafts (v3.1, several entries per sentence):** one bordered card per drafted entry,
+    numbered (accent circle) "Entry 1 of 2" with an `AI` accent badge and an **Include** check on
+    the right; inside, the same form as above; under a line whose amount came from a bank or card
+    statement a `help` line with the landmark icon "from <statement name> statement <8 Oct>"; the
+    card's foot has ghost **Remove** and secondary **Post**. A card whose statement line is already
+    used by a posted voucher shows a warn note "Already in your book…" and starts unticked (the
+    card dims); so does a card citing the same statement line as an earlier card ("Same bank line
+    as entry 1…"). Under the cards: the proposed new accounts (editable code · name · kind · currency
+    · parent, **Add**), "Claude assumed", "Claude asks" with an answer field per question, an
+    "Anything else to add or correct?" box and a secondary **Answer & redraft**. Posted cards leave
+    the list and a good note "Posted from this prompt: …" sums them up; a refused post part way
+    through Post all keeps the sheet open with a bad note "k posted, 1 failed: …". Footer: Cancel · primary
+    **Post all (n)**, n = ticked entries, disabled unless every ticked entry passes. No entries
+    (only questions) → the questions, the answer box and a ghost **Fill one in by hand instead**.
+    The help line under **Draft with Claude** and the Settings › AI note both say what is sent:
+    chart of accounts, account balances, open receivables and payables, the last 60 days of
+    statement lines and the sentence.
+  - Journals rows of vouchers posted together from one sentence carry an accent badge
+    "AI · 1 of 2"; the voucher panel adds "Entry 1 of 2 from one prompt: …" with links to the others.
   - **Edit** adds a required "Why the change" field; an Accurate voucher gets a warn note "your
     book differs from Accurate from now on". **Void** is a small sheet with a required reason and a
     destructive **Void voucher** button (the one confirm-style step: voiding is permanent in the

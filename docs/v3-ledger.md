@@ -206,7 +206,7 @@ stay in the Drive main file; `mergeStates` keeps Drive's when the mirror has non
 | `ledgerSeeded()` | true once the views are on |
 | `ledgerView(kind)` | 'wealth' \| 'books' \| 'cash' view, or null |
 | `ledgerValidate(v)` | `[]` or error strings: date, ≥ 2 lines, whole rupiah, non-zero, accounts exist and are not parents, balanced, fx consistent |
-| `ledgerPost(v, {origin, why})` | → id; throws `Error` with `.errors` when invalid. `v = {date, description, number?, type?, prompt?, ref?, lines: [{account, amount, memo?, fx?}]}`; origin app (default) \| ai \| month-end \| income |
+| `ledgerPost(v, {origin, why})` | → id; throws `Error` with `.errors` when invalid. `v = {date, description, number?, type?, prompt?, ref?, batch?, lines: [{account, amount, memo?, fx?, stmtLine?}]}`; origin app (default) \| ai \| month-end \| income |
 | `ledgerEdit(id, v, why)` | change date / lines / description / number; history kept |
 | `ledgerVoid(id, why)` | status void; history kept; → false if already void |
 | `ledgerAddAccount(acc)` | `{id, name, kind, type?, parent?, group?, ccy?, investment?, order?, suspended?}`; adds an app account or updates one the app added (Add account uses it); refuses an Accurate code |
@@ -233,7 +233,8 @@ seed, and the review list (Add all · Add · Take Accurate's version · Dismiss)
 - Added fields: `source` (book, exportedOn, balancesAsOf, wealthFrom/AsOf, the three generatedAt,
   cashAsOf), `pending` (the review list has to live somewhere), `cash.alias`, `n` on cash entries,
   `at` on closes, flags and pending entries, `srcKey` + `source` on Accurate vouchers, `plKind` on
-  accounts, `sig` on flags, `why`/`prompt`/`ref` on app vouchers. Import log entries also carry `new`
+  accounts, `sig` on flags, `why`/`prompt`/`ref`/`batch` on app vouchers, `stmtLine` on a voucher
+  line (the cash line id an AI draft took the amount from; kept through edits, see §7). Import log entries also carry `new`
   (vouchers waiting for review) and `from`.
 - Flags keep `dismissed` / `cleared` entries instead of being removed, and pending entries become
   `accepted` / `gone`, so another device's older copy can't bring them back.
@@ -259,16 +260,49 @@ the voucher sheet call into it through `window.etEntry`.
   checks run `ledgerValidate` on every keystroke (balanced, accounts exist and are not parents, whole
   rupiah, fx consistent); totals and a `Balanced` / `Off by Rp x` badge sit under the lines. **Post**
   stays disabled while any check fails.
-- **With a key:** a "Tell me what happened" box and **Draft with Claude** above the form. Claude's
-  draft fills the form; its assumptions and questions are listed under it; proposed new accounts are
-  shown with editable code / name / kind / currency / parent and an **Add** button
-  (→ `ledgerAddAccount`). Post stays blocked until each is added or removed. The AI never posts.
+- **With a key:** a "Tell me what happened" box and **Draft with Claude** above the form. One
+  sentence can give several entries (a receipt, then a transfer, then a fee...): each becomes its
+  own numbered card ("Entry 1 of 2", AI badge, an **Include** tick) holding the same editable
+  debit/credit form, its own check line, its own **Post** and **Remove**. A line whose amount came
+  from a statement line shows "from <statement name> statement <day month>" under its memo.
+  Claude's assumptions, its questions (each with an answer box), an "Anything else" box and
+  **Answer & redraft** sit under the cards; proposed new accounts are shown with editable code /
+  name / kind / currency / parent and an **Add** button (→ `ledgerAddAccount`), and every entry that
+  uses one stays blocked until it is added or removed. The footer is **Post all (n)**, n = the
+  ticked entries, enabled only when every ticked entry passes its checks. The AI never posts.
+- **Self-correction:** every drafted entry is run through `ledgerValidate` (a proposed account
+  waiting for the owner is not counted as an error). If any fail, the app sends the errors back to
+  Claude once, in the same conversation; a second failure stops there (no third call) and the
+  cards show with their errors and a note "Claude couldn't fix ...". If the correction call itself
+  fails, that unanswered correction turn is dropped from the conversation, so it keeps alternating
+  user / assistant for a later follow-up. An answer that arrives after its sheet was closed is
+  ignored (it never fills a sheet opened later).
+- **Follow-up:** **Answer & redraft** appends one user turn to the same conversation with the
+  draft as it is now (the owner's edits included, entries left out marked), the entries already
+  posted from this prompt, the answers and the extra note. The new answer replaces the unposted
+  cards (and gets the same one-time correction). The owner can repeat it. **Draft with Claude**
+  on a changed sentence starts afresh: a new conversation and a new batch, and nothing posted from
+  the earlier sentence is listed as posted from this one. An answer with no
+  entries (only questions) shows the questions with the answer box and **Fill one in by hand
+  instead**; there is no "no voucher lines" dead end.
+- **Duplicate guard:** a drafted entry with a line whose `stmtLine` (through the cash id aliases) is
+  already on a posted voucher's line warns "Already in your book" and starts unticked, so Post all
+  leaves it out unless the owner ticks Include. Two entries of one draft citing the same statement
+  line: the later one warns "Same bank line as entry i" and starts unticked the same way.
 - **Without a key, offline, or on any API error** (401, 403, 429, 5xx, timeout at 90 s, malformed or
   refused answer): the same form, empty, with a message saying what happened and to fill it in by
   hand. One request per click; nothing retries by itself.
-- **Post:** `ledgerPost(v, {origin, why})`: origin `ai` with `prompt` = the sentence when the form
-  came from a Claude draft (even if the owner changed it), else `app`. Then Journals opens with the
-  voucher in the panel (`window.openVoucher(key)` in js/books.js).
+- **Post:** a manual entry → `ledgerPost(v, {origin: 'app'})`. A drafted entry (its own Post, or
+  Post all) → one `ledgerPost` per entry with origin `ai`, `prompt` = the sentence, `batch` = one id
+  per draft sheet (`b-YYYYMMDD-xxxxxx`, shared by every entry posted from it, follow-ups included)
+  and each line's `stmtLine` (`prompt` is the sentence that was drafted, not later edits to the
+  box). Posting one card keeps the sheet open with the rest and a "Posted from this prompt" note. If
+  a post is refused part way through Post all, posting stops there and the sheet stays open: "k
+  posted, 1 failed: entry i: <reason>"; the posted entries leave the cards (listed as posted, never
+  posted again, and sent as `postedAlready` in a follow-up) and the rest stay to be fixed; Post all (or posting the last card) closes it and Journals opens on the first
+  voucher (`window.openVoucher(key)` in js/books.js). Journals list rows of a batch carry an
+  "AI · i of n" badge (`etEntry.batchBadge(v)`), and the voucher panel lists the other entries of
+  the batch with links.
 - **Edit** (voucher panel / sheet): the form prefilled, plus a required **Why the change**; saves
   with `ledgerEdit(id, v, why)`. Accurate vouchers are editable too and the form warns "your book
   differs from Accurate from now on" (a later Accurate export then flags it, never overwrites it).
@@ -286,7 +320,7 @@ the voucher sheet call into it through `window.etEntry`.
   names.
 
 `window.etEntry = {open, edit(id), void(id), canPost, originBadge(v), voucherTools(v), voucherByKey(key),
-voidList(), newEntryBtn()}`.
+voidList(), newEntryBtn(), batchBadge(v)}`.
 
 ## 7. The AI request and response
 
@@ -300,28 +334,68 @@ Anthropic, not by the app). No `temperature` / `top_p` / `top_k` (rejected on th
 {"model": "claude-sonnet-5-5", "max_tokens": 16000, "system": "<drafting rules>",
  "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": {"...": "below"}}},
  "fallbacks": "default",
- "messages": [{"role": "user", "content": "{\"today\":\"2026-11-04\",\"baseCurrency\":\"IDR\",\"chartOfAccounts\":[{\"id\":\"1100.01\",\"name\":\"Bank A ••1234\",\"kind\":\"asset\",\"ccy\":\"IDR\",\"isParent\":false}],\"sentence\":\"I just bought USD 1,000 at 16,350 from Bank B\"}"}]}
+ "messages": [{"role": "user", "content": "<the context below, as JSON>"}]}
 ```
 
-The user message is exactly four fields: `today`, `baseCurrency`, `chartOfAccounts` (id, name, kind,
-ccy, isParent of every non-suspended account, parents included so a proposed account can name one;
-the system prompt forbids posting to them) and `sentence`. Never balances, statement lines, notes or
-anything else from the book.
+The first user message is exactly seven fields (owner-approved 2026-11-06; they go only to
+Anthropic, through the owner's key, never the key itself):
+
+```json
+{"today": "2026-11-06", "baseCurrency": "IDR",
+ "chartOfAccounts": [{"id": "1100.01", "name": "Bank A ••1234", "kind": "asset", "ccy": "IDR", "isParent": false}],
+ "balances": {"1100.01": 25000000, "1400.01": 3000000, "2100.01": -1200000},
+ "openItems": [{"account": "1400.01", "name": "Loan to Person A", "kind": "receivable", "outstanding": 3000000}],
+ "statementLines": [{"id": "t-0a1b2c3d4e5f", "account": "1100.01", "statement": "Savings ••1234", "date": "2026-11-03",
+                     "amount": 3000000, "desc": "TRSF CR PERSON A", "counterparty": "PERSON A"}],
+ "sentence": "The loan to Person A was paid into my Bank A account, then moved to my 5678 account"}
+```
+
+- `chartOfAccounts`: id, name, kind, ccy, isParent of every non-suspended account (parents included
+  so a proposed account can name one; the system prompt forbids posting to them).
+- `balances`: the book's current balance of every posting account, debit positive, zero ones left
+  out. Read from the books view's cumulative balances at its latest month, which already hold every
+  posted voucher up to the newest (no second computation).
+- `openItems`: posting asset/liability accounts in the wealth view's receivables, loans or other
+  liabilities groups (or whose type says receivable / payable) with a non-zero balance; `kind`
+  from the sign, `outstanding` = its size.
+- `statementLines`: `CM()` lines dated within 60 days back from the newest line (never later than
+  today), newest first, at most 400 (the oldest dropped). `account` = the book account the
+  statement maps to (Month-end's statement mapping `meMapOf`, else null); `statement` = the
+  statement's name; `currency` only when not IDR; `inBook: true` when a posted voucher already uses
+  it (`stmtLine`).
+
+The system prompt tells Claude to split the sentence into separate transactions in time order, one
+balanced entry each; posting accounts only (a bank's name means its posting account, "my 5678
+account" the one whose masked name ends ••5678); amounts from the sentence, else a matching
+statement line (its id in `stmtLine`, its date as the entry date), else the open balance; never a
+zero amount (ask in `questions` and leave the entry out instead).
 
 Structured output (every object `additionalProperties: false`, every field required):
 
 ```json
-{"date": "2026-11-04", "description": "Bought USD 1,000",
- "lines": [{"account": "1100.12", "debit": 16350000, "credit": 0, "memo": "USD purchase", "fx": {"ccy": "USD", "amount": 1000, "rate": 16350}},
-           {"account": "1100.11", "debit": 0, "credit": 16350000, "memo": "USD purchase", "fx": null}],
+{"entries": [
+   {"date": "2026-11-03", "description": "Loan to Person A repaid",
+    "lines": [{"account": "1100.01", "debit": 3000000, "credit": 0, "memo": "received", "fx": null, "stmtLine": "t-0a1b2c3d4e5f"},
+              {"account": "1400.01", "debit": 0, "credit": 3000000, "memo": "loan repaid", "fx": null, "stmtLine": null}]},
+   {"date": "2026-11-04", "description": "Bank A to ••5678",
+    "lines": [{"account": "1100.09", "debit": 3000000, "credit": 0, "memo": "in", "fx": null, "stmtLine": null},
+              {"account": "1100.01", "debit": 0, "credit": 3000000, "memo": "out", "fx": null, "stmtLine": null}]}],
  "newAccounts": [{"id": "6000.12", "name": "Hobby supplies", "kind": "expense", "ccy": "IDR", "parent": "6000"}],
- "assumptions": ["Paid from Bank B in rupiah"], "questions": ["Was there a transfer fee?"]}
+ "assumptions": ["The whole loan was repaid"], "questions": ["Was there a transfer fee?"]}
 ```
 
 The app reads the text blocks as JSON and checks the shape itself (a `refusal` or `max_tokens` stop,
-unparsable text or no lines → the manual form with a message). A line with both a debit and a credit
-is netted; `fx.amount` is stored as a positive amount; a proposed account without a usable code gets
-the next free code under its parent. Settings › AI → **Test** sends one tiny request
+unparsable text, or neither entries nor questions → the manual form with a message). A line with
+both a debit and a credit is netted; `fx.amount` is stored as a positive amount; a `stmtLine` that
+is not a known statement line is dropped; a proposed account without a usable code gets the next
+free code under its parent.
+
+**Turns.** The correction turn and each follow-up are appended to the same `messages` array
+(append-only): `[user: context, assistant: Claude's answer exactly as returned (content blocks
+unchanged, thinking included), user: "...fail the book's checks..." + {errors: [{entry, description,
+errors}]}, assistant, user: {followUp: true, currentDraft: {entries, newAccounts}, postedAlready:
+[{date, description}], answers: [{question, answer}], ownerNote}, ...]`. At most one automatic
+correction per click; every other call is a click by the owner. Settings › AI → **Test** sends one tiny request
 (`max_tokens: 16`, effort low, "Reply with OK.") to check the key.
 
 Models (Settings › AI): Claude Sonnet 5.5 `claude-sonnet-5-5` (default), Claude Opus 5.5
@@ -332,8 +406,9 @@ Models (Settings › AI): Claude Sonnet 5.5 `claude-sonnet-5-5` (default), Claud
 - Pasted by the owner in Settings › AI (`#set-ai`, sub-nav "AI", after Your book): a password input,
   **Save key**, **Test**, **Remove** (with Undo), the model choice and the note "Your key is stored in
   your private Google Drive app folder and this device; set a spend limit on it at
-  console.anthropic.com; your sentence and your chart of accounts are sent to Anthropic when you ask
-  the AI."
+  console.anthropic.com; when you ask the AI, it is sent your chart of accounts, account balances,
+  open receivables and payables, the last 60 days of statement lines and your sentence (to Anthropic
+  only, never the key in any of it)."
 - Stored as `{key, model, at}` in its own Drive appData file `ai.json` (through `driveFindFileByName`
   / `driveReadJson` / `driveUploadJson`) and in IndexedDB database `et-secret`, store `secret`, key
   `ai|<account e-mail>`, value `{key, model, at, owner}`. Signed out (no Drive token): IndexedDB only.
@@ -422,3 +497,18 @@ in 7 days** (`showBanner` takes an optional fourth action `{label, action}`).
   default); Haiku requests go without.
 - The voucher history shows "By you" for every in-app change: the ledger records why and when, not
   who (there is one owner).
+
+## 12. Deviations (AI entry v3.1, 2026-11-06)
+
+- `js/ledger.js` keeps two more fields (the only change there): `batch` on a posted voucher and
+  `stmtLine` on a line (`normLines`), so they survive posting, edits, merges and backups.
+- `statementLines` carry `statement` (the statement's name, so "from <statement> statement <date>"
+  and Claude can match "my 2222 account" even when no book account is mapped), `currency` for a
+  foreign line and `inBook` for a line already used, besides the planned id / account / date /
+  amount / desc / counterparty.
+- The 60 days count back from the newest statement line (capped at today), not from today, so a
+  statement file that is a few weeks old still gives Claude its latest lines.
+- A drafted entry has an **Include** tick (unticked for a duplicate) so the owner can leave one
+  out of Post all without removing it; its own Post is disabled while unticked.
+- `etAI.requestCounts(sentence)` returns counts only (accounts, balances, openItems,
+  statementLines, bytes) of the request the builder would send, for real-data checks; no call.

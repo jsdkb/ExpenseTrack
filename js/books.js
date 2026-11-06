@@ -495,13 +495,13 @@
     const v=I.b.vouchers[i],sel=BK.jSel===v.key;
     return`<tr class="clickable${sel?' selected':''}" data-bk="jopen" data-key="${attr(v.key)}" tabindex="0">
       <td class="date">${escH(dShort(v.date))}</td><td class="muted" style="white-space:nowrap">${escH(v.number||'—')}</td>
-      <td class="merchant"><div class="merchant-name" style="font-weight:500">${escH(v.description||'—')}</div><div class="merchant-sub"><span class="badge">${escH(I.vType[i])}</span><span>${(v.lines||[]).length} lines</span></div></td>
+      <td class="merchant"><div class="merchant-name" style="font-weight:500">${escH(v.description||'—')}</div><div class="merchant-sub"><span class="badge">${escH(I.vType[i])}</span>${EN()?EN().batchBadge(v):''}<span>${(v.lines||[]).length} lines</span></div></td>
       <td class="num">${plain(I.vDr[i])}</td></tr>`;
   }
   function jItemHTML(i){
     const v=I.b.vouchers[i];
     return`<button class="list-item" data-bk="jopen" data-key="${attr(v.key)}"><span class="li-body"><span class="li-title" style="display:block">${escH(v.description||'—')}</span>
-      <span class="li-sub" style="display:block">${escH(dShort(v.date))} · ${escH(v.number||'—')} · ${escH(I.vType[i])}</span></span><span class="li-amt">${plain(I.vDr[i])}</span></button>`;
+      <span class="li-sub" style="display:block">${escH(dShort(v.date))} · ${escH(v.number||'—')} · ${escH(I.vType[i])}${EN()?' '+EN().batchBadge(v):''}</span></span><span class="li-amt">${plain(I.vDr[i])}</span></button>`;
   }
   function jListHTML(){
     const list=jFiltered(),n=list.length,pages=Math.max(1,Math.ceil(n/J_SIZE));

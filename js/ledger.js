@@ -68,7 +68,8 @@
   /* ── Voucher shapes ── */
   function normLines(ls){
     return(ls||[]).map(l=>{const o={account:String(l.account),amount:Math.round(+l.amount||0),memo:cut(l.memo!=null?l.memo:l.description,200)};
-      if(l.fx)o.fx={ccy:String(l.fx.ccy||'').toUpperCase(),amount:+l.fx.amount,rate:+l.fx.rate};return o;});
+      if(l.fx)o.fx={ccy:String(l.fx.ccy||'').toUpperCase(),amount:+l.fx.amount,rate:+l.fx.rate};
+      if(l.stmtLine)o.stmtLine=cut(l.stmtLine,120);return o;});
   }
   function vFromBooks(v,at){
     const k=String(v.key);
@@ -636,6 +637,7 @@
     if(o.why)y.why=cut(o.why,200);
     if(v.prompt)y.prompt=cut(v.prompt,2000);
     if(v.ref)y.ref=cut(v.ref,120);
+    if(v.batch)y.batch=cut(v.batch,60);
     x.vouchers[id]=y;changed({why:'post'});return id;
   }
   function before(v){return{date:v.date,description:v.description||'',lines:cp(v.lines),status:v.status};}

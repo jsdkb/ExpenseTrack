@@ -3,10 +3,13 @@
    Contract: docs/v3-ledger.md §6–§8. Loaded after js/books.js. No personal data in this file: the
    repo is public.
 
-   The AI never posts. Claude only suggests a draft; the owner checks it in the same debit/credit
-   form used for manual entries and taps Post. A request sends ONLY the chart of accounts (id, name,
-   kind, ccy, isParent of the non-suspended accounts), today's date, the base currency and the
-   owner's sentence: no balances, no statement lines, nothing else.
+   The AI never posts. Claude only suggests drafts (one prompt may give several entries: a
+   receipt, then a transfer, ...); the owner checks each in the same debit/credit form used for
+   manual entries and posts it. A request sends today's date, the base currency, the chart of
+   accounts (id, name, kind, ccy, isParent of the non-suspended accounts), the current balance of
+   each posting account, the open receivables and payables, the last 60 days of statement lines
+   (id, book account, statement name, date, amount, description, counterparty; at most 400) and
+   the owner's sentence. Nothing else; never the key.
 
    The key lives only in its own Drive appData file ai.json ({key, model, at}) and this device's
    IndexedDB 'et-secret' (per signed-in account). It is never put in STATE, the localStorage
@@ -65,6 +68,16 @@
     .en-hist td.num{text-align:right;font-variant-numeric:tabular-nums}
     .en-tools{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
     .en-key{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+    .en-card{border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin:0 0 12px;background:var(--surface)}
+    .en-card.off{opacity:.72}
+    .en-card-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+    .en-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600}
+    .en-grow{flex:1}
+    .en-card-foot{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--border)}
+    .en-src{display:flex;gap:4px;align-items:center;margin-top:4px}
+    .en-qs{display:flex;flex-direction:column;gap:8px}
+    .en-q{white-space:normal;line-height:18px}
+    .en-batch{font-size:13px;color:var(--text-2);margin-top:10px}
     @media (max-width:767px){
       .en-line{grid-template-columns:1fr 1fr}
       .en-line .en-acc{grid-column:1/-1}
@@ -177,32 +190,41 @@
     return data;
   }
 
-  // Structured output: the draft voucher (contract §7). Debit/credit in whole rupiah.
-  const SCHEMA={type:'object',additionalProperties:false,required:['date','description','lines','newAccounts','assumptions','questions'],properties:{
-    date:{type:'string',description:'YYYY-MM-DD'},
-    description:{type:'string'},
-    lines:{type:'array',items:{type:'object',additionalProperties:false,required:['account','debit','credit','memo','fx'],properties:{
-      account:{type:'string',description:'Account id from the chart (or from newAccounts)'},
-      debit:{type:'integer',description:'Whole rupiah, 0 when the line is a credit'},
-      credit:{type:'integer',description:'Whole rupiah, 0 when the line is a debit'},
-      memo:{type:'string'},
-      fx:{anyOf:[{type:'null'},{type:'object',additionalProperties:false,required:['ccy','amount','rate'],properties:{
-        ccy:{type:'string',description:'ISO currency code'},amount:{type:'number',description:'Amount in that currency'},rate:{type:'number',description:'Rupiah per unit'}}}]}}}},
+  // Structured output: the drafted entries (contract §7). Debit/credit in whole rupiah.
+  const LINE_SCHEMA={type:'object',additionalProperties:false,required:['account','debit','credit','memo','fx','stmtLine'],properties:{
+    account:{type:'string',description:'Account id from the chart (or from newAccounts)'},
+    debit:{type:'integer',description:'Whole rupiah, 0 when the line is a credit'},
+    credit:{type:'integer',description:'Whole rupiah, 0 when the line is a debit'},
+    memo:{type:'string'},
+    fx:{anyOf:[{type:'null'},{type:'object',additionalProperties:false,required:['ccy','amount','rate'],properties:{
+      ccy:{type:'string',description:'ISO currency code'},amount:{type:'number',description:'Amount in that currency'},rate:{type:'number',description:'Rupiah per unit'}}}]},
+    stmtLine:{anyOf:[{type:'null'},{type:'string'}],description:'id of the statementLines entry the amount was taken from, else null'}}};
+  const SCHEMA={type:'object',additionalProperties:false,required:['entries','newAccounts','assumptions','questions'],properties:{
+    entries:{type:'array',items:{type:'object',additionalProperties:false,required:['date','description','lines'],properties:{
+      date:{type:'string',description:'YYYY-MM-DD'},
+      description:{type:'string'},
+      lines:{type:'array',items:LINE_SCHEMA}}}},
     newAccounts:{type:'array',items:{type:'object',additionalProperties:false,required:['id','name','kind','ccy','parent'],properties:{
       id:{type:'string'},name:{type:'string'},kind:{type:'string',enum:KINDS},ccy:{type:'string'},parent:{anyOf:[{type:'string'},{type:'null'}]}}}},
     assumptions:{type:'array',items:{type:'string'}},
     questions:{type:'array',items:{type:'string'}}}};
   const SYSTEM=[
-    'You draft one double-entry journal voucher for a personal accounting book kept in Indonesian rupiah (IDR), from one sentence the owner wrote. The owner reviews your draft and posts it; you never post.',
-    'Rules:',
-    '- Use only accounts from chartOfAccounts with isParent false. Never put a line on a parent account.',
-    '- Every line is whole rupiah: the amount goes in debit or credit and the other is 0. Total debits must equal total credits exactly.',
-    '- Assets and expenses increase with a debit; liabilities, equity and income increase with a credit. Money leaving a bank account is a credit to it; a purchase on a credit card is a credit to the card.',
-    '- A line on an account whose ccy is not IDR, or a line whose amount the sentence gives in a foreign currency, carries fx {ccy, amount, rate}: the amount in that currency, the rate in rupiah per unit, and round(amount x rate) equals the line\'s rupiah amount. Every other line has fx null.',
-    '- Use the date the sentence gives, else today (YYYY-MM-DD).',
+    'You draft double-entry journal vouchers for a personal accounting book kept in Indonesian rupiah (IDR), from what the owner wrote. The owner reviews every draft and posts it; you never post.',
+    'Split what the owner wrote into separate transactions, in the order they happened, one entry each. Example: "the receivable from X was paid into my bank account, then I moved it to my 5678 account" is two entries: first Dr the bank account / Cr the receivable, then Dr the account whose name ends ••5678 / Cr the bank account. Receipts, payments, transfers between the owner\'s own accounts, purchases, currency buys, card payments and fees are each their own entry.',
+    'Rules for every entry:',
+    '- Lines only on accounts from chartOfAccounts with isParent false (or from newAccounts). Never a parent account: a bank\'s name or "my bank" means the posting account under it whose name matches, not the parent.',
+    '- Account names mask numbers as ••1234. "My 5678 account" or "the ••5678 account" is the posting account whose name ends with ••5678.',
+    '- Every line is whole rupiah: the amount goes in debit or credit and the other is 0. Each entry\'s debits equal its credits exactly.',
+    '- Assets and expenses increase with a debit; liabilities, equity and income increase with a credit. Money leaving a bank account is a credit to it; a purchase on a credit card is a credit to the card; a receivable that is paid is a credit to the receivable.',
+    '- A line on an account whose ccy is not IDR, or a line whose amount is in a foreign currency, carries fx {ccy, amount, rate}: the amount in that currency, the rate in rupiah per unit, and round(amount x rate) equals the line\'s rupiah amount. Every other line has fx null.',
+    '- Amounts, in this order: (1) the amount in the owner\'s words; (2) else a matching line in statementLines (same account, same direction, a fitting description or counterparty): use its amount, use its date as the entry\'s date, and put its id in stmtLine on the line for that account; (3) else the open balance in openItems (for example a receivable paid in full). Otherwise stmtLine is null.',
+    '- Never write an amount of 0 on a line. If no amount can be found for an entry, leave that entry out and ask for the amount in questions.',
+    '- balances is the current book balance of each posting account (debit positive, credit negative; an account not listed is 0). openItems lists receivables and payables that are not settled (outstanding = what is still owed). statementLines are the last 60 days of bank and card lines: amount positive = money into that account (for a card: a payment or refund), negative = money out (for a card: a charge); account = the book account it belongs to, or null; statement = the statement\'s name. A line with inBook true is already in the book: do not use it again unless the owner says so.',
+    '- date: the statement line\'s date when an amount came from one, else the date the owner gives, else today (YYYY-MM-DD).',
     '- If no account in the chart fits, propose one in newAccounts (an unused id that follows the chart\'s numbering under a fitting parent, a short name, kind, ccy, parent id) and use that id in the lines. Never propose an account the chart already has. Otherwise newAccounts is empty.',
-    '- If something is unclear (which bank, the rate, a fee), make the most reasonable assumption, state it in assumptions, and ask about it in questions. Do not invent amounts the sentence does not support.',
-    '- description: a short neutral description of the event. memo: a few words per line.'].join('\n');
+    '- If something is unclear (which account, the rate, a fee), make the most reasonable assumption, state it in assumptions, and ask about it in questions. Never invent an amount.',
+    '- description: a short neutral description of each entry. memo: a few words per line.',
+    'When the app sends back errors, fix those entries and return the whole answer again. On a follow-up (followUp true) the owner answers your questions and may have edited your draft (currentDraft): return the whole answer again with every entry still to post, using the answers and keeping the owner\'s edits unless the answers change them. Entries in postedAlready are in the book: never repeat them.'].join('\n');
   // The chart sent to Claude: id, name, kind, ccy, isParent of every non-suspended account. Nothing else.
   function chartForAI(){
     const x=L();if(!x)return[];
@@ -210,37 +232,109 @@
       .sort((p,q)=>String(p.id).localeCompare(String(q.id),undefined,{numeric:true}))
       .map(a=>({id:String(a.id),name:String(a.name||a.id),kind:a.kind,ccy:a.ccy||'IDR',isParent:!!a.isParent}));
   }
-  function draftRequest(sentence){
+  // The book's current balance per account: the views' cumulative balances at their latest month,
+  // which already hold every posted voucher up to the newest one (js/ledger.js coreOf).
+  function bookBalances(){
+    const b=typeof BOOKS==='function'?BOOKS():null;
+    if(!b||!b.fromLedger||!Array.isArray(b.months)||!b.months.length)return{};
+    return b.balances[b.months[b.months.length-1]]||{};
+  }
+  function balancesForAI(){
+    const bal=bookBalances(),out={};
+    for(const a of postable()){const v=Math.round(bal[a.id]||0);if(v)out[a.id]=v;}
+    return out;
+  }
+  // Receivables and payables that are not settled: the wealth view's receivables, loans and other
+  // liabilities groups, plus any account whose type says receivable or payable.
+  const OPEN_GROUPS=new Set(['receivables','loans','other_liabilities']);
+  function openItemsForAI(){
+    const w=typeof W==='function'?W():null,bal=bookBalances(),grp=new Map(((w&&w.accounts)||[]).map(a=>[String(a.id),a.group]));
+    const out=[];
+    for(const a of postable()){
+      if(a.kind!=='asset'&&a.kind!=='liability')continue;
+      if(!OPEN_GROUPS.has(grp.get(a.id))&&!/receivable|payable/i.test(a.type||''))continue;
+      const v=Math.round(bal[a.id]||0);if(!v)continue;
+      out.push({account:String(a.id),name:String(a.name||a.id),kind:v>0?'receivable':'payable',outstanding:Math.abs(v)});
+    }
+    return out;
+  }
+  // Cash lines → the book account their statement belongs to (Month-end's statement mapping).
+  function stmtCode(ca){try{return typeof meMapOf==='function'?(meMapOf(ca)||null):null;}catch(_){return null;}}
+  function cashAccOf(id){const c=typeof CM==='function'?CM():null;return(c&&c.accounts||[]).find(a=>a.id===id)||{id,label:String(id),kind:'account',currency:'IDR'};}
+  const STMT_DAYS=60,STMT_CAP=400;
+  const isoMinus=(d,n)=>{const t=new Date(d+'T00:00:00Z');t.setUTCDate(t.getUTCDate()-n);return t.toISOString().slice(0,10);};
+  // The last 60 days of statement lines, counted back from the newest line (never after today),
+  // newest first, at most 400.
+  function stmtWindow(){
+    const c=typeof CM==='function'?CM():null,ts=(c&&Array.isArray(c.txns)?c.txns:[]).filter(t=>t&&t.id&&/^\d{4}-\d{2}-\d{2}$/.test(String(t.date)));
+    if(!ts.length)return[];
+    const today=todayISO();let end=ts.reduce((m,t)=>t.date>m&&t.date<=today?t.date:m,'');if(!end)end=today;
+    const from=isoMinus(end,STMT_DAYS);
+    return ts.filter(t=>t.date>from&&t.date<=end).sort((p,q)=>q.date.localeCompare(p.date)||String(q.id).localeCompare(String(p.id))).slice(0,STMT_CAP);
+  }
+  function stmtLinesForAI(){
+    const used=usedStmtLines(),accs=new Map();
+    const acc=id=>{if(!accs.has(id)){const ca=cashAccOf(id);accs.set(id,{code:stmtCode(ca),label:String(ca.label||id)});}return accs.get(id);};
+    return stmtWindow().map(t=>{const a=acc(t.account),o={id:String(t.id),account:a.code,statement:a.label,date:t.date,amount:Math.round(+t.amount||0)};
+      if(t.currency&&t.currency!=='IDR')o.currency=t.currency;
+      o.desc=String(t.desc||'');o.counterparty=String(t.counterparty||'');if(used.has(String(t.id)))o.inBook=true;return o;});
+  }
+  // Statement line ids already used by a posted voucher (stmtLine on its lines), through the cash
+  // id aliases so a line renamed by a newer file still counts.
+  function stmtResolve(id){const al=((L()||{}).cash||{}).alias||{};let x=String(id),n=0;while(al[x]&&n++<8)x=al[x];return x;}
+  function usedStmtLines(){
+    const x=L(),s=new Set();if(!x)return s;
+    for(const v of Object.values(x.vouchers))if(v&&v.status==='posted')for(const l of v.lines||[])if(l&&l.stmtLine)s.add(stmtResolve(l.stmtLine));
+    return s;
+  }
+  function stmtLineOf(id){
+    if(!id)return null;const c=typeof CM==='function'?CM():null;if(!c||!Array.isArray(c.txns))return null;
+    const r=stmtResolve(id);return c.txns.find(t=>t&&(t.id===id||t.id===r))||null;
+  }
+  // What the first message carries. Never the key.
+  function contextForAI(sentence){
+    return{today:todayISO(),baseCurrency:'IDR',chartOfAccounts:chartForAI(),balances:balancesForAI(),openItems:openItemsForAI(),
+      statementLines:stmtLinesForAI(),sentence:String(sentence)};
+  }
+  // The request. With no messages it is the first turn for a sentence; a correction or follow-up
+  // passes the whole conversation so far (append-only: Claude's earlier answers go back unchanged).
+  function draftRequest(sentence,messages){
     return{model:SEC.model,max_tokens:16000,system:SYSTEM,
       output_config:{effort:'medium',format:{type:'json_schema',schema:SCHEMA}},
-      messages:[{role:'user',content:JSON.stringify({today:todayISO(),baseCurrency:'IDR',chartOfAccounts:chartForAI(),sentence:String(sentence)})}]};
+      messages:messages||[{role:'user',content:JSON.stringify(contextForAI(sentence))}]};
   }
-  // Reads Claude's answer into a draft; throws 'malformed' when it isn't the shape asked for.
-  function readDraft(data){
+  // Reads Claude's answer; throws 'malformed' when it isn't the shape asked for.
+  function readAnswer(data){
     if(data.stop_reason==='refusal')throw aiErr('refusal','Claude declined to draft this one.');
     if(data.stop_reason==='max_tokens')throw aiErr('malformed','Claude’s answer was cut off before it finished.');
     const t=(Array.isArray(data.content)?data.content:[]).filter(b=>b&&b.type==='text').map(b=>b.text).join('');
     let o;try{o=JSON.parse(t);}catch(_){throw aiErr('malformed','Claude’s answer couldn’t be read.');}
-    if(!o||typeof o!=='object'||!Array.isArray(o.lines)||!o.lines.length)throw aiErr('malformed','Claude’s answer had no voucher lines.');
+    if(!o||typeof o!=='object'||!Array.isArray(o.entries))throw aiErr('malformed','Claude’s answer couldn’t be read.');
     const str=v=>typeof v==='string'?v:v==null?'':String(v);
     const amt=v=>{const n=Number(v);return isFinite(n)&&n>0?Math.round(n):0;};
-    const lines=o.lines.filter(l=>l&&typeof l==='object').map(l=>{
-      let dr=amt(l.debit),cr=amt(l.credit);if(dr&&cr){const d=dr-cr;dr=d>0?d:0;cr=d<0?-d:0;}
-      const f=l.fx&&typeof l.fx==='object'?l.fx:null;
-      return{account:str(l.account).trim(),debit:dr,credit:cr,memo:str(l.memo).slice(0,200),
-        fx:f&&num(f.amount)!=null&&num(f.rate)!=null?{ccy:str(f.ccy).toUpperCase().slice(0,3),amount:Math.abs(num(f.amount)),rate:num(f.rate)}:null};
-    });
-    if(!lines.length)throw aiErr('malformed','Claude’s answer had no voucher lines.');
+    const list=v=>(Array.isArray(v)?v:[]).map(str).filter(Boolean).slice(0,12);
+    const entries=o.entries.filter(e=>e&&typeof e==='object'&&Array.isArray(e.lines)).slice(0,20).map(e=>({
+      date:/^\d{4}-\d{2}-\d{2}$/.test(str(e.date))?str(e.date):todayISO(),description:str(e.description).slice(0,200),
+      lines:e.lines.filter(l=>l&&typeof l==='object').slice(0,30).map(l=>{
+        let dr=amt(l.debit),cr=amt(l.credit);if(dr&&cr){const d=dr-cr;dr=d>0?d:0;cr=d<0?-d:0;}
+        const f=l.fx&&typeof l.fx==='object'?l.fx:null,sl=str(l.stmtLine).trim();
+        return{account:str(l.account).trim(),debit:dr,credit:cr,memo:str(l.memo).slice(0,200),
+          fx:f&&num(f.amount)!=null&&num(f.rate)!=null?{ccy:str(f.ccy).toUpperCase().slice(0,3),amount:Math.abs(num(f.amount)),rate:num(f.rate)}:null,
+          stmtLine:sl&&stmtLineOf(sl)?sl:null};})})).filter(e=>e.lines.length);
+    const questions=list(o.questions);
+    if(!entries.length&&!questions.length)throw aiErr('malformed','Claude’s answer had no entries and no questions.');
     const na=(Array.isArray(o.newAccounts)?o.newAccounts:[]).filter(a=>a&&typeof a==='object').map(a=>({id:str(a.id).trim(),name:str(a.name).trim().slice(0,80),
       kind:KINDS.includes(a.kind)?a.kind:'expense',ccy:(str(a.ccy)||'IDR').toUpperCase().slice(0,3),parent:a.parent?str(a.parent):''}));
-    const date=/^\d{4}-\d{2}-\d{2}$/.test(str(o.date))?str(o.date):todayISO();
-    const list=v=>(Array.isArray(v)?v:[]).map(str).filter(Boolean).slice(0,12);
-    return{date,description:str(o.description).slice(0,200),lines,newAccounts:na,assumptions:list(o.assumptions),questions:list(o.questions)};
+    return{entries,newAccounts:na,assumptions:list(o.assumptions),questions};
   }
 
-  /* ══ The entry form (new, AI draft, edit) ══ */
+  /* ══ The entry form (new, AI drafts, edit) ══
+     D holds the sheet: D.entries is one entry for a manual entry or an edit, and one per drafted
+     voucher after a Claude answer (D.ai). Ids: en<Name><i> for the single form, enE<k><Name><i>
+     for drafted entry k. */
   let D=null,SH=null;
-  const blankLine=()=>({account:'',debit:0,credit:0,memo:'',fxOn:false,ccy:'',famt:'',rate:''});
+  const blankLine=()=>({account:'',debit:0,credit:0,memo:'',fxOn:false,ccy:'',famt:'',rate:'',stmtLine:null});
+  const blankEntry=(date)=>({date:date||todayISO(),description:'',lines:[blankLine(),blankLine()],include:true,dup:[]});
   function accounts(){const x=L();return x?x.accounts:{};}
   function accOf(code){return accounts()[code]||null;}
   function postable(){
@@ -248,70 +342,99 @@
   }
   function lineFrom(l){
     const a=Math.round(l.amount||0),f=l.fx||null;
-    return{account:String(l.account||''),debit:a>0?a:0,credit:a<0?-a:0,memo:l.memo||l.description||'',fxOn:!!f,ccy:f?f.ccy:'',famt:f?String(f.amount):'',rate:f?String(f.rate):''};
+    return{account:String(l.account||''),debit:a>0?a:0,credit:a<0?-a:0,memo:l.memo||l.description||'',fxOn:!!f,ccy:f?f.ccy:'',famt:f?String(f.amount):'',rate:f?String(f.rate):'',stmtLine:l.stmtLine||null};
   }
   // Next free code under a parent following its children's pattern (e.g. 6000.12 after 6000.11).
-  function nextCode(parent){
+  function nextCode(parent,taken){
     if(!parent)return'';
+    const used=id=>!!accounts()[id]||!!(taken&&taken.has(id));
     const ids=Object.keys(accounts()).filter(id=>id.startsWith(parent+'.')&&/^\d+$/.test(id.slice(parent.length+1)));
     const w=ids.reduce((m,id)=>Math.max(m,id.length-parent.length-1),2);
     let n=ids.reduce((m,id)=>Math.max(m,Number(id.slice(parent.length+1))),0)+1;
-    let c;do{c=`${parent}.${String(n).padStart(w,'0')}`;n++;}while(accounts()[c]);
+    let c;do{c=`${parent}.${String(n).padStart(w,'0')}`;n++;}while(used(c));
     return c;
   }
-  function draftToD(dr,sentence){
-    const na=dr.newAccounts.filter(a=>!accOf(a.id)||!a.id).map(a=>{
-      const parent=a.parent&&accOf(a.parent)?a.parent:'';const id=a.id&&!accOf(a.id)?a.id:nextCode(parent);
-      return{orig:a.id||a.name,id,name:a.name||id,kind:a.kind,ccy:a.ccy||'IDR',parent,added:false};});
-    const lines=dr.lines.map(l=>{const nx=na.find(a=>a.orig===l.account||(a.name&&a.name===l.account));
-      return{account:nx?nx.id:l.account,debit:l.debit,credit:l.credit,memo:l.memo,fxOn:!!l.fx,ccy:l.fx?l.fx.ccy:'',famt:l.fx?String(l.fx.amount):'',rate:l.fx?String(l.fx.rate):''};});
-    while(lines.length<2)lines.push(blankLine());
-    na.forEach(a=>{a.orig=a.id;});
-    return{date:dr.date,description:dr.description,lines,newAccounts:na,assumptions:dr.assumptions,questions:dr.questions};
+  // Claude's answer → entries for the form; proposed accounts get a usable code first.
+  function answerToForm(ans){
+    const taken=new Set();
+    const na=ans.newAccounts.filter(a=>!a.id||!accOf(a.id)).map(a=>{
+      const parent=a.parent&&accOf(a.parent)?a.parent:'';const id=a.id&&!accOf(a.id)&&!taken.has(a.id)?a.id:nextCode(parent,taken);taken.add(id);
+      return{orig:a.id||a.name,name0:a.name,id,name:a.name||id,kind:a.kind,ccy:a.ccy||'IDR',parent,added:false};});
+    const entries=ans.entries.map((e,k)=>{
+      const lines=e.lines.map(l=>{const nx=na.find(a=>a.orig===l.account||(a.name0&&a.name0===l.account));
+        return{account:nx?nx.id:l.account,debit:l.debit,credit:l.credit,memo:l.memo,fxOn:!!l.fx,ccy:l.fx?l.fx.ccy:'',famt:l.fx?String(l.fx.amount):'',rate:l.fx?String(l.fx.rate):'',stmtLine:l.stmtLine||null};});
+      return{n:k+1,date:e.date,description:e.description,lines,include:true,dup:[]};});
+    na.forEach(a=>{a.orig=a.id;delete a.name0;});
+    return{entries,newAccounts:na};
   }
-  function voucherFromD(){
-    return{date:D.date,description:D.description,lines:D.lines.filter(l=>l.account||l.debit||l.credit).map(l=>{
+  function voucherOf(E){
+    return{date:E.date,description:E.description,lines:E.lines.filter(l=>l.account||l.debit||l.credit).map(l=>{
       const o={account:l.account,amount:Math.round((l.debit||0)-(l.credit||0)),memo:l.memo||''};
       if(l.fxOn){o.fx={ccy:String(l.ccy||'').toUpperCase(),amount:Math.abs(num(l.famt)||0),rate:num(l.rate)||0};}
+      if(l.stmtLine)o.stmtLine=l.stmtLine;
       return o;})};
   }
-  function errorsOf(v){
-    let e=typeof ledgerValidate==='function'?ledgerValidate(v):['Your book is not set up yet'];
-    const pend=new Map(D.newAccounts.filter(a=>!a.added).map(a=>[a.id,a]));
+  const pendingNew=()=>D.newAccounts.filter(a=>!a.added);
+  // The book's checks on one entry, with "add the proposed account" in place of "not in your book".
+  function errorsOf(E){
+    let e=typeof ledgerValidate==='function'?ledgerValidate(voucherOf(E)):['Your book is not set up yet'];
+    const pend=new Map(pendingNew().map(a=>[a.id,a]));
     e=e.map(m=>{const r=/^Line (\d+): account (.+) is not in your book$/.exec(m);return r&&pend.has(r[2])?`Line ${r[1]}: add the new account ${r[2]} to your book first (below)`:m;});
-    if(D.newAccounts.some(a=>!a.added))e.push(`Confirm or remove the proposed new account${D.newAccounts.filter(a=>!a.added).length===1?'':'s'} before posting`);
-    if(D.mode==='edit'&&!String(D.why||'').trim())e.push('Say why you are changing it');
+    if(pend.size&&E.lines.some(l=>pend.has(l.account)))e.push(`Confirm or remove the proposed new account${pend.size===1?'':'s'} before posting`);
+    if(D.mode==='edit'&&!String(E.why||'').trim())e.push('Say why you are changing it');
     return e;
   }
+  // The checks sent back to Claude: the book's own checks, except a proposed account the owner
+  // still has to confirm (that is not Claude's mistake).
+  function aiErrorsOf(form){
+    const pend=new Set(form.newAccounts.map(a=>a.id)),out=[];
+    form.entries.forEach((E,k)=>{
+      const v=voucherOf(E),errs=(typeof ledgerValidate==='function'?ledgerValidate(v):['Your book is not set up yet'])
+        .filter(m=>{const r=/^Line \d+: account (.+) is not in your book$/.exec(m);return!(r&&pend.has(r[1]));});
+      if(errs.length)out.push({entry:k+1,description:E.description,errors:errs});
+    });
+    return out;
+  }
+  const pre=k=>D&&D.ai?`E${k}`:'';
+  const remaining=()=>D.entries.filter(E=>E.include);
   function sheetTitle(){return D.mode==='edit'?'Edit voucher':'New entry';}
   function askHTML(){
     if(D.mode==='edit')return'';
     if(!hasKey())return`<div class="en-note" id="enNoKey">${ic('info','s16')}<span>Claude can draft entries from a sentence once you add your own Anthropic API key in <button class="bk-link" data-en="settings">Settings › AI</button>. For now, fill this one in by hand.</span></div>`;
     return`<div class="en-ask"><label class="label" for="enText">Tell me what happened</label>
-      <textarea class="input" id="enText" rows="2" placeholder="e.g. I bought USD 1,000 at 16,350 from my bank account">${escH(D.prompt||'')}</textarea>
+      <textarea class="input" id="enText" rows="2" placeholder="e.g. the money my friend owed me came into my bank account, then I moved it to my ••5678 account">${escH(D.prompt||'')}</textarea>
       <div class="row"><button class="btn btn-secondary btn-sm" data-en="ask" id="enAsk">${ic('sparkles','s16')}Draft with Claude</button>
-      <span class="help">Sends your sentence and your chart of accounts to Anthropic (${escH(modelOf(SEC.model).label)}). Nothing posts until you tap Post.</span></div></div>`;
+      <span class="help" id="enSends">Sends your chart of accounts, account balances, open receivables and payables, the last 60 days of statement lines and your sentence to Anthropic (${escH(modelOf(SEC.model).label)}). Nothing posts until you tap Post.</span></div></div>`;
   }
   function noteHTML(){
     if(!D.note)return'';
     return`<div class="en-note ${D.note.tone||''}" id="enNote" role="status">${ic(D.note.tone==='warn'||D.note.tone==='bad'?'triangle-alert':'info','s16')}<span>${escH(D.note.text)}</span></div>`;
   }
-  function lineHTML(l,i){
-    const a=accOf(l.account),pend=D.newAccounts.find(n=>n.id===l.account&&!n.added);
-    const nm=!l.account?'':a?`${escH(a.name)}${a.isParent?' · parent account':''}${a.ccy&&a.ccy!=='IDR'?' · '+escH(a.ccy):''}`:pend?'New account (confirm below)':'Not in your book';
+  function accLabel(a){return`${a.name}${a.isParent?' · parent account':''}${a.ccy&&a.ccy!=='IDR'?' · '+a.ccy:''}`;}
+  function lineHTML(E,k,l,i){
+    const p=pre(k),a=accOf(l.account),pend=D.newAccounts.find(n=>n.id===l.account&&!n.added);
+    const nm=!l.account?'':a?escH(accLabel(a)):pend?'New account (confirm below)':'Not in your book';
     const bad=l.account&&(!a||a.isParent)&&!pend;
+    const src=srcNote(l.stmtLine);
     return`<div class="en-line" data-i="${i}">
-      <div class="field en-acc"><label class="label" for="enAcc${i}">Account</label><input class="input" id="enAcc${i}" data-f="account" list="enAccList" autocomplete="off" spellcheck="false" placeholder="Code or name" value="${escH(l.account)}">
-        <div class="en-accname${bad?' bad':''}" id="enAccName${i}">${nm}</div></div>
-      <div class="field"><label class="label" for="enDr${i}">Debit</label><div class="input-affix"><span class="affix">Rp</span><input class="input" id="enDr${i}" data-f="debit" inputmode="numeric" autocomplete="off" value="${l.debit?fmtNum(l.debit):''}"></div></div>
-      <div class="field"><label class="label" for="enCr${i}">Credit</label><div class="input-affix"><span class="affix">Rp</span><input class="input" id="enCr${i}" data-f="credit" inputmode="numeric" autocomplete="off" value="${l.credit?fmtNum(l.credit):''}"></div></div>
-      <div class="en-btns"><button class="icon-btn sm" data-en="fx" data-i="${i}" aria-pressed="${l.fxOn}" aria-label="Foreign currency on line ${i+1}" title="Foreign currency">${ic('globe','s16')}</button>
-        <button class="icon-btn sm" data-en="del" data-i="${i}" aria-label="Remove line ${i+1}" title="Remove line" ${D.lines.length<=2?'disabled':''}>${ic('x','s16')}</button></div>
-      <div class="field en-memo"><label class="label" for="enMemo${i}">Memo</label><input class="input" id="enMemo${i}" data-f="memo" autocomplete="off" value="${escH(l.memo)}"></div>
-      ${l.fxOn?`<div class="en-fx"><div class="field"><label class="label" for="enCcy${i}">Currency</label><input class="input" id="enCcy${i}" data-f="ccy" maxlength="3" autocomplete="off" placeholder="USD" value="${escH(l.ccy)}"></div>
-        <div class="field"><label class="label" for="enFa${i}">Foreign amount</label><input class="input" id="enFa${i}" data-f="famt" type="number" step="any" min="0" value="${escH(l.famt)}"></div>
-        <div class="field"><label class="label" for="enRate${i}">Rate (Rp per unit)</label><input class="input" id="enRate${i}" data-f="rate" type="number" step="any" min="0" value="${escH(l.rate)}"><span class="help" id="enFxHint${i}">${fxHint(l)}</span></div></div>`:''}
+      <div class="field en-acc"><label class="label" for="en${p}Acc${i}">Account</label><input class="input" id="en${p}Acc${i}" data-f="account" list="enAccList" autocomplete="off" spellcheck="false" placeholder="Code or name" value="${escH(l.account)}">
+        <div class="en-accname${bad?' bad':''}" id="en${p}AccName${i}">${nm}</div></div>
+      <div class="field"><label class="label" for="en${p}Dr${i}">Debit</label><div class="input-affix"><span class="affix">Rp</span><input class="input" id="en${p}Dr${i}" data-f="debit" inputmode="numeric" autocomplete="off" value="${l.debit?fmtNum(l.debit):''}"></div></div>
+      <div class="field"><label class="label" for="en${p}Cr${i}">Credit</label><div class="input-affix"><span class="affix">Rp</span><input class="input" id="en${p}Cr${i}" data-f="credit" inputmode="numeric" autocomplete="off" value="${l.credit?fmtNum(l.credit):''}"></div></div>
+      <div class="en-btns"><button class="icon-btn sm" data-en="fx" data-k="${k}" data-i="${i}" aria-pressed="${l.fxOn}" aria-label="Foreign currency on line ${i+1}" title="Foreign currency">${ic('globe','s16')}</button>
+        <button class="icon-btn sm" data-en="del" data-k="${k}" data-i="${i}" aria-label="Remove line ${i+1}" title="Remove line" ${E.lines.length<=2?'disabled':''}>${ic('x','s16')}</button></div>
+      <div class="field en-memo"><label class="label" for="en${p}Memo${i}">Memo</label><input class="input" id="en${p}Memo${i}" data-f="memo" autocomplete="off" value="${escH(l.memo)}">
+        ${src?`<div class="help en-src" id="en${p}Src${i}" data-stmt="${escH(l.stmtLine)}">${ic('landmark','s16')}<span>${escH(src)}</span></div>`:''}</div>
+      ${l.fxOn?`<div class="en-fx"><div class="field"><label class="label" for="en${p}Ccy${i}">Currency</label><input class="input" id="en${p}Ccy${i}" data-f="ccy" maxlength="3" autocomplete="off" placeholder="USD" value="${escH(l.ccy)}"></div>
+        <div class="field"><label class="label" for="en${p}Fa${i}">Foreign amount</label><input class="input" id="en${p}Fa${i}" data-f="famt" type="number" step="any" min="0" value="${escH(l.famt)}"></div>
+        <div class="field"><label class="label" for="en${p}Rate${i}">Rate (Rp per unit)</label><input class="input" id="en${p}Rate${i}" data-f="rate" type="number" step="any" min="0" value="${escH(l.rate)}"><span class="help" id="en${p}FxHint${i}">${fxHint(l)}</span></div></div>`:''}
     </div>`;
+  }
+  // "from Test savings ••1111 statement 3 Nov" under a line whose amount came from a statement line.
+  function srcNote(id){
+    const t=stmtLineOf(id);if(!t)return'';
+    const d=typeof meDay==='function'?meDay(t.date):t.date;
+    return`from ${cashAccOf(t.account).label||t.account} statement ${d}`;
   }
   function fxHint(l){const a=num(l.famt),r=num(l.rate);return a&&r?`= ${fmtIDR(Math.round(Math.abs(a)*r))}`:'';}
   function naHTML(){
@@ -329,130 +452,269 @@
         <div style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" data-en="naadd" data-j="${j}">${ic('plus','s16')}Add</button><button class="icon-btn sm" data-en="nadel" data-j="${j}" aria-label="Remove the proposed account" title="Remove">${ic('x','s16')}</button></div>
       </div>`).join('')}</div>`;
   }
+  // Claude's assumptions, its questions with an answer box each, and Answer & redraft.
   function aqHTML(){
-    const a=D.assumptions||[],q=D.questions||[];if(!a.length&&!q.length)return'';
+    if(!D.ai)return'';
+    const a=D.assumptions||[],q=D.questions||[];
     return`<div class="en-sec" id="enAQ">${a.length?`<h3 class="label">Claude assumed</h3><ul>${a.map(x=>`<li>${escH(x)}</li>`).join('')}</ul>`:''}
-      ${q.length?`<h3 class="label" style="margin-top:10px">Claude asks</h3><ul>${q.map(x=>`<li>${escH(x)}</li>`).join('')}</ul>`:''}</div>`;
+      ${q.length?`<h3 class="label" style="margin-top:10px">Claude asks</h3><div class="en-qs">${q.map((x,j)=>`<div class="field"><label class="label en-q" for="enQA${j}">${escH(x)}</label>
+        <input class="input" id="enQA${j}" data-qa="${j}" autocomplete="off" placeholder="Your answer" value="${escH((D.answers||[])[j]||'')}"></div>`).join('')}</div>`:''}
+      <div class="field" style="margin-top:10px"><label class="label" for="enMore">${q.length?'Anything else to add or correct?':'Anything to add or correct?'}</label>
+        <textarea class="input" id="enMore" rows="2" placeholder="e.g. the transfer was on the 9th, with a Rp 6.500 fee">${escH(D.more||'')}</textarea></div>
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><button class="btn btn-secondary btn-sm" data-en="redraft" id="enRedraft">${ic('sparkles','s16')}Answer &amp; redraft</button>
+        <span class="help">Sends your answers and the draft as it is now back to Claude; entries already posted stay as they are.</span></div></div>`;
+  }
+  function entryFieldsHTML(E,k){
+    const p=pre(k);
+    return`<div class="form-grid">
+        <div class="field"><label class="label" for="en${p}Date">Date</label><input class="input" id="en${p}Date" data-e="date" type="date" value="${escH(E.date)}"></div>
+        <div class="field"><label class="label" for="en${p}Desc">Description</label><input class="input" id="en${p}Desc" data-e="desc" autocomplete="off" value="${escH(E.description)}"></div>
+        ${D.mode==='edit'?`<div class="field full"><label class="label" for="enWhy">Why the change</label><input class="input" id="enWhy" data-e="why" autocomplete="off" placeholder="e.g. wrong account" value="${escH(E.why||'')}"></div>`:''}
+      </div>
+      <div class="en-lines" id="en${p}Lines">${E.lines.map((l,i)=>lineHTML(E,k,l,i)).join('')}</div>
+      <div><button class="btn btn-ghost btn-sm" data-en="addline" data-k="${k}">${ic('plus','s16')}Add line</button></div>
+      <div class="en-tot" id="en${p}Tot"></div>
+      <div class="en-checks" id="en${p}Checks" role="status" aria-live="polite"></div>`;
+  }
+  function cardHTML(E,k){
+    const dup=E.dup&&E.dup.length;
+    return`<section class="en-card en-entry${E.include?'':' off'}" data-k="${k}" id="enE${k}" aria-label="Entry ${E.n}">
+      <div class="en-card-head"><span class="en-num">${E.n}</span><span class="li-title">Entry ${E.n} of ${D.total}</span><span class="badge accent">AI</span><span class="en-grow"></span>
+        <label class="check"><input type="checkbox" data-e="inc" id="enE${k}Inc" ${E.include?'checked':''}> Include</label></div>
+      ${dup?`<div class="en-note warn en-dup" id="enE${k}Dup">${ic('triangle-alert','s16')}<span>Already in your book: ${E.dup.length===1?'its statement line is':'its statement lines are'} used by an entry you posted before. It is left out unless you tick Include.</span></div>`:''}
+      ${E.same&&E.same.length?`<div class="en-note warn en-dup" id="enE${k}Same">${ic('triangle-alert','s16')}<span>Same bank line as entry ${E.same.join(' and ')}: one statement line can back only one entry. It is left out unless you tick Include.</span></div>`:''}
+      ${entryFieldsHTML(E,k)}
+      <div class="en-card-foot"><button class="btn btn-ghost btn-sm" data-en="remove" data-k="${k}" id="enE${k}Remove">${ic('x','s16')}Remove</button>
+        <button class="btn btn-secondary btn-sm" data-en="post1" data-k="${k}" id="enE${k}Post" disabled>${ic('check','s16')}Post</button></div></section>`;
+  }
+  function postedHTML(){
+    if(!D.posted||!D.posted.length)return'';
+    return`<div class="en-note good" id="enPosted">${ic('square-check','s16')}<span>Posted from this prompt: ${D.posted.map(p=>`${escH(p.description||'Entry '+p.n)}`).join(' · ')}</span></div>`;
   }
   function formHTML(){
     const warn=D.mode==='edit'&&D.origin==='accurate'
       ?`<div class="en-note warn" id="enAccWarn">${ic('triangle-alert','s16')}<span>This voucher came from Accurate. Once you change it here your book differs from Accurate from now on; a later Accurate export flags it but never overwrites it.</span></div>`:'';
-    return`${warn}<div class="form-grid">
-        <div class="field"><label class="label" for="enDate">Date</label><input class="input" id="enDate" type="date" value="${escH(D.date)}"></div>
-        <div class="field"><label class="label" for="enDesc">Description</label><input class="input" id="enDesc" autocomplete="off" value="${escH(D.description)}"></div>
-        ${D.mode==='edit'?`<div class="field full"><label class="label" for="enWhy">Why the change</label><input class="input" id="enWhy" autocomplete="off" placeholder="e.g. wrong account" value="${escH(D.why||'')}"></div>`:''}
-      </div>
-      <div class="en-lines" id="enLines">${D.lines.map(lineHTML).join('')}</div>
-      <div><button class="btn btn-ghost btn-sm" data-en="addline">${ic('plus','s16')}Add line</button></div>
-      <div class="en-tot" id="enTot"></div>
-      <div class="en-checks" id="enChecks" role="status" aria-live="polite"></div>
-      ${naHTML()}${aqHTML()}
-      <datalist id="enAccList">${postable().map(a=>`<option value="${escH(a.id)}">${escH(a.id)} · ${escH(a.name)}${a.ccy&&a.ccy!=='IDR'?' · '+escH(a.ccy):''}</option>`).join('')}</datalist>`;
+    const list=`<datalist id="enAccList">${postable().map(a=>`<option value="${escH(a.id)}">${escH(a.id)} · ${escH(a.name)}${a.ccy&&a.ccy!=='IDR'?' · '+escH(a.ccy):''}</option>`).join('')}</datalist>`;
+    if(!D.ai)return`${warn}<div class="en-entry" data-k="0">${entryFieldsHTML(D.entries[0],0)}</div>${naHTML()}${list}`;
+    const cards=D.entries.length?`<div class="en-cards" id="enCards">${D.entries.map(cardHTML).join('')}</div>`
+      :`<div class="en-empty" id="enNoEntries"><p class="muted" style="margin:0 0 8px">${D.posted&&D.posted.length?'Nothing left to post from this prompt.':'No entries drafted yet: Claude needs your answers first.'}</p>
+        <button class="btn btn-ghost btn-sm" data-en="manual" id="enManual">${ic('pencil','s16')}Fill one in by hand instead</button></div>`;
+    return`${postedHTML()}${cards}${naHTML()}${aqHTML()}${list}`;
+  }
+  function footHTML(){
+    if(D.ai)return`<button class="btn btn-secondary" data-en="cancel">Cancel</button><button class="btn btn-primary" data-en="postall" id="enPostAll" disabled>${ic('check','s16')}Post all (${remaining().length})</button>`;
+    return`<button class="btn btn-secondary" data-en="cancel">Cancel</button><button class="btn btn-primary" data-en="post" id="enPost" disabled>${ic('check','s16')}${D.mode==='edit'?'Save changes':'Post'}</button>`;
   }
   function bodyHTML(){return`<div id="enRoot">${askHTML()}<div id="enNoteHost">${noteHTML()}</div><div id="enForm">${formHTML()}</div></div>`;}
   function rerender(focusSel){
     if(!SH)return;const host=SH.sheet.querySelector('.sheet-body');if(!host)return;
-    host.innerHTML=bodyHTML();updateChecks();
+    host.innerHTML=bodyHTML();renderFoot();updateChecks();
     if(focusSel){const f=host.querySelector(focusSel);if(f)try{f.focus();}catch(_){}}
   }
-  function renderForm(){const f=SH&&SH.sheet.querySelector('#enForm');if(f){f.innerHTML=formHTML();updateChecks();}}
+  function renderFoot(){const f=SH&&SH.sheet.querySelector('.sheet-foot');if(f)f.innerHTML=footHTML();}
+  function renderForm(){const f=SH&&SH.sheet.querySelector('#enForm');if(f){f.innerHTML=formHTML();renderFoot();updateChecks();}}
   function setNote(text,tone){D.note=text?{text,tone}:null;const h=SH&&SH.sheet.querySelector('#enNoteHost');if(h)h.innerHTML=noteHTML();}
   function sync(){
     if(!SH)return;const q=s=>SH.sheet.querySelector(s);
-    const d=q('#enDate'),ds=q('#enDesc'),w=q('#enWhy'),t=q('#enText');
-    if(d)D.date=d.value;if(ds)D.description=ds.value;if(w)D.why=w.value;if(t)D.prompt=t.value;
-    SH.sheet.querySelectorAll('.en-line').forEach(el=>{const i=+el.dataset.i,l=D.lines[i];if(!l)return;
-      el.querySelectorAll('[data-f]').forEach(inp=>{const f=inp.dataset.f;
-        if(f==='debit'||f==='credit')l[f]=parseRp(inp.value);
-        else if(f==='account')l.account=String(inp.value||'').split(/[\s·]/)[0].trim();
-        else if(f==='ccy')l.ccy=String(inp.value||'').toUpperCase();
-        else l[f]=inp.value;});});
+    const t=q('#enText');if(t)D.prompt=t.value;
+    const m=q('#enMore');if(m)D.more=m.value;
+    SH.sheet.querySelectorAll('[data-qa]').forEach(inp=>{(D.answers||(D.answers=[]))[+inp.dataset.qa]=inp.value;});
+    SH.sheet.querySelectorAll('.en-entry').forEach(el=>{const E=D.entries[+el.dataset.k];if(!E)return;
+      el.querySelectorAll('[data-e]').forEach(inp=>{const f=inp.dataset.e;
+        if(f==='date')E.date=inp.value;else if(f==='desc')E.description=inp.value;else if(f==='why')E.why=inp.value;else if(f==='inc')E.include=!!inp.checked;});
+      el.querySelectorAll('.en-line').forEach(le=>{const l=E.lines[+le.dataset.i];if(!l)return;
+        le.querySelectorAll('[data-f]').forEach(inp=>{const f=inp.dataset.f;
+          if(f==='debit'||f==='credit')l[f]=parseRp(inp.value);
+          else if(f==='account')l.account=String(inp.value||'').split(/[\s·]/)[0].trim();
+          else if(f==='ccy')l.ccy=String(inp.value||'').toUpperCase();
+          else l[f]=inp.value;});});});
     SH.sheet.querySelectorAll('.en-na').forEach(el=>{const a=D.newAccounts[+el.dataset.j];if(!a||a.added)return;
       el.querySelectorAll('[data-na]').forEach(inp=>{a[inp.dataset.na]=inp.dataset.na==='ccy'?String(inp.value).toUpperCase():inp.value.trim();});});
   }
   function updateChecks(){
-    if(!SH)return;const q=s=>SH.sheet.querySelector(s);
-    D.lines.forEach((l,i)=>{const el=q('#enAccName'+i);if(el){const a=accOf(l.account),pend=D.newAccounts.find(n=>n.id===l.account&&!n.added);
-        el.textContent=!l.account?'':a?`${a.name}${a.isParent?' · parent account':''}${a.ccy&&a.ccy!=='IDR'?' · '+a.ccy:''}`:pend?'New account (confirm below)':'Not in your book';
-        el.classList.toggle('bad',!!l.account&&(!a||a.isParent)&&!pend);}
-      const h=q('#enFxHint'+i);if(h)h.textContent=fxHint(l);});
-    const dr=D.lines.reduce((s,l)=>s+(l.debit||0),0),cr=D.lines.reduce((s,l)=>s+(l.credit||0),0);
-    const tot=q('#enTot');
-    if(tot)tot.innerHTML=`<span>Debits <b id="enDrTot" data-raw="${dr}">${rp(dr)}</b></span><span>Credits <b id="enCrTot" data-raw="${cr}">${rp(cr)}</b></span>
-      ${dr===cr&&dr>0?'<span class="badge good">Balanced</span>':`<span class="badge bad" id="enDiff" data-raw="${dr-cr}">Off by ${rpSigned(Math.abs(dr-cr))}</span>`}`;
-    const errs=errorsOf(voucherFromD()),ch=q('#enChecks');
-    if(ch)ch.innerHTML=errs.length?errs.map(m=>`<div class="help err">${ic('triangle-alert','s16')}<span>${escH(m)}</span></div>`).join('')
-      :`<div class="help" style="color:var(--good)">${ic('square-check','s16')} Ready to ${D.mode==='edit'?'save':'post'}: balanced, every account is in your book</div>`;
-    const p=q('#enPost');if(p){p.disabled=!!errs.length||!!D.busy;p.dataset.errors=String(errs.length);}
+    if(!SH||!D)return;const q=s=>SH.sheet.querySelector(s);
+    let allOk=true;
+    D.entries.forEach((E,k)=>{
+      const p=pre(k);
+      E.lines.forEach((l,i)=>{const el=q(`#en${p}AccName${i}`);if(el){const a=accOf(l.account),pend=D.newAccounts.find(n=>n.id===l.account&&!n.added);
+          el.textContent=!l.account?'':a?accLabel(a):pend?'New account (confirm below)':'Not in your book';
+          el.classList.toggle('bad',!!l.account&&(!a||a.isParent)&&!pend);}
+        const h=q(`#en${p}FxHint${i}`);if(h)h.textContent=fxHint(l);});
+      const dr=E.lines.reduce((s,l)=>s+(l.debit||0),0),cr=E.lines.reduce((s,l)=>s+(l.credit||0),0);
+      const tot=q(`#en${p}Tot`);
+      if(tot)tot.innerHTML=`<span>Debits <b id="en${p}DrTot" data-raw="${dr}">${rp(dr)}</b></span><span>Credits <b id="en${p}CrTot" data-raw="${cr}">${rp(cr)}</b></span>
+        ${dr===cr&&dr>0?'<span class="badge good">Balanced</span>':`<span class="badge bad" id="en${p}Diff" data-raw="${dr-cr}">Off by ${rpSigned(Math.abs(dr-cr))}</span>`}`;
+      const errs=errorsOf(E),ch=q(`#en${p}Checks`);E.ok=!errs.length;
+      if(E.include&&errs.length)allOk=false;
+      if(ch)ch.innerHTML=errs.length?errs.map(m=>`<div class="help err">${ic('triangle-alert','s16')}<span>${escH(m)}</span></div>`).join('')
+        :`<div class="help" style="color:var(--good)">${ic('square-check','s16')} Ready to ${D.mode==='edit'?'save':'post'}: balanced, every account is in your book</div>`;
+      const b=q(`#enE${k}Post`);if(b)b.disabled=!!errs.length||!E.include||!!D.busy;
+      const card=q(`#enE${k}`);if(card)card.classList.toggle('off',!E.include);
+    });
+    const p=q('#enPost');if(p){const errs=D.entries[0]?errorsOf(D.entries[0]):['No entry'];p.disabled=!!errs.length||!!D.busy;p.dataset.errors=String(errs.length);}
+    const pa=q('#enPostAll');if(pa){const n=remaining().length;pa.disabled=!n||!allOk||!!D.busy;pa.dataset.n=String(n);
+      pa.innerHTML=`${ic('check','s16')}Post all (${n})`;}
+    const rd=q('#enRedraft');if(rd)rd.disabled=!!D.busy;
   }
   function openForm(d){
     D=d;
-    const foot=`<button class="btn btn-secondary" data-en="cancel">Cancel</button><button class="btn btn-primary" data-en="post" id="enPost" disabled>${ic('check','s16')}${D.mode==='edit'?'Save changes':'Post'}</button>`;
-    SH=openSheet({title:sheetTitle(),body:bodyHTML(),foot,wide:true,focus:D.mode==='edit'?'#enDate':hasKey()?'#enText':'#enDate',onClose:()=>{SH=null;D=null;}});
+    SH=openSheet({title:sheetTitle(),body:bodyHTML(),foot:footHTML(),wide:true,focus:D.mode==='edit'?'#enDate':hasKey()?'#enText':'#enDate',onClose:()=>{SH=null;D=null;}});
     SH.sheet.id='enSheet';
-    SH.sheet.addEventListener('input',e=>{if(e.target&&e.target.closest('[data-f],[data-na],#enDate,#enDesc,#enWhy,#enText')){sync();updateChecks();}});
-    SH.sheet.addEventListener('change',e=>{if(e.target&&e.target.closest('[data-na]')){sync();updateChecks();}});
+    SH.sheet.addEventListener('input',e=>{if(e.target&&e.target.closest('[data-f],[data-na],[data-e],[data-qa],#enText,#enMore')){sync();updateChecks();}});
+    SH.sheet.addEventListener('change',e=>{if(e.target&&e.target.closest('[data-na],[data-e]')){sync();updateChecks();}});
     SH.sheet.addEventListener('click',e=>{const b=e.target.closest('[data-en]');if(!b||b.disabled)return;e.preventDefault();act(b);});
     updateChecks();
     return SH;
   }
   async function act(b){
-    const a=b.dataset.en,i=+b.dataset.i,j=+b.dataset.j;
+    const a=b.dataset.en,k=+(b.dataset.k||0),i=+b.dataset.i,j=+b.dataset.j,E=D.entries[k];
     sync();
     switch(a){
       case'cancel':SH.close();return;
       case'settings':SH.close(true);goSettings();return;
-      case'addline':D.lines.push(blankLine());renderForm();{const f=SH.sheet.querySelector(`#enAcc${D.lines.length-1}`);if(f)f.focus();}return;
-      case'del':if(D.lines.length>2){D.lines.splice(i,1);renderForm();}return;
-      case'fx':{const l=D.lines[i];l.fxOn=!l.fxOn;if(l.fxOn&&!l.ccy){const ac=accOf(l.account);if(ac&&ac.ccy&&ac.ccy!=='IDR')l.ccy=ac.ccy;}renderForm();return;}
+      case'addline':if(E){E.lines.push(blankLine());renderForm();const f=SH.sheet.querySelector(`#en${pre(k)}Acc${E.lines.length-1}`);if(f)f.focus();}return;
+      case'del':if(E&&E.lines.length>2){E.lines.splice(i,1);renderForm();}return;
+      case'fx':{const l=E&&E.lines[i];if(!l)return;l.fxOn=!l.fxOn;if(l.fxOn&&!l.ccy){const ac=accOf(l.account);if(ac&&ac.ccy&&ac.ccy!=='IDR')l.ccy=ac.ccy;}renderForm();return;}
       case'naadd':return addNew(j);
       case'nadel':D.newAccounts.splice(j,1);renderForm();return;
-      case'ask':return ask(b);
+      case'ask':return ask(b,false);
+      case'redraft':return ask(b,true);
+      case'remove':if(E){D.entries.splice(k,1);renderForm();}return;
+      case'manual':D.ai=false;D.entries=[blankEntry()];D.newAccounts=[];setNote('Fill the entry in by hand below.','');renderForm();return;
       case'post':return post();
+      case'post1':return postEntries([k],false);
+      case'postall':return postEntries(D.entries.map((x,n)=>x.include?n:-1).filter(n=>n>=0),true);
     }
   }
   function addNew(j){
     const a=D.newAccounts[j];if(!a)return;
     try{
       ledgerAddAccount({id:a.id,name:a.name,kind:a.kind,ccy:a.ccy||'IDR',parent:a.parent||null});
-      if(a.orig&&a.orig!==a.id)D.lines.forEach(l=>{if(l.account===a.orig)l.account=a.id;});
+      if(a.orig&&a.orig!==a.id)D.entries.forEach(E=>E.lines.forEach(l=>{if(l.account===a.orig)l.account=a.id;}));
       a.added=true;renderForm();toast(`${a.id} added to your book`);
     }catch(e){setNote(String(e&&e.message||e),'bad');}
   }
-  async function ask(btn){
+  /* ── Asking Claude: one call, at most one automatic correction, then the owner's follow-ups ── */
+  async function turn(messages){
+    const data=await callClaude(draftRequest(null,messages),TIMEOUT_DRAFT);
+    const ans=readAnswer(data);
+    // Claude's answer goes back unchanged (thinking blocks included) on any later turn.
+    return{ans,assistant:{role:'assistant',content:Array.isArray(data.content)?data.content:[]}};
+  }
+  function correctionText(errs){
+    return'Some entries in your answer fail the book\'s checks. Fix them and return the whole answer again (every entry, in the same format). Use only posting accounts (isParent false), whole rupiah, never 0, and make each entry balance.\n'
+      +JSON.stringify({errors:errs});
+  }
+  function draftForAI(){
+    const lineOut=l=>({account:l.account,debit:l.debit||0,credit:l.credit||0,memo:l.memo||'',
+      fx:l.fxOn?{ccy:String(l.ccy||'').toUpperCase(),amount:Math.abs(num(l.famt)||0),rate:num(l.rate)||0}:null,stmtLine:l.stmtLine||null});
+    return{entries:D.entries.map(E=>({date:E.date,description:E.description,lines:E.lines.filter(l=>l.account||l.debit||l.credit).map(lineOut),
+      ...(E.include?{}:{leftOut:true})})),newAccounts:D.newAccounts.map(a=>({id:a.id,name:a.name,kind:a.kind,ccy:a.ccy,parent:a.parent||null,addedToBook:!!a.added}))};
+  }
+  function followUpText(){
+    const q=D.questions||[],ans=q.map((x,j)=>({question:x,answer:String((D.answers||[])[j]||'').trim()})).filter(x=>x.answer);
+    return JSON.stringify({followUp:true,currentDraft:draftForAI(),postedAlready:(D.posted||[]).map(p=>({date:p.date,description:p.description})),
+      answers:ans,ownerNote:String(D.more||'').trim()});
+  }
+  function applyAnswer(ans){
+    const f=answerToForm(ans),used=usedStmtLines(),base=D.posted?D.posted.length:0;
+    // A statement line already on a posted voucher, or already cited by an earlier entry of this
+    // draft, leaves the entry out until the owner ticks Include.
+    const seen=new Map();
+    f.entries.forEach((E,k)=>{E.n=base+k+1;const ids=[...new Set(E.lines.map(l=>l.stmtLine).filter(Boolean).map(stmtResolve))];
+      E.dup=ids.filter(id=>used.has(id));E.same=[...new Set(ids.filter(id=>!used.has(id)&&seen.has(id)).map(id=>seen.get(id)))];
+      ids.forEach(id=>{if(!seen.has(id))seen.set(id,E.n);});E.include=!E.dup.length&&!E.same.length;});
+    // A proposed account the owner already added keeps its "added" state.
+    const added=new Map(D.newAccounts.filter(a=>a.added).map(a=>[a.id,a]));
+    D.newAccounts=f.newAccounts.filter(a=>!accOf(a.id)).concat([...added.values()].filter(a=>f.entries.some(E=>E.lines.some(l=>l.account===a.id))));
+    D.ai=true;D.entries=f.entries;D.total=base+f.entries.length;
+    D.assumptions=ans.assumptions;D.questions=ans.questions;D.answers=[];D.more='';
+  }
+  async function ask(btn,followUp){
     const text=String(D.prompt||'').trim();
     if(!text){setNote('Write a sentence first, e.g. what you bought or paid, from which account, and the amount.','warn');return;}
     if(D.busy)return;
-    D.busy=true;btn.disabled=true;const lbl=btn.innerHTML;btn.innerHTML=`${ic('sparkles','s16')}Drafting…`;btn.setAttribute('aria-busy','true');
+    if(followUp&&!D.convo){followUp=false;}
+    if(followUp&&!String(D.more||'').trim()&&!(D.answers||[]).some(x=>String(x||'').trim())){setNote('Answer a question or say what to change first.','warn');return;}
+    // A fresh draft for a different sentence starts a new batch: nothing posted from the old
+    // sentence counts as posted from this one, and its conversation is not continued.
+    if(!followUp&&D.drafted!=null&&text!==D.drafted){D.batch=null;D.posted=[];D.convo=null;D.total=0;}
+    const me=D;
+    D.busy=true;btn.disabled=true;const lbl=btn.innerHTML;btn.innerHTML=`${ic('sparkles','s16')}${followUp?'Redrafting…':'Drafting…'}`;btn.setAttribute('aria-busy','true');
     setNote('Asking Claude…','');updateChecks();
+    let msgs=followUp?[...D.convo,{role:'user',content:followUpText()}]:[{role:'user',content:JSON.stringify(contextForAI(text))}];
+    let got=null,stuck=null;
     try{
-      const data=await callClaude(draftRequest(text),TIMEOUT_DRAFT);
-      const dr=readDraft(data);
-      if(!D)return;
-      Object.assign(D,draftToD(dr,text),{fromAI:true,prompt:text});
-      D.note={text:'Claude’s draft. Check every line, change anything that’s wrong, then tap Post.',tone:''};
+      const r=await turn(msgs);if(D!==me)return;
+      msgs=[...msgs,r.assistant];got=r.ans;
+      const errs=aiErrorsOf(answerToForm(r.ans));
+      if(errs.length){
+        setNote('Claude’s first draft didn’t pass the checks; asking it to fix them…','');
+        msgs=[...msgs,{role:'user',content:correctionText(errs)}];
+        try{const r2=await turn(msgs);if(D!==me)return;msgs=[...msgs,r2.assistant];got=r2.ans;
+          const e2=aiErrorsOf(answerToForm(r2.ans));if(e2.length)stuck=e2;}
+        catch(e){if(D!==me)return;
+          // The correction got no answer: drop it so the conversation still alternates user/assistant.
+          msgs=msgs.slice(0,-1);stuck=errs;stuck.err=clean(e&&e.message||e);}
+      }
+      if(!D.batch)D.batch=`b-${todayISO().replace(/-/g,'')}-${Math.floor(Math.random()*16777216).toString(16).padStart(6,'0')}`;
+      D.convo=msgs;D.prompt=text;D.drafted=text;D.fromAI=true;applyAnswer(got);
+      const n=D.entries.length,dups=D.entries.filter(E=>E.dup.length).length,same=D.entries.filter(E=>!E.dup.length&&E.same.length).length;
+      D.note=stuck?{text:`Claude couldn’t fix ${stuck.length===1?'one entry':stuck.length+' entries'}${stuck.err?' ('+stuck.err+')':''}: ${stuck.map(s=>`entry ${s.entry}: ${s.errors.join('; ')}`).join(' · ')}. Correct ${stuck.length===1?'it':'them'} below, remove ${stuck.length===1?'it':'them'}, or answer and redraft.`,tone:'warn'}
+        :!n?{text:'Claude needs more before it can draft this. Answer its questions below and tap Answer & redraft.',tone:'warn'}
+        :{text:`Claude drafted ${n===1?'one entry':n+' entries'}${dups?`; ${dups===1?'one is':dups+' are'} already in your book and left out`:''}${same?`; ${same===1?'one uses':same+' use'} the same bank line as an earlier entry and ${same===1?'is':'are'} left out`:''}. Check every line, change anything that’s wrong, then post.`,tone:dups||same?'warn':''};
     }catch(e){
-      if(!D)return;
-      D.note={text:`${clean(e&&e.message||e)} Fill the entry in by hand below${e&&e.kind!=='auth'&&e.kind!=='refusal'?', or try again':''}.`,tone:e&&e.kind==='auth'?'bad':'warn'};
+      if(D!==me)return;
+      const msg=clean(e&&e.message||e);
+      if(followUp)D.note={text:`${msg} Your draft is unchanged${e&&e.kind!=='auth'&&e.kind!=='refusal'?'; try again':''}.`,tone:e&&e.kind==='auth'?'bad':'warn'};
+      else D.note={text:`${msg} Fill the entry in by hand below${e&&e.kind!=='auth'&&e.kind!=='refusal'?', or try again':''}.`,tone:e&&e.kind==='auth'?'bad':'warn'};
       D.aiError=e&&e.kind||'error';
     }finally{
-      if(D){D.busy=false;rerender();}
-      else{btn.disabled=false;btn.innerHTML=lbl;}
+      me.busy=false;
+      // A late answer never lands in another sheet (the owner closed this one, maybe opened a new one).
+      if(D===me)rerender();
+      else{btn.disabled=false;btn.innerHTML=lbl;btn.removeAttribute('aria-busy');}
     }
   }
   function post(){
-    const v=voucherFromD(),errs=errorsOf(v);
+    const E=D.entries[0],v=voucherOf(E),errs=errorsOf(E);
     if(errs.length){updateChecks();return;}
     try{
       if(D.mode==='edit'){
-        const id=D.id,key=D.key;ledgerEdit(id,v,String(D.why).trim());
+        const id=D.id,key=D.key;ledgerEdit(id,v,String(E.why).trim());
         SH.close(true);toast('Saved · the earlier version stays in its history');openVoucherKey(key);
       }else{
-        const ai=!!D.fromAI,vv={...v};if(ai)vv.prompt=D.prompt;
-        const id=ledgerPost(vv,{origin:ai?'ai':'app',why:ai?'Drafted by Claude, checked and posted by you':'Entered by hand'});
+        const id=ledgerPost(v,{origin:'app',why:'Entered by hand'});
         SH.close(true);toast('Posted to your book');openVoucherKey(id);
       }
     }catch(e){setNote(((e&&e.errors)||[String(e&&e.message||e)]).join(' · '),'bad');updateChecks();}
+  }
+  // Posts drafted entries (one card, or every included one): each its own voucher, origin ai, the
+  // drafted sentence as prompt and the shared batch id. Stops at the first refusal and keeps the
+  // sheet open: posted entries leave the cards (listed as posted, never posted again), the rest stay.
+  function postEntries(ks,all){
+    if(!D||D.busy)return;
+    const list=ks.map(k=>D.entries[k]).filter(E=>E&&E.include);
+    if(!list.length||list.some(E=>errorsOf(E).length)){updateChecks();return;}
+    const ids=[];let failed=null;
+    for(const E of list){
+      try{const id=ledgerPost({...voucherOf(E),prompt:D.drafted||D.prompt,batch:D.batch},{origin:'ai',why:'Drafted by Claude, checked and posted by you'});
+        ids.push(id);(D.posted||(D.posted=[])).push({id,n:E.n,date:E.date,description:E.description});D.entries.splice(D.entries.indexOf(E),1);}
+      catch(e){failed={E,why:((e&&e.errors)||[String(e&&e.message||e)]).join(' · ')};break;}
+    }
+    if(failed){
+      setNote(`${ids.length} posted, 1 failed: entry ${failed.E.n}: ${failed.why}. ${D.entries.length===1?'It is':`The ${D.entries.length} entries not posted are`} still below; fix and post again.`,'bad');
+      if(ids.length)toast(`Posted ${ids.length} ${ids.length===1?'entry':'entries'} · 1 failed`);
+      renderForm();return;
+    }
+    if(!ids.length){renderForm();return;}
+    if(all||!D.entries.length){
+      const left=D.entries.length;SH.close(true);
+      toast(ids.length===1?`Posted to your book${left?` · ${left} left out`:''}`:`Posted ${ids.length} entries to your book${left?` · ${left} left out`:''}`);
+      openVoucherKey(ids[0]);return;
+    }
+    setNote(`Posted entry ${list[0].n}. ${D.entries.length===1?'One entry is':D.entries.length+' entries are'} still to check.`,'good');
+    toast('Posted to your book');renderForm();
   }
   function openVoucherKey(key){if(typeof window.openVoucher==='function')window.openVoucher(key);}
   function goSettings(){setTab('settings');setTimeout(()=>{const e=document.getElementById('set-ai');if(e)e.scrollIntoView({behavior:'smooth',block:'start'});},60);}
@@ -462,7 +724,7 @@
   function openNew(){
     if(!canPost()){toast('Set up your book first (Settings › Your book)');return null;}
     aiEnsure();
-    return openForm({mode:'new',date:todayISO(),description:'',lines:[blankLine(),blankLine()],newAccounts:[],assumptions:[],questions:[],prompt:'',fromAI:false,note:null});
+    return openForm({mode:'new',ai:false,entries:[blankEntry()],newAccounts:[],assumptions:[],questions:[],answers:[],more:'',prompt:'',fromAI:false,note:null,posted:[],convo:null,batch:null});
   }
   function ledgerVoucher(id){const x=L();return x&&x.vouchers[id]||null;}
   function keyOf(v){return v.origin==='accurate'?(v.srcKey||v.id):v.id;}
@@ -470,7 +732,7 @@
     const v=ledgerVoucher(id);if(!v){toast('That voucher isn’t in your book');return null;}
     if(v.status!=='posted'){toast('A void voucher can’t be edited');return null;}
     const lines=(v.lines||[]).map(lineFrom);while(lines.length<2)lines.push(blankLine());
-    return openForm({mode:'edit',id,key:keyOf(v),origin:v.origin,date:v.date,description:v.description||'',lines,newAccounts:[],assumptions:[],questions:[],why:'',note:null});
+    return openForm({mode:'edit',ai:false,id,key:keyOf(v),origin:v.origin,entries:[{date:v.date,description:v.description||'',lines,why:'',include:true,dup:[]}],newAccounts:[],assumptions:[],questions:[],note:null,posted:[]});
   }
   function openVoid(id){
     const v=ledgerVoucher(id);if(!v||v.status!=='posted')return null;
@@ -522,6 +784,25 @@
           <details><summary>Before: ${escH(dayLong(b.date))} · ${rp(dr)}${b.description&&b.description!==v.description?` · ${escH(b.description)}`:''}</summary>${linesTable(b.lines)}</details></li>`;}).join('')}
       <li><div class="li-title">${escH(created)}</div><div class="li-sub">${escH(when(v.createdAt||v.at))}${v.prompt?` · “${escH(v.prompt)}”`:''}</div></li></ol></div>`;
   }
+  // Vouchers posted from one prompt share a batch id: Journals marks them "AI · 1 of 2" and the
+  // voucher panel links the others. Cached per change of the book.
+  let BATCH={ver:null,map:new Map()};
+  function batches(){
+    const x=L();if(!x)return new Map();
+    const ver=(x.updatedAt||'')+'|'+Object.keys(x.vouchers).length;
+    if(BATCH.ver!==ver||BATCH.x!==x){const m=new Map();
+      for(const v of Object.values(x.vouchers))if(v&&v.batch&&v.status==='posted')(m.get(v.batch)||m.set(v.batch,[]).get(v.batch)).push(v);
+      for(const l of m.values())l.sort((p,q)=>p.date.localeCompare(q.date)||String(p.createdAt||'').localeCompare(String(q.createdAt||''))||String(p.id).localeCompare(String(q.id)));
+      BATCH={ver,x,map:m};}
+    return BATCH.map;
+  }
+  function batchOf(bv){const v=bv&&bv.id?ledgerVoucher(bv.id):null;if(!v||!v.batch)return null;const l=batches().get(v.batch);return l&&l.length>1?{v,list:l,i:l.indexOf(v)}:null;}
+  function batchBadge(bv){const b=batchOf(bv);return b?`<span class="badge accent" data-batch="${escH(b.v.batch)}" title="Posted together from one prompt">AI · ${b.i+1} of ${b.list.length}</span>`:'';}
+  function batchHTML(bv){
+    const b=batchOf(bv);if(!b)return'';
+    return`<div class="en-batch" id="enBatch">${ic('sparkles','s16')} Entry ${b.i+1} of ${b.list.length} from one prompt: ${b.list.map((y,n)=>n===b.i?`<b>${n+1}. ${escH(y.description||'This entry')}</b>`
+      :`<button class="bk-link" data-en-act="open" data-id="${escH(y.id)}">${n+1}. ${escH(y.description||'Entry')}</button>`).join(' · ')}</div>`;
+  }
   // Tools under a voucher in Journals / the voucher sheet: Edit, Void, the status and the history.
   function voucherTools(bv){
     if(!bv||!bv.id||!seeded())return'';
@@ -529,14 +810,14 @@
     const isVoid=v.status==='void';
     return`<div class="en-tools" data-vid="${escH(v.id)}">${isVoid?`<span class="badge bad" id="enVoidBadge">Void</span>`:`<button class="btn btn-secondary btn-sm" data-en-act="edit" data-id="${escH(v.id)}">${ic('pencil','s16')}Edit</button>
         <button class="btn btn-ghost btn-sm" data-en-act="void" data-id="${escH(v.id)}" style="color:var(--bad)">${ic('ban','s16')}Void</button>`}</div>
-      ${historyHTML(v)}`;
+      ${batchHTML(bv)}${historyHTML(v)}`;
   }
   function newEntryBtn(cls){return canPost()?`<button class="btn ${cls||'btn-primary'} btn-sm" data-en-act="new" id="enNewBtn">${ic('plus','s16')}New entry</button>`:'';}
   document.addEventListener('click',e=>{
     const b=e.target.closest&&e.target.closest('[data-en-act]');if(!b||b.disabled)return;
     e.preventDefault();e.stopPropagation();
     const a=b.dataset.enAct;
-    if(a==='new')openNew();else if(a==='edit')openEdit(b.dataset.id);else if(a==='void')openVoid(b.dataset.id);
+    if(a==='new')openNew();else if(a==='edit')openEdit(b.dataset.id);else if(a==='void')openVoid(b.dataset.id);else if(a==='open')openVoucherKey(b.dataset.id);
   },true);
   registerHook('homeActions',()=>canPost()?`<button class="btn btn-secondary btn-sm" data-en-act="new" id="enHomeBtn">${ic('sparkles','s16')}Tell me what happened</button>`:null);
   registerHook('beforeRender',()=>{if(owner()&&(SEC.owner!==owner()||(!SEC.localDone)||(signedIn()&&!SEC.driveTried)))aiEnsure();});
@@ -556,7 +837,7 @@
         <button class="btn btn-primary" onclick="etAI.save()" id="aiSave">${ic('key-round','s16')}Save key</button></div>
       <div class="setting-row"><div><div class="li-title">Model</div><div class="li-sub">${escH(modelOf(SEC.model).sub)}</div></div>
         <select class="input" id="aiModel" style="width:auto" onchange="etAI.setModel(this.value)" aria-label="Model">${MODELS.map(m=>`<option value="${m.id}"${m.id===SEC.model?' selected':''}>${escH(m.label)}</option>`).join('')}</select></div>
-      <p class="help" id="aiNote">Your key is stored in your private Google Drive app folder and this device; set a spend limit on it at console.anthropic.com; your sentence and your chart of accounts are sent to Anthropic when you ask the AI.</p>
+      <p class="help" id="aiNote">Your key is stored in your private Google Drive app folder and this device; set a spend limit on it at console.anthropic.com; when you ask the AI, it is sent your chart of accounts, account balances, open receivables and payables, the last 60 days of statement lines and your sentence (to Anthropic only, never the key in any of it).</p>
       <div class="help" id="aiStatus" role="status" aria-live="polite"></div></section>`;
   }
   function status(msg,tone){const el=document.getElementById('aiStatus');if(el){el.textContent=msg||'';el.style.color=tone==='bad'?'var(--bad)':tone==='good'?'var(--good)':'';}}
@@ -589,9 +870,13 @@
     // For tests and other modules: plain facts, never the key itself.
     state(){return{hasKey:!!SEC.key,masked:masked(),model:SEC.model,at:SEC.at,status:SEC.status};},
     ensure:aiEnsure,
-    request:draftRequest
+    request:draftRequest,
+    // Counts only, for checks on real data: what a request for a sentence would carry. No call.
+    requestCounts(sentence){const r=draftRequest(sentence||'test'),u=JSON.parse(r.messages[0].content);
+      return{accounts:u.chartOfAccounts.length,balances:Object.keys(u.balances).length,openItems:u.openItems.length,statementLines:u.statementLines.length,
+        bytes:new Blob([JSON.stringify(r)]).size};}
   };
   window.etAI=AI;
   window.aiSettingsHTML=aiSettingsHTML;
-  window.etEntry={open:openNew,edit:openEdit,void:openVoid,canPost,originBadge,voucherTools,voucherByKey,voidList,newEntryBtn};
+  window.etEntry={open:openNew,edit:openEdit,void:openVoid,canPost,originBadge,voucherTools,voucherByKey,voidList,newEntryBtn,batchBadge};
 })();
