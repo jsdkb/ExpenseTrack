@@ -121,7 +121,7 @@
   function plNet(M){const r=roll(M);let s=0;for(const c of I.roots)if(isPL(kindOf(c)))s+=r.get(c)||0;return s?-s:0;}
 
   /* ── Page state shared by every Books page ── */
-  const BK={month:null,coaAll:false,coaQ:'',jPeriod:'all',jFrom:'',jTo:'',jAcc:'',jType:'',jQ:'',jPage:0,jSel:null,
+  const BK={month:null,coaAll:false,coaQ:'',coaKind:'',jPeriod:'all',jFrom:'',jTo:'',jAcc:'',jType:'',jQ:'',jPage:0,jSel:null,
     lAcc:null,lPreset:'ytd',lFrom:'',lTo:'',lLimit:300,bsView:'book',bsCol:0,plCol:1,jVoid:false};
   const J_SIZE=50;
   let J_CACHE={key:null,list:null};
@@ -366,35 +366,62 @@
     I.roots.forEach(up);return out;
   }
   function coaValue(c,M){const k=kindOf(c),r=rawAt(c,M);return sgn(k)*(isPL(k)?r-rawAt(c,decBefore(M)):r);}
+  // Folded parents: a per-device convenience (localStorage), never personal data.
+  const COA_FOLD_KEY='et_coa_fold';
+  const COA_FOLD=(()=>{try{return new Set(JSON.parse(localStorage.getItem(COA_FOLD_KEY)||'[]'));}catch(_){return new Set();}})();
+  function saveFold(){try{localStorage.setItem(COA_FOLD_KEY,JSON.stringify([...COA_FOLD]));}catch(_){}}
+  // The summary strip: one cell per section, in plain words. Each cell filters the list.
+  const COA_CELLS=[['asset','Own'],['liability','Owe'],['equity','Equity'],['income','Earned'],['expense','Spent']];
+  function coaStrip(M,ytdLbl){
+    const tot={};for(const c of I.flat)if(!isParentAcc(c)){const k=kindOf(c);tot[k]=(tot[k]||0)+coaValue(c,M);}
+    const bal=`On ${dShort(meMonthEnd(M))}`,short=n=>`<span class="amt">${n<0?'−':''}${fmtIDRShort(Math.abs(n))}</span>`;
+    return`<div class="grid"><div class="card strip bk-strip span-12" role="group" aria-label="Show one section">${COA_CELLS.map(([k,l])=>{const on=BK.coaKind===k,v=tot[k]||0;
+      return`<button class="strip-cell k-${k}" data-bk="coa-kind" data-k="${k}" aria-pressed="${on}" title="${on?'Show every section':`Show only ${escH(KIND_LABEL[k].toLowerCase())}`}">
+        <span class="eyebrow">${l}</span><span class="strip-val" data-raw="${v}">${short(v)}</span><span class="strip-sub">${isPL(k)?escH(ytdLbl):bal}</span></button>`;}).join('')}</div></div>`;
+  }
   function renderCOA(){
     const g=gateHTML('Chart of accounts');if(g)return g;
-    idx();const M=syncMonth(),q=BK.coaQ.trim().toLowerCase(),inact=inactiveSet(M);
+    idx();const M=syncMonth(),q=BK.coaQ.trim().toLowerCase(),inact=inactiveSet(M),kf=BK.coaKind;
     const susp=c=>{let x=c;while(x){const a=I.acc.get(x);if(a&&a.suspended)return true;x=a&&a._p;}return false;};
     const hidden=c=>!BK.coaAll&&(inact.has(c)||susp(c));
-    const match=c=>!q||c.toLowerCase().includes(q)||String(accName(c)).toLowerCase().includes(q);
+    const match=c=>(!kf||kindOf(c)===kf)&&(!q||c.toLowerCase().includes(q)||String(accName(c)).toLowerCase().includes(q));
     // Show an account when it (or a descendant) passes; ancestors of a match stay visible.
     const keep=new Set();
     const walk=c=>{if(hidden(c))return false;let any=match(c);for(const x of I.kids.get(c)||[])if(walk(x))any=true;if(any)keep.add(c);return any;};
     I.roots.forEach(walk);
+    // Folds apply only while browsing: a search or a section filter shows every match.
+    const browse=!q&&!kf;
+    const folded=c=>{if(!browse)return false;let x=I.acc.get(c)._p;while(x){if(COA_FOLD.has(x))return true;x=I.acc.get(x)._p;}return false;};
     const nHidden=I.flat.filter(c=>!isParentAcc(c)&&hidden(c)).length;
-    const ytd=`Jan – ${monthLabel(M).replace(/ \d{4}$/,'')}`;
+    const ytdLbl=`Jan – ${monthLabel(M).replace(/ \d{4}$/,'')} ${M.slice(0,4)}`;
+    const balLbl=`balance on ${dLong(meMonthEnd(M))}`;
     let lastKind=null;
-    const rows=I.flat.filter(c=>keep.has(c)).map(c=>{
-      const a=I.acc.get(c),k=kindOf(c),d=I.depth.get(c)||0,v=coaValue(c,M),par=isParentAcc(c);
-      let sec='';if(d===0&&k!==lastKind){lastKind=k;sec=`<tr class="bk-sec"><th scope="rowgroup" colspan="4">${escH(KIND_LABEL[k]||k)}${isPL(k)?` · ${escH(ytd)}`:''}</th></tr>`;}
+    const vis=I.flat.filter(c=>keep.has(c)&&!folded(c));
+    const rows=vis.map(c=>{
+      const a=I.acc.get(c),k=kindOf(c),d=I.depth.get(c)||0,v=coaValue(c,M),par=isParentAcc(c),open=!COA_FOLD.has(c)||!browse;
+      let sec='';if(d===0&&k!==lastKind){lastKind=k;sec=`<tr class="bk-sec"><th scope="rowgroup" colspan="2">${escH(KIND_LABEL[k]||k)} · ${escH(isPL(k)?ytdLbl:balLbl)}</th></tr>`;}
       const badges=[a.suspended?'<span class="badge">Suspended</span>':'',inact.has(c)&&!par?'<span class="badge">Inactive</span>':'',a.ccy&&a.ccy!=='IDR'?`<span class="badge">${escH(a.ccy)}</span>`:'',a.unknown?'<span class="badge warn">Not in the chart</span>':''].join('');
-      return sec+`<tr class="clickable ${par?'bk-par':'bk-row'}" data-bk="led" data-code="${attr(c)}" data-row="${attr(c)}" data-parent="${attr(a._p||'')}" tabindex="0">
-        <td class="bk-acc" style="padding-left:${16+d*16}px"><div class="merchant-name"><span class="bk-code">${escH(c)}</span>${escH(a.name)}${ledgerLink(c,'','',true)}</div>${badges?`<div class="merchant-sub">${badges}</div>`:''}</td>
-        <td class="muted hide-sm">${escH(a.type||'')}</td><td class="num" data-raw="${v}">${money(v)}</td></tr>`;
+      const fold=par&&browse?`<button class="bk-fold" data-bk="coa-fold" data-code="${attr(c)}" aria-expanded="${open}" aria-label="${open?'Fold':'Unfold'} ${attr(a.name)}">${ic(open?'chevron-down':'chevron-right')}</button>`:'';
+      return sec+`<tr class="clickable ${par?'bk-par':'bk-row'}" data-bk="led" data-code="${attr(c)}" data-row="${attr(c)}" data-parent="${attr(a._p||'')}" tabindex="0"${a.type?` title="${attr(a.type)}"`:''}>
+        <td class="bk-acc" style="padding-left:${16+d*16}px"><div class="merchant-name">${fold}<span class="bk-code">${escH(c)}</span>${escH(a.name)}${ledgerLink(c,'','',true)}</div><div class="merchant-sub"><span class="bk-code-sub">${escH(c)}</span>${badges}</div></td>
+        <td class="num" data-raw="${v}">${money(v)}</td></tr>`;
     }).join('');
-    const total=I.flat.filter(c=>!isParentAcc(c)).length;
-    return`${pageHead('Chart of accounts',sourceLine(),hideBtn())}
+    // Count what the filters keep, not what a fold tucks away.
+    const total=I.flat.filter(c=>!isParentAcc(c)).length,shown=I.flat.filter(c=>keep.has(c)&&!isParentAcc(c)).length;
+    const anyPar=browse&&vis.some(isParentAcc),allFolded=anyPar&&vis.filter(isParentAcc).every(c=>COA_FOLD.has(c));
+    const foldAll=anyPar?`<button class="btn btn-ghost btn-sm" data-bk="coa-foldall" data-open="${allFolded?1:0}">${ic(allFolded?'chevron-down':'chevron-right','s16')}${allFolded?'Expand all':'Collapse all'}</button>`:'';
+    const canAdd=typeof W==='function'&&W()&&typeof openAddAccount==='function';
+    const add=sm=>canAdd?`<button class="btn btn-secondary${sm?' btn-sm only-sm':''}" onclick="openAddAccount()">${ic('plus',sm?'s16':'')}Add account</button>`:'';
+    const desc=`${shown===total?`${total} accounts`:`${shown} of ${total} accounts`}${kf?` · ${escH(KIND_LABEL[kf].toLowerCase())} only`:''}`;
+    return`${pageHead('Chart of accounts','Every account in your book. Tap one to see its entries.',add(false)+hideBtn())}
       <div class="bk-bar">${monthPicker()}
         <input class="input bk-search" type="search" data-bk="coa-q" placeholder="Search code or name" aria-label="Search accounts" value="${attr(BK.coaQ)}">
-        <label class="check"><input type="checkbox" data-bk="coa-all" ${BK.coaAll?'checked':''}> Show inactive and suspended${nHidden&&!BK.coaAll?` (${nHidden})`:''}</label></div>
-      <div class="grid"><section class="card flush span-12">${cardHead('list-tree','Accounts',`${total} accounts · balance at ${escH(dLong(meMonthEnd(M)))}; income and expenses year to date · assets and expenses debit-positive, liabilities, equity and income credit-positive`)}
-        ${rows?`<div class="table-wrap"><table class="data bk-stmt" id="bkCoa"><thead><tr><th scope="col">Account</th><th scope="col" class="hide-sm">Type</th><th scope="col" class="num">Balance (natural sign)</th></tr></thead><tbody>${rows}</tbody></table></div>`
-          :`<div style="padding:0 var(--card-pad) var(--card-pad)">${emptyBk('search',q?'No account matches that search':'No active accounts this month',BK.coaAll?'':'Show all accounts','coa-show')}</div>`}
+        <label class="check"><input type="checkbox" data-bk="coa-all" ${BK.coaAll?'checked':''}> ${BK.coaAll?'Showing hidden accounts':`Show ${nHidden||''} hidden`.replace('  ',' ')}</label>${add(true)}</div>
+      ${coaStrip(M,ytdLbl.replace(/ \d{4}$/,''))}
+      <div class="grid"><section class="card flush span-12">${cardHead('list-tree','Accounts',desc,foldAll)}
+        ${rows?`<div class="table-wrap"><table class="data bk-stmt bk-coa" id="bkCoa"><thead><tr><th scope="col">Account</th><th scope="col" class="num">Amount</th></tr></thead><tbody>${rows}</tbody></table></div>`
+          :`<div style="padding:0 var(--card-pad) var(--card-pad)">${emptyBk('search',q?'No account matches that search':kf?'No accounts in this section':'No active accounts this month',kf?'Show every section':BK.coaAll?'':'Show all accounts',kf?'coa-kind-all':'coa-show')}</div>`}
+        <p class="help bk-foot">Each amount reads the normal way: what you own, owe, earned or spent shows positive. A minus means the opposite, e.g. an overdrawn account.<br>${sourceLine()}</p>
       </section></div>`;
   }
 
@@ -773,6 +800,11 @@
       case'connect':connectWealthFolder();return;
       case'coa-all':BK.coaAll=el.checked;renderAll();return;
       case'coa-show':BK.coaAll=true;renderAll();return;
+      case'coa-kind':BK.coaKind=BK.coaKind===el.dataset.k?'':el.dataset.k;renderAll();return;
+      case'coa-kind-all':BK.coaKind='';renderAll();return;
+      case'coa-fold':{const c=el.dataset.code;if(COA_FOLD.has(c))COA_FOLD.delete(c);else COA_FOLD.add(c);saveFold();renderAll();
+        const b=document.querySelector(`button[data-bk="coa-fold"][data-code="${CSS.escape(c)}"]`);if(b)b.focus({preventScroll:true});return;}
+      case'coa-foldall':{const pars=I.flat.filter(isParentAcc);if(el.dataset.open==='1')pars.forEach(c=>COA_FOLD.delete(c));else pars.forEach(c=>COA_FOLD.add(c));saveFold();renderAll();return;}
       case'led':ev&&ev.stopPropagation();openLedger(el.dataset.code,el.dataset.from||null,el.dataset.to||null);return;
       case'jopen':jSelect(el.dataset.key);return;
       case'vsheet':openVoucherSheet(el.dataset.key);return;

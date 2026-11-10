@@ -1,8 +1,9 @@
 # ExpenseTrack — UX Guideline
 
-**Version 1.2 · 2026-11-03 · Status: FINAL — v1.0 approved 2026-10-15; v1.1 ("calm private-banking"
+**Version 1.3 · 2026-11-06 · Status: FINAL — v1.0 approved 2026-10-15; v1.1 ("calm private-banking"
 brand and home-screen revision) approved 2026-10-16; v1.2 (wealth tracker v2: Home, Books, Plan,
-statement-corrected spending) 2026-11-03**
+statement-corrected spending) 2026-11-03; v1.3 (simpler Chart of accounts and Month-end, §11.7,
+§11.10) 2026-11-06**
 
 This document is the design source of truth for ExpenseTrack on web and mobile. Every UI change
 should follow it; anything that needs to break a rule here should update this file first.
@@ -533,7 +534,9 @@ budget usage (future) and the Month-end Close stepper.
 - Track 6px, `--surface-2`, pill radius; fill solid `--accent`; value label right-aligned above.
 - Over 100% (e.g. over budget): fill turns `--bad`, overflow shown as a striped segment.
 - Stepper: numbered dots joined by a line; done = `--good` check, current = `--accent` ring,
-  upcoming = `--text-3`.
+  upcoming = `--text-3`. Keep it to three or four plain steps (Month-end uses three, §11.7); on
+  phones it stays horizontal and compact (dot over a short label and hint) rather than a vertical
+  list that fills the screen.
 - **Budget pace tick:** a 2px `--text-2` tick on the budget bar marks where spend would be today
   on an even pace through the month. The fill stays `--accent` and turns `--bad` once over budget;
   being ahead of the tick with a projected month-end over budget shows the `On pace to overspend`
@@ -907,6 +910,36 @@ from chat offers **Fill in positions here**. Data lives only in the Drive file
 - Typed income after the book's month shows under the Book figure as "+ Rp x typed income"; the
   difference is against book + typed income.
 
+**v1.3 — simpler month-end (2026-11-06).** For a non-accountant owner; supersedes the bullets above
+where they differ. Data and logic are unchanged.
+- Header description: "Check your balances against your book once a month." The close picker
+  stays in the header (a select on phones when there are more than three closes).
+- **Status card** is the one place that says where you are: title "<Month YYYY> close", status
+  badge, and a **three-step** stepper — **1 Enter balances** ("4 of 7 entered") → **2 Post the
+  entry** ("Ready" / "Posted" / "1 of 2 posted") → **3 Book matches** ("When your book reaches
+  Oct" / "Matches" / "2 differences left"). A chat close maps onto the same three steps. Under the
+  stepper, one `summary-line` with the next thing to do and, when there is one, a single secondary
+  button that takes you there (**Show empty rows** sets the To fill filter, **Go to the entry**
+  scrolls to card 2); the page's one primary stays **Post to book** (or **Start …** in the header).
+  The separate Re-check card is gone; its sentence is this line. On phones the stepper stays
+  horizontal and compact.
+- **"1 · Your balances"** card: two header tools only — secondary **Fill empty rows** (a menu:
+  "From statements dated <day> (n)" and "Same as last month"; nothing fills without choosing) and an
+  icon **More** menu (Download Excel, Upload Excel, Add account, Match statements to accounts). Above
+  the rows, filter chips **All n · To fill n · Differences n**. Columns: Account · In your book
+  (<Mon>) · Your figure · Difference. The book-lag banner is one short line ("Your book runs to
+  Aug 2026, so differences include Sep and Oct."). The statement matching list opens as a sheet
+  from More.
+- **"2 · Post the entry"** card (was Suggested journal): subtitle "What changes in your book so it
+  matches your balances". While no difference account is chosen, one inline question "Where should
+  differences the statements don't explain go?"; the other category accounts live in an **Entry
+  settings** sheet, remembered for every close (an item in the card's More menu with the own book;
+  a gear icon button without it). With the app's own book set up,
+  the one primary is **Post to book**; **Download for Accurate import** moves into the card's
+  **More** menu, and the import steps after a download sit in a collapsed "How to import into
+  Accurate". Without the own book, the download stays the primary button.
+- Wording: "balances" not "positions", "entry" not "voucher/journal", "difference" stays.
+
 ### 11.7a Accounts added in the app (shipped 2026-11-03)
 
 - **Add account** on Accounts (page header; a small button in the filter row on phones) and in the
@@ -1038,6 +1071,22 @@ the imported `books.json`; each shows its own import step until a file exists.
 - Exports: Balance sheet, Income statement and Trial balance download Excel with the as-of date in
   the title; Journals (the filtered set, one row per line) and General ledger (the account and
   range shown) too. File names carry the period, never an account name.
+- **Chart of accounts (v1.3, 2026-11-06)** — written for a non-accountant:
+  - Header: description "Every account in your book. Tap one to see its entries."; secondary
+    **Add account** (the §11.7a form) when the wealth snapshot exists. The source line moves to a
+    `help` footnote under the table.
+  - A **summary strip** (§11.2 pattern) of five cells: **Own** (assets), **Owe** (liabilities),
+    **Equity**, **Earned** and **Spent** (income and expenses, year to date). Each cell is a
+    toggle button that shows only that section; pressing it again shows all. Phones: two columns.
+  - Control bar: month picker, search, and a check "Show n hidden" (inactive and suspended).
+  - Table: Account · Amount. No Type column (the book's type is the row's tooltip). Each section
+    heading says what its figures mean ("Assets · balance on 31 Oct 2026", "Income · Jan – Oct
+    2026"). Parent rows carry a chevron button that folds their children; the card header has a
+    ghost **Collapse all / Expand all**. Default open; folds are a per-device convenience. Search
+    and the section filter always show their matches.
+  - The jargon sub-title is replaced by a plain footnote: "Each amount reads the normal way: what
+    you own, owe, earned or spent shows positive. A minus means the opposite, e.g. an overdrawn
+    account." On phones the code sits under the name.
 - **v3 — the app's own book (2026-11-04).** Once the book is set up, Books pages say "Your own
   book" instead of "read-only", and:
   - **New entry** is the Journals header's primary button; Home's header has a secondary

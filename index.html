@@ -595,7 +595,7 @@
     table.data tr.group-row td { border-top: 1px solid var(--border); background: var(--surface-1); }
     code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 0.92em; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
     /* Stepper (§8.10) + journal entries (§11.7) */
-    .stepper { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px; }
+    .stepper { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
     .step { position: relative; display: flex; flex-direction: column; gap: 4px; padding-top: 6px; min-width: 0; }
     .step::before { content: ''; position: absolute; top: 19px; left: 34px; right: -2px; height: 2px; background: var(--border-strong); }
     .step:last-child::before { display: none; }
@@ -634,6 +634,18 @@
     .me-next .li-title { display: flex; align-items: center; gap: 6px; }
     .me-next code { overflow-wrap: anywhere; }
     .me-banner { border-radius: var(--radius-sm); margin-bottom: 12px; padding: 10px 14px; }
+    .me-nextstep { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .me-nextstep .summary-line { margin: 0; flex: 1 1 260px; min-width: 0; }
+    .me-bar { padding: 0 var(--card-pad) 12px; }
+    .me-chips { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+    @media (max-width: 767px) { .me-chips button { height: 36px; padding: 0 12px; } }
+    .me-cnt { color: var(--text-3); font-variant-numeric: tabular-nums; }
+    .me-ask { border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); padding: 12px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .me-ask .me-select { max-width: 420px; }
+    .me-ask .help { margin: 0; }
+    .me-sheet .setting-row { gap: 12px; }
+    .me-how summary { cursor: pointer; font-size: 13px; color: var(--accent-text); margin-top: 6px; }
+    #mePosCard .card-tools, #meJournal .card-tools { flex-wrap: nowrap; }
     .cf-facts { grid-template-columns: repeat(4, minmax(0,1fr)); margin: 0 0 16px; padding: 0 0 16px; border-top: none; border-bottom: 1px solid var(--border); }
     .cs-row { gap: 12px; }
     .cs-amt { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -753,11 +765,11 @@
       table.me-table tr.me-row td.num::before { content: attr(data-label); display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
       table.me-table tr.group-row, table.me-table tr.group-row th { display: block; }
       .me-select { max-width: none; width: 100%; }
-      .stepper { grid-template-columns: 1fr; gap: 0; }
-      .step { display: grid; grid-template-columns: 28px 1fr; column-gap: 12px; row-gap: 0; padding: 6px 0 10px; }
-      .step::before { top: 38px; left: 13px; right: auto; width: 2px; height: calc(100% - 30px); }
-      .step-dot { grid-row: span 2; }
-      .step-label { margin-top: 4px; }
+      .stepper { gap: 4px; }
+      .step-dot { width: 24px; height: 24px; font-size: 12px; }
+      .step::before { top: 17px; left: 30px; }
+      .step-label { font-size: 12px; line-height: 16px; margin-top: 4px; }
+      .step-hint { font-size: 11px; line-height: 14px; }
       .strip-cell { border-left: none; border-top: 1px solid var(--border); padding: 14px 16px; }
       .strip-cell:first-child { border-top: none; }
       .strip-val { font-size: 22px; line-height: 28px; }
@@ -813,6 +825,29 @@
     .bk-note{border-radius:var(--radius-sm);margin-bottom:12px;padding:10px 14px}
     .bk-facts{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--text-2);margin-top:4px}
     .bk-facts b{color:var(--text-1);font-weight:600}
+    /* Chart of accounts: summary strip that filters, folding parents, plain footnote */
+    .bk-strip{grid-template-columns:repeat(5,minmax(0,1fr))}
+    .bk-strip .strip-cell{padding:14px 16px}
+    .bk-strip .strip-val{font-size:20px;line-height:26px}
+    .bk-strip .strip-cell[aria-pressed="true"]{background:var(--accent-soft);box-shadow:inset 0 -3px 0 var(--accent)}
+    .bk-strip .strip-cell[aria-pressed="true"] .eyebrow{color:var(--accent-text)}
+    .bk-fold{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin:-4px 4px -4px -6px;border-radius:var(--radius-xs);color:var(--text-2);vertical-align:middle}
+    .bk-fold:hover,.bk-fold:focus-visible{background:var(--surface-2);color:var(--text-1)}
+    .bk-fold svg.i{width:16px;height:16px}
+    @media (min-width:768px){table.bk-coa .merchant-sub:not(:has(.badge)){display:none}}
+    .bk-code-sub{display:none}
+    .bk-foot{padding:12px var(--card-pad) var(--card-pad);margin:0;border-top:1px solid var(--border)}
+    @media (max-width:767px){
+      .bk-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+      .bk-strip .strip-cell{border-top:1px solid var(--border);border-left:none;padding:12px 14px}
+      .bk-strip .strip-cell:nth-child(-n+2){border-top:none}
+      .bk-strip .k-liability,.bk-strip .k-expense{border-left:1px solid var(--border)}
+      .bk-strip .k-income{order:3}.bk-strip .k-expense{order:4}.bk-strip .k-equity{order:5;grid-column:1/-1}
+      .bk-strip .strip-val{font-size:18px;line-height:24px}
+      table.bk-coa .bk-code{display:none}
+      table.bk-coa .bk-code-sub{display:inline;color:var(--text-3);font-variant-numeric:tabular-nums;margin-right:6px}
+      .bk-fold{width:36px;height:36px;margin:-10px 2px -10px -10px}
+    }
     @media (max-width:767px){
       .bk-c-off{display:none!important}
       tr .bk-link.bk-hover{display:none}
@@ -4095,19 +4130,44 @@ function toggleEntryPosted(month,id){
   m[id]=!entryPosted(c,e);scheduleDriveSave();renderAll();
   toast(m[id]?`Entry ${id} marked as posted`:`Entry ${id} marked as not posted`);
 }
+// Three plain steps (§11.7 v1.3): enter balances → post the entry → the book matches.
 function closeSteps(c){
   const hasPos=!!(c.positions&&c.positions.length),openDiffs=(c.positions||[]).filter(r=>Math.abs(r.diff)>=1).length;
-  const allPosted=c.entries.length>0&&c.entries.every(e=>entryPosted(c,e));
-  const rechecked=!!c.recheck&&c.recheck.openDiffs===0;
+  const nE=c.entries.length,nP=c.entries.filter(e=>entryPosted(c,e)).length,allPosted=nE>0&&nP===nE;
+  const rechecked=!!c.recheck&&c.recheck.openDiffs===0,balDone=hasPos&&!c.missing;
+  const postDone=nE?allPosted:balDone&&!openDiffs;
+  // Warn only while there is still something to post: "Nothing to post" is not a problem.
+  const blocked=c.app&&balDone&&!postDone&&meJournal(c.month).issues.length>0;
   const s=[
-    {label:'Positions',done:hasPos&&!c.missing,hint:c.app?(c.missing?`${c.positions.length} of ${c.positions.length+c.missing} filled`:`${c.positions.length} accounts filled`):hasPos?`${c.positions.length} accounts given`:'Give Claude your month-end balances'},
-    {label:'Differences',done:hasPos,warn:hasPos&&openDiffs>0,hint:hasPos?(openDiffs?`${openDiffs} to resolve`:'None'):'After positions'},
-    {label:'Journal entries',done:c.entries.length?allPosted:hasPos&&!openDiffs,hint:c.entries.length?`${c.entries.filter(e=>entryPosted(c,e)).length} of ${c.entries.length} posted`:'None needed yet'},
-    {label:'Re-check',done:rechecked,hint:c.recheck?(c.recheck.openDiffs?`${c.recheck.openDiffs} differences left`:'Books match'):`When books reach ${c.label}`},
-    {label:'Closed',done:c.status==='closed',hint:c.status==='closed'?'Locked':''},
+    {label:'Enter balances',done:balDone,hint:c.app?`${c.positions.length} of ${c.positions.length+(c.missing||0)} entered`:hasPos?`${c.positions.length} accounts given`:'Give Claude your balances'},
+    {label:'Post the entry',done:postDone,warn:blocked,
+      hint:!balDone&&c.app?'After balances':nE>1?`${nP} of ${nE} posted`:nE?(allPosted?'Posted':blocked?'Needs your answer':'Ready'):openDiffs?(c.app?(blocked?'Needs your answer':'After balances'):'Ask Claude for it'):'Nothing to post'},
+    {label:'Book matches',done:rechecked||c.status==='closed',warn:!!c.recheck&&c.recheck.openDiffs>0,
+      hint:c.recheck?(c.recheck.openDiffs?`${c.recheck.openDiffs} difference${c.recheck.openDiffs===1?'':'s'} left`:'Matches'):`When your book reaches ${monthLabel(c.month).replace(/ \d{4}$/,'')}`},
   ];
   let cur=s.findIndex(x=>!x.done);if(cur<0)cur=s.length;
   return{steps:s,cur};
+}
+// The one line under the stepper: what to do next, with at most one button for it.
+function closeNextHTML(c){
+  const{cur}=closeSteps(c),M=escAttr(c.month);
+  if(c.status==='closed')return{msg:'<span class="good">Closed.</span> Your book matches every balance for this month.',btn:''};
+  if(cur===0){
+    if(c.app)return{msg:`${c.missing} account${c.missing===1?'':'s'} still need${c.missing===1?'s':''} a balance.`,btn:`<button class="btn btn-secondary btn-sm" onclick="meShow('${M}','fill')">${ic('table','s16')}Show empty rows</button>`};
+    return{msg:'Give Claude your month-end balances in chat, or fill them in below.',btn:''};
+  }
+  if(cur===1){
+    if(c.app){const j=meJournal(c.month);if(j.issues.length)return{msg:escH(j.issues[0]),btn:`<button class="btn btn-secondary btn-sm" onclick="meShow('${M}','entry')">Go to the entry</button>`};
+      return{msg:meOwn()?'The entry is ready to post to your book.':'The entry is ready: download it for Accurate, import it, then tick it as posted.',btn:`<button class="btn btn-secondary btn-sm" onclick="meShow('${M}','entry')">Go to the entry</button>`};}
+    if(!c.entries.length)return{msg:'Ask Claude in chat for the entry that clears the differences.',btn:''};
+    return{msg:'Post the entries below in Accurate yourself, then tick them.',btn:''};
+  }
+  return{msg:closeRecheckText(c),btn:''};
+}
+function closeRecheckText(c){
+  return c.recheck?(c.recheck.openDiffs?`<span class="warn">${c.recheck.openDiffs} difference${c.recheck.openDiffs===1?'':'s'} left</span> now that your book reaches ${monthLabel(c.recheck.asOf,true)}.`
+      :`<span class="good">Your book matches every balance</span> (book through ${monthLabel(c.recheck.asOf,true)}).`)
+    :`Waiting for your book to reach ${escH(monthLabel(c.month,true))}${c.app&&c.missing?' and every balance to be entered':''}. It runs to ${escH(asOfLabel())} now.`;
 }
 function stepperHTML(c){
   const{steps,cur}=closeSteps(c);
@@ -4128,8 +4188,10 @@ function copyEntry(month,id){
   else toast('Copy is not available in this browser');
 }
 function closeStatusCardHTML(c){
-  return`<div class="grid" id="closeStatus"><section class="card span-12">${cardHead('calendar-check',escH(c.label),`Books through ${escH(asOfLabel())}`,closeStatusBadge(c))}${stepperHTML(c)}
-      ${c.note?`<p class="help" style="margin-top:14px">${escH(c.note)}</p>`:''}</section></div>`;
+  const n=closeNextHTML(c);
+  return`<div class="grid" id="closeStatus"><section class="card span-12">${cardHead('calendar-check',`${escH(monthLabel(c.month,true))} close`,`Your book runs to ${escH(asOfLabel())}`,closeStatusBadge(c))}${stepperHTML(c)}
+      <div class="me-nextstep"><p class="summary-line" id="closeNext">${n.msg}</p>${n.btn}</div>
+      ${c.note?`<p class="help" style="margin-top:10px">${escH(c.note)}</p>`:''}</section></div>`;
 }
 function meStartHTML(){
   const M=meLastFinished();if(meStore()[M])return'';
@@ -4137,7 +4199,7 @@ function meStartHTML(){
 }
 function renderClose(){
   if(!W())return wealthEmptyHTML();
-  const list=allCloses(),start=meStartHTML(),desc='Fill in your month-end figures; the app suggests the journal and the Accurate import file';
+  const list=allCloses(),start=meStartHTML(),desc='Check your balances against your book once a month';
   if(!list.length)return`${pageHead('Month-end',desc,start)}<div class="card">${emptyHTML('calendar-check','No month-end close yet. Start one to fill in your month-end figures.')}</div>`;
   if(!CLOSE_SEL||!list.some(c=>c.month===CLOSE_SEL))CLOSE_SEL=list[0].month;
   const c=list.find(x=>x.month===CLOSE_SEL);
@@ -4154,9 +4216,6 @@ function renderClose(){
       <div class="table-wrap"><table class="data"><thead><tr><th scope="col">Account</th><th scope="col" class="num">Debit</th><th scope="col" class="num">Credit</th></tr></thead>
         <tbody>${e.lines.map(l=>`<tr><td><span class="muted">${escH(l.account)}</span> ${escH(l.name||name(l.account))}</td><td class="num amt">${l.debit?fmtIDR(l.debit):''}</td><td class="num amt">${l.credit?fmtIDR(l.credit):''}</td></tr>`).join('')}</tbody>
         <tfoot><tr><td style="font-weight:600">Total${td!==tc?' <span class="badge bad">Unbalanced</span>':''}</td><td class="num amt" style="font-weight:600">${fmtIDR(td)}</td><td class="num amt" style="font-weight:600">${fmtIDR(tc)}</td></tr></tfoot></table></div></div>`;}).join('');
-  const recheck=c.recheck?(c.recheck.openDiffs?`<span class="warn">${c.recheck.openDiffs} difference${c.recheck.openDiffs===1?'':'s'} left</span> after the books reached ${monthLabel(c.recheck.asOf,true)}.`
-      :`<span class="good">Books match every position</span> (books through ${monthLabel(c.recheck.asOf,true)}).`)
-    :`Runs once the books are posted through ${escH(c.label)}${c.app&&c.missing?' and every account is filled in':''}. Books are currently through ${escH(asOfLabel())}.`;
   const fillHere=!c.app&&!(c.positions&&c.positions.length)?`<button class="btn btn-secondary btn-sm" onclick="meStart('${escAttr(c.month)}')">${ic('table','s16')}Fill in positions here</button>`:'';
   const positions=c.app?`<div class="grid">${mePositionsHTML(c.month)}</div><div class="grid">${meJournalHTML(c.month,c)}</div>`
     :`<div class="grid">
@@ -4171,8 +4230,7 @@ function renderClose(){
     ${closeStatusCardHTML(c)}
     ${naCardHTML()}
     ${positions}
-    ${otherCard}
-    <div class="grid"><section class="card span-12">${cardHead('refresh-cw','Re-check','')}<p class="summary-line">${recheck}</p></section></div>`;
+    ${otherCard}`;
 }
 /* ── Month-end in the app: you fill in your positions (prefilled from statements where they reach
    the month-end, or kept from last month), the app suggests the one journal voucher that brings
@@ -4315,7 +4373,7 @@ function meJournal(M){
   if(incUnsure)issues.push(`${incUnsure} typed income receipt${incUnsure===1?'':'s'} dated within the book’s months need${incUnsure===1?'s':''} an answer on the Income page: tick Posted once imported, and say whether this snapshot has ${incUnsure===1?'it':'them'}, so this journal doesn’t book ${incUnsure===1?'it':'them'} twice.`);
   if(incTodo)issues.push(own?`${incTodo} income receipt${incTodo===1?'':'s'} in this period ${incTodo===1?'isn’t':'aren’t'} posted to your book yet. This journal counts typed income as booked, so post ${incTodo===1?'it':'them'} on the Income page first.`
     :`${incTodo} income receipt${incTodo===1?'':'s'} in this period ${incTodo===1?'isn’t':'aren’t'} saved for import yet. This journal counts typed income as booked, so download it on the Income page first.`);
-  if(lines.some(l=>!l.account))issues.push('Choose a difference account under Counter-accounts');
+  if(lines.some(l=>!l.account))issues.push('Choose where unexplained differences go');
   if(!lines.length&&!missing&&!pv)issues.push('Nothing to post: every rupiah account matches the book');
   const pending=[...new Set([...lines,...fx].map(l=>l.account).filter(naPending))];
   const j={date:to,description:meText(`Month-end reconciliation ${monthLabel(M,true)}`,200),lines,fx,buckets,residual,bookM,from,issues,pending,state:'new',posted:null};
@@ -4432,17 +4490,46 @@ function meSrcHTML(M,a){
   if(p)out.push(`<span class="badge${p.src==='statement'?' accent':''}">${p.src==='statement'?`Statement ${escH(meDay(p.date||meMonthEnd(M)))}`:p.src==='kept'?'Kept':p.src==='excel'?'Excel':'Typed'}</span>`);
   if(fxA&&p&&p.v==null)out.push('<span class="badge warn">Needs a rate</span>');
   if(s&&!(p&&same(fxA?(p.fx||{}).amt:p.v,s.v)))out.push(`<button class="btn btn-ghost btn-sm" onclick="meUseStmt('${escAttr(M)}','${escAttr(a.id)}')" title="Use the statement figure">${ic('receipt','s16')}${s.exact?'Statement':'Statement '+escH(meDay(s.date))}: ${fxA?escH(a.ccy)+' '+fmtNum2(s.v):fmtIDRShort(s.v)}</button>`);
-  if(!(p&&same(p.v,l.v)))out.push(`<button class="btn btn-ghost btn-sm" onclick="meKeep('${escAttr(M)}','${escAttr(a.id)}')" title="Same figure as ${escH(l.label)}">${ic('refresh-cw','s16')}Same as ${escH(l.label)}</button>`);
+  if(!(p&&same(p.v,l.v)))out.push(`<button class="btn btn-ghost btn-sm" onclick="meKeep('${escAttr(M)}','${escAttr(a.id)}')" title="Same figure as ${escH(l.label)}">${ic('refresh-cw','s16')}Same as ${escH(l.label)}${l.fx&&l.fx.amt!=null?'':`: ${fmtIDRShort(l.v||0)}`}</button>`);
   return out.join('');
 }
 function fmtNum2(n){return Number(n||0).toLocaleString('id-ID',{maximumFractionDigits:2});}
 function meDiffHTML(M,a,bi){const p=mePosOf(M,a.id);if(!p)return'<span class="faint">—</span>';const d=Math.round(p.v-meExpected(M,a.id,bi));
   return Math.abs(d)>=1?`<span class="warn">${d>0?'+':'−'}${fmtIDR(Math.abs(d))}</span>`:'<span class="good">Match</span>';}
 function meInputVal(n){return n==null?'':fmtNum2(n);}
+/* The balances list can show every row, only the empty ones, or only the ones with a difference.
+   Typing never re-renders, so a row stays put until the next full render. */
+let ME_FILTER='all';
+function meIsDiff(M,a,bi){const p=mePosOf(M,a.id);return!!p&&Math.abs(Math.round(p.v-meExpected(M,a.id,bi)))>=1;}
+function meCounts(M){const bi=meBookIdx(M),accs=meAccounts(M);return{all:accs.length,fill:accs.filter(a=>!mePosOf(M,a.id)).length,diff:accs.filter(a=>meIsDiff(M,a,bi)).length};}
+function meChipsHTML(M){
+  const n=meCounts(M),b=(k,l)=>`<button aria-pressed="${ME_FILTER===k}" onclick="ME_FILTER='${k}';renderAll()">${l} <span class="me-cnt" id="me-cnt-${k}">${n[k]}</span></button>`;
+  return`<div class="seg sm me-chips" role="group" aria-label="Show rows">${b('all','All')}${b('fill','To fill')}${b('diff','Differences')}</div>`;
+}
+// Jump from the status card: show the empty rows, or scroll to the entry.
+function meShow(M,what){
+  if(what==='fill'){ME_FILTER='fill';renderAll();const c=$('mePosCard');if(c)c.scrollIntoView({block:'start',behavior:'smooth'});return;}
+  const j=$('meJournal');if(j)j.scrollIntoView({block:'start',behavior:'smooth'});
+}
+function meStmtReady(M){return meAccounts(M).filter(a=>{if(meHasEntry(M,a.id))return false;const s=meStmt(M,a.id);return s&&s.exact;}).length;}
+function meFillMenu(el,M){
+  const n=meStmtReady(M);
+  openMenu(el,{title:'Fill empty rows',items:[
+    {label:`From statements dated ${meDay(meMonthEnd(M))}${n?` (${n})`:''}`,icon:'receipt',onSelect:()=>meFill(M)},
+    {label:'Same as last month',icon:'refresh-cw',onSelect:()=>meKeepAll(M)}]});
+}
+function meMoreMenu(el,M){
+  const items=[{label:'Download Excel',icon:'download',onSelect:()=>xlDownload(M)},{label:'Upload Excel',icon:'upload',onSelect:()=>xlPick(M)},{label:'Add account',icon:'plus',onSelect:()=>openAddAccount()}];
+  const c=CM();if(c&&c.accounts.length)items.push({label:'Match statements to accounts',icon:'arrow-left-right',onSelect:()=>meMapSheet()});
+  openMenu(el,{title:'Your balances',items});
+}
 function mePositionsHTML(M){
   const st=meClose0(M),bi=meBookIdx(M),accs=meAccounts(M),grpLabel=id=>wGroup(id).label;
+  const show=a=>ME_FILTER==='fill'?!mePosOf(M,a.id):ME_FILTER==='diff'?meIsDiff(M,a,bi):true;
+  const bookShort=bi<0?'':monthLabel(wMonths()[bi].month).replace(/ \d{4}$/,'');
   let rows='',lastG=null;
   accs.forEach((a,i)=>{
+    if(!show(a))return;
     if(a.group!==lastG){lastG=a.group;rows+=`<tr class="group-row"><th scope="rowgroup" colspan="4">${escH(grpLabel(a.group))}</th></tr>`;}
     const p=st.pos[a.id],fxA=(a.ccy||'IDR')!=='IDR',d=`data-m="${escH(M)}" data-code="${escH(a.id)}"`;
     const fig=fxA
@@ -4452,21 +4539,23 @@ function mePositionsHTML(M){
       :`<div class="input-affix"><span class="affix">Rp</span><input class="input" id="me-v-${i}" ${d} data-f="v" inputmode="decimal" autocomplete="off" aria-label="${escH(a.name)}: your figure" value="${meInputVal(p?p.v:null)}" oninput="meInput(this)"></div>`;
     const mk=a.investment?`<div class="input-affix me-market"><span class="affix">Mkt</span><input class="input" id="me-mk-${i}" ${d} data-f="market" inputmode="decimal" autocomplete="off" aria-label="${escH(a.name)}: market value" placeholder="Market value (optional)" value="${meInputVal((st.market[a.id]||{}).v)}" oninput="meInput(this)"></div>`:'';
     rows+=`<tr class="me-row${meHasEntry(M,a.id)?'':' me-empty'}" id="me-row-${i}"><td class="merchant" data-label="Account"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${escH(a.id)}${a.side==='liability'?' · owed':''} ${naBadge(a.id)}</div></td>
-      <td class="num amt" data-label="Book">${fmtIDR(meBook(a.id,bi))}${meIncAfter(M,a.id,bi)?`<div class="merchant-sub">+ ${fmtIDR(meIncAfter(M,a.id,bi))} typed income</div>`:''}</td>
+      <td class="num amt" data-label="In your book${bookShort?` (${escH(bookShort)})`:''}">${fmtIDR(meBook(a.id,bi))}${meIncAfter(M,a.id,bi)?`<div class="merchant-sub">+ ${fmtIDR(meIncAfter(M,a.id,bi))} typed income</div>`:''}</td>
       <td class="me-fig" data-label="Your figure">${fig}${mk}<div class="me-src" id="me-src-${i}">${meSrcHTML(M,a)}</div></td>
       <td class="num amt" data-label="Difference" id="me-d-${i}">${meDiffHTML(M,a,bi)}</td></tr>`;
   });
-  const filled=accs.filter(a=>mePosOf(M,a.id)).length,bookLbl=bi<0?'no book month':monthLabel(wMonths()[bi].month);
-  const gap=bi>=0&&wMonths()[bi].month<M?`<div class="banner info me-banner">${ic('info')}<span class="msg">The book is through ${escH(monthLabel(wMonths()[bi].month,true))}, so differences cover everything since then, up to ${escH(meDay(meMonthEnd(M)))} ${M.slice(0,4)}. Market values show on Net worth once the book reaches ${escH(monthLabel(M,true))}.</span></div>`:'';
-  const tools=`<button class="btn btn-secondary btn-sm" onclick="meFill('${escAttr(M)}')">${ic('receipt','s16')}Fill from statements</button>
-    <button class="btn btn-secondary btn-sm" onclick="meKeepAll('${escAttr(M)}')">${ic('refresh-cw','s16')}Keep empty rows as last month</button>
-    <button class="btn btn-secondary btn-sm" onclick="xlDownload('${escAttr(M)}')" title="Your figures as an Excel file to edit">${ic('download','s16')}Download Excel</button>
-    <button class="btn btn-secondary btn-sm" onclick="xlPick('${escAttr(M)}')" title="Upload the edited Excel file; you see the changes before they apply">${ic('upload','s16')}Upload Excel</button>
-    <button class="btn btn-ghost btn-sm" onclick="openAddAccount()">${ic('plus','s16')}Add account</button>`;
-  return`<section class="card flush span-12" id="mePosCard">${cardHead('table','Your positions',`<span id="me-count">${filled} of ${accs.length} filled</span> · book column is ${escH(bookLbl)} · liabilities as the amount owed`,tools)}
+  const filled=accs.filter(a=>mePosOf(M,a.id)).length;
+  // Book lag in one line: name the months after the book's last one (up to three), else "since then".
+  let gap='';
+  if(bi>=0&&wMonths()[bi].month<M){const bm=wMonths()[bi].month,after=[];for(let k=meShift(bm,1);k<=M&&after.length<4;k=meShift(k,1))after.push(monthLabel(k).replace(/ \d{4}$/,''));
+    gap=`<div class="banner info me-banner">${ic('info')}<span class="msg">Your book runs to ${escH(monthLabel(bm,true))}, so differences include ${after.length>3?'every month since then':escH(after.length===1?after[0]:after.slice(0,-1).join(', ')+' and '+after[after.length-1])}.</span></div>`;}
+  const tools=`<button class="btn btn-secondary btn-sm" onclick="meFillMenu(this,'${escAttr(M)}')" aria-haspopup="menu">${ic('receipt','s16')}Fill empty rows${ic('chevron-down','s16')}</button>
+    <button class="icon-btn" onclick="meMoreMenu(this,'${escAttr(M)}')" aria-haspopup="menu" aria-label="More for your balances" title="Excel, add account, match statements">${ic('ellipsis')}</button>`;
+  const empty=!rows?`<div style="padding:0 var(--card-pad) var(--card-pad)">${ME_FILTER==='fill'?emptyHTML('square-check','Every account has a balance'):ME_FILTER==='diff'?emptyHTML('square-check','No differences'):emptyHTML('table','No accounts to check yet')}</div>`:'';
+  return`<section class="card flush span-12" id="mePosCard">${cardHead('table','1 · Your balances',`<span id="me-count">${filled} of ${accs.length} entered</span> · amounts owed shown as positive`,tools)}
+    <div class="me-bar">${meChipsHTML(M)}</div>
     ${gap?`<div style="padding:0 var(--card-pad)">${gap}</div>`:''}
-    <div class="table-wrap"><table class="data me-table"><thead><tr><th scope="col">Account</th><th scope="col" class="num">Book</th><th scope="col">Your figure</th><th scope="col" class="num">Difference</th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${meMapHTML()}</section>`;
+    ${rows?`<div class="table-wrap"><table class="data me-table"><thead><tr><th scope="col">Account</th><th scope="col" class="num">In your book${bookShort?` (${escH(bookShort)})`:''}</th><th scope="col">Your figure</th><th scope="col" class="num">Difference</th></tr></thead><tbody>${rows}</tbody></table></div>`:empty}
+    </section>`;
 }
 function meAccOptions(sel,blank,includeBalance){
   const led=meLedger(),kinds=[['expense','Expense'],['income','Income'],['equity','Equity']];
@@ -4476,6 +4565,10 @@ function meAccOptions(sel,blank,includeBalance){
   if(sel&&!led.some(x=>x.id===sel)&&!(includeBalance&&wAcc(sel)))o+=`<option value="${escH(sel)}" selected>${escH(sel)}</option>`;
   return o;
 }
+function meMapSheet(){
+  const h=meMapHTML();if(!h)return;
+  openSheet({title:'Match statements to accounts',body:h,confirmDiscard:false});
+}
 function meMapHTML(){
   const c=CM();if(!c||!c.accounts.length)return'';
   const cfg=meCfg(),book=wAccounts().filter(a=>a.active||Object.values(cfg.stmtMap).includes(a.id));
@@ -4484,8 +4577,7 @@ function meMapHTML(){
     return`<div class="setting-row"><div><div class="li-title">${escH(ca.label)}</div><div class="li-sub">${ca.kind==='card'?'Card statement':'Account statement'} · ${escH(ca.currency||'IDR')}${auto&&cur?' · matched automatically':''}</div></div>
       <select class="input me-select" aria-label="Book account for ${escH(ca.label)}" onchange="meSetMap('${escAttr(ca.id)}',this.value)"><option value=""${cur?'':' selected'}>Not in the book</option>${opts.map(a=>`<option value="${escH(a.id)}"${a.id===cur?' selected':''}>${escH(a.id)} · ${escH(a.name)}</option>`).join('')}</select></div>`;}).join('');
   const n=c.accounts.filter(ca=>meMapOf(ca)).length;
-  return`<details class="me-details"><summary>${ic('arrow-left-right','s16')}Statements matched to book accounts <span class="faint">· ${n} of ${c.accounts.length}</span></summary>
-    <p class="help">Several statements can feed one account (cards add up into the book’s card account). Pick “Not in the book” for anything the book doesn’t track.</p>${rows}</details>`;
+  return`<div class="me-details me-sheet"><p class="help">${n} of ${c.accounts.length} statements matched. Several statements can feed one account (cards add up into the book’s card account). Pick “Not in the book” for anything the book doesn’t track. Saved for every close.</p>${rows}</div>`;
 }
 function meLinesTable(lines){
   const td=lines.reduce((s,l)=>s+(l.amount>0?l.amount:0),0),tc=lines.reduce((s,l)=>s+(l.amount<0?-l.amount:0),0);
@@ -4498,10 +4590,25 @@ function meCounterHTML(M,j){
   const rows=ME_BUCKETS.map(b=>{const x=j.buckets.find(y=>y.id===b.id);
     return`<div class="setting-row"><div><div class="li-title">${escH(b.label)}</div><div class="li-sub">${x?`${x.amount<0?'Money in':'Money out'} on statements: <span class="amt">${fmtIDR(Math.abs(x.amount))}</span>`:'Nothing on statements this period'}</div></div>
       <select class="input me-select" aria-label="Account for ${escH(b.label)}" onchange="meSetCounter('${b.id}',this.value)">${meAccOptions(cfg.counter[b.id]||'','Difference account',false)}</select></div>`;}).join('');
-  return`<details class="me-details"${cfg.diffAccount?'':' open'}><summary>${ic('settings','s16')}Counter-accounts <span class="faint">· remembered for every close</span></summary>
+  return`<div class="me-details me-sheet"><p class="help">Where the money on your statements goes in the entry. Remembered for every close.</p>
     <div class="setting-row"><div><div class="li-title">Difference account</div><div class="li-sub">Takes whatever the statements don’t explain, and any type without its own account</div></div>
       <select class="input me-select" aria-label="Difference account" onchange="meSetDiff(this.value)">${meAccOptions(cfg.diffAccount||'','Choose…',true)}</select></div>
-    ${rows}</details>`;
+    ${rows}</div>`;
+}
+function meSettingsSheet(M){openSheet({title:'Entry settings',body:meCounterHTML(M,meJournal(M)),confirmDiscard:false});}
+// The one question the entry can't go without, asked inline until it is answered.
+function meAskHTML(){
+  if(meCfg().diffAccount)return'';
+  return`<div class="me-ask"><label class="label" for="meDiffAsk">Where should differences the statements don’t explain go?</label>
+    <select class="input me-select" id="meDiffAsk" onchange="meSetDiff(this.value)">${meAccOptions('','Choose an account…',true)}</select>
+    <p class="help">Pick the account you use for amounts you can’t explain. Asked once; remembered for every close. The other choices are under Entry settings.</p></div>`;
+}
+function meEntryMoreMenu(el,M){
+  const j=meJournal(M),own=meOwn(),st=meClose0(M),can=!j.issues.length||(own&&j.state==='posted');
+  const lbl=st&&st.exportedAt?'Download again':'Download for Accurate import (optional)';
+  openMenu(el,{title:'The entry',items:[
+    {label:can?lbl:`${lbl} · ${j.issues[0]}`,icon:'download',onSelect:()=>{if(can)meExport(M);else toast(j.issues[0]);}},
+    {label:'Entry settings',icon:'settings',onSelect:()=>meSettingsSheet(M)}]});
 }
 function meJournalHTML(M,c){
   const j=meJournal(M),e=c.entries.find(x=>x.id==='J'),posted=e?entryPosted(c,e):false,st=meClose0(M),own=meOwn();
@@ -4523,14 +4630,20 @@ function meJournalHTML(M,c){
   const fx=j.fx.length&&!(own&&j.state==='posted')?`<div class="entry"><div class="entry-head"><div class="li-title"><span class="badge warn" style="margin-right:8px">FX</span>${own?'Foreign-currency accounts — go into your book with the lines above. The Accurate import file leaves them out (it can’t carry exchange rates)':'Foreign-currency accounts — post by hand in Accurate (the import file can’t carry exchange rates)'}</div></div>${meLinesTable(j.fx)}</div>`:'';
   const can=!j.issues.length||(own&&j.state==='posted');
   const next=st&&st.exportedAt?`<div class="me-next"><div class="li-title">${ic('square-check','s16')} Saved ${escH(fmtDateTime(st.exportedAt))} as <code>${escH(meFileName(M))}</code></div>
-      <p class="help">${own?'Optional: only if you also want this in Accurate. ':''}Next: ask Claude to import it into Accurate, or run <code>accurate-write queue --book ${escH(W().source.book)} --file "%USERPROFILE%\\Downloads\\${escH(meFileName(M))}" --check-only</code>, then without <code>--check-only</code>, then <code>accurate-write import --book ${escH(W().source.book)}</code>.${own?' The next books import links it to the entry in your book instead of adding it again.':' Tick “Posted in Accurate” once it’s in.'}</p></div>`:'';
-  const dl=`<button class="btn ${own?'btn-secondary':'btn-primary'} btn-sm" ${can?'':'disabled aria-disabled="true"'} onclick="meExport('${escAttr(M)}')" title="${can?'Download the voucher in the Accurate import format':escH(j.issues[0]||'')}">${ic('download','s16')}${st&&st.exportedAt?'Download again':own?'Download for Accurate import (optional)':'Download for Accurate import'}</button>`;
-  const post=own&&j.state!=='posted'?`<button class="btn btn-primary btn-sm" id="mePostBtn" ${j.issues.length?'disabled aria-disabled="true"':''} onclick="mePost('${escAttr(M)}')" title="${j.issues.length?escH(j.issues[0]):'Put this voucher in your own book'}">${ic('book-open','s16')}${j.state==='update'?'Update posted entry':'Post to book'}</button>`:'';
-  const tools=post+dl;
-  return`<section class="card span-12" id="meJournal">${cardHead('receipt','Suggested journal',own?`One voucher that brings your book to your figures · statement activity ${escH(period)}`:`One voucher that brings the book to your figures · statement activity ${escH(period)}`,tools)}
-    ${!can&&j.lines.length?`<p class="help err" style="margin-bottom:12px">${ic('info','s16')}${escH(j.issues[0])}</p>`:''}
+      <p class="help">${own?'Optional: only if you also want this in Accurate. ':''}Next: ask Claude to import it into Accurate.${own?' The next books import links it to the entry in your book instead of adding it again.':' Tick “Posted in Accurate” once it’s in.'}</p>
+      <details class="me-how"><summary>How to import into Accurate yourself</summary><p class="help">Run <code>accurate-write queue --book ${escH(W().source.book)} --file "%USERPROFILE%\\Downloads\\${escH(meFileName(M))}" --check-only</code>, then the same without <code>--check-only</code>, then <code>accurate-write import --book ${escH(W().source.book)}</code>.</p></details></div>`:'';
+  // With the app's own book, Post is the one main button and the Accurate file sits in More.
+  // Without it, the download stays the main button.
+  const dl=own?'':`<button class="btn btn-primary btn-sm" ${can?'':'disabled aria-disabled="true"'} onclick="meExport('${escAttr(M)}')" title="${can?'Download the entry in the Accurate import format':escH(j.issues[0]||'')}">${ic('download','s16')}${st&&st.exportedAt?'Download again':'Download for Accurate import'}</button>`;
+  const post=own&&j.state!=='posted'?`<button class="btn btn-primary btn-sm" id="mePostBtn" ${j.issues.length?'disabled aria-disabled="true"':''} onclick="mePost('${escAttr(M)}')" title="${j.issues.length?escH(j.issues[0]):'Put this entry in your own book'}">${ic('book-open','s16')}${j.state==='update'?'Update posted entry':'Post to book'}</button>`:'';
+  const more=own?`<button class="icon-btn" id="meEntryMore" onclick="meEntryMoreMenu(this,'${escAttr(M)}')" aria-haspopup="menu" aria-label="More for the entry" title="Accurate file, entry settings">${ic('ellipsis')}</button>`
+    :`<button class="icon-btn" onclick="meSettingsSheet('${escAttr(M)}')" aria-label="Entry settings" title="Entry settings">${ic('settings')}</button>`;
+  const tools=post+dl+more;
+  return`<section class="card span-12" id="meJournal">${cardHead('receipt','2 · Post the entry',`${own?'What changes in your book so it matches your balances':'What to post in Accurate so the book matches your balances'} · statement activity ${escH(period)}`,tools)}
+    ${meAskHTML()}
+    ${!can&&j.lines.length&&!(meAskHTML()&&j.issues[0]==='Choose where unexplained differences go')?`<p class="help err" style="margin-bottom:12px">${ic('info','s16')}${escH(j.issues[0])}</p>`:''}
     ${j.pending.length&&!own?`<p class="help" style="margin-bottom:12px;color:var(--warn)">${ic('triangle-alert','s16')}${j.pending.map(escH).join(', ')} ${j.pending.length===1?'isn’t':'aren’t'} in Accurate yet — create ${j.pending.length===1?'it':'them'} there before importing this file.</p>`:''}
-    ${body}${fx}${next}${meCounterHTML(M,j)}</section>`;
+    ${body}${fx}${next}</section>`;
 }
 // Patch only what depends on the figures, so the input being typed in keeps its cursor.
 function mePatch(M){
@@ -4541,7 +4654,8 @@ function mePatch(M){
     const p=mePosOf(M,a.id),idr=$('me-idr-'+i);if(idr)idr.textContent=p?fmtIDR(p.v):'Amount × rate = rupiah';
     const row=$('me-row-'+i);if(row)row.classList.toggle('me-empty',!meHasEntry(M,a.id));
   });
-  const cnt=$('me-count');if(cnt)cnt.textContent=`${accs.filter(a=>mePosOf(M,a.id)).length} of ${accs.length} filled`;
+  const cnt=$('me-count');if(cnt)cnt.textContent=`${accs.filter(a=>mePosOf(M,a.id)).length} of ${accs.length} entered`;
+  const n=meCounts(M);for(const k of['all','fill','diff']){const e=$('me-cnt-'+k);if(e)e.textContent=n[k];}
   const c=allCloses().find(x=>x.month===M);if(!c)return;
   const j=$('meJournal');if(j){const open=[...j.querySelectorAll('details')].map(d=>d.open);j.outerHTML=meJournalHTML(M,c);
     [...$('meJournal').querySelectorAll('details')].forEach((d,k)=>{if(open[k]!==undefined)d.open=open[k];});}
