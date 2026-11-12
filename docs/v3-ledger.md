@@ -1,5 +1,8 @@
 # ExpenseTrack v3 — the app keeps its own book (`js/ledger.js`)
 
+> **Superseded by `docs/v4-books.md` (2026-11-12, schema `et-ledger/2`).** This file describes v3
+> and the parts v4 kept (AI request, the API key, backups); where they differ, v4-books.md wins.
+
 All examples use fabricated values. Personal data never goes into code, tests, fixtures, docs or
 commit messages (the repo is public).
 

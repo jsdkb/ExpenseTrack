@@ -59,6 +59,9 @@ Six gaps flagged before continuing: hourly re-login friction, the "unverified ap
     - Shrink hero number/padding sizes slightly at narrow widths.
     - Let header buttons (Refresh / Import / Sign out) wrap cleanly under the title instead of overflowing.
 
+12. **[DONE, 2026-11-12, not pushed] Books v4 — copy the owner's ERP books**
+    Journals are the only source of the ledger (drafts, numbering, periods with close/lock, year-end close into Retained earnings, account rules, audit trail), the ERP's chart structure with a re-code, the ERP report layouts and filter kit, and a Compare with column. Contract: `docs/v4-books.md`; design: `UX-GUIDELINE.md` §11.10b–c.
+
 ## Reference
 
 Full spec and business logic (parsers, categories, data model, filtering, UI layout) is documented in the original conversation and mirrored in the existing artifact at `../Artifacts/maybank-cc-tracker/index.html`.

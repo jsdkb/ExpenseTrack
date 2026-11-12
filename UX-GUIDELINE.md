@@ -1,9 +1,10 @@
 # ExpenseTrack — UX Guideline
 
-**Version 1.3 · 2026-11-06 · Status: FINAL — v1.0 approved 2026-10-15; v1.1 ("calm private-banking"
+**Version 1.4 · 2026-11-11 · Status: FINAL — v1.0 approved 2026-10-15; v1.1 ("calm private-banking"
 brand and home-screen revision) approved 2026-10-16; v1.2 (wealth tracker v2: Home, Books, Plan,
 statement-corrected spending) 2026-11-03; v1.3 (simpler Chart of accounts and Month-end, §11.7,
-§11.10) 2026-11-06**
+§11.10) 2026-11-06; v1.4 (Books copied from the owner's ERP: journals, periods, ERP chart,
+filter kit, compare, §11.10b–c) 2026-11-11**
 
 This document is the design source of truth for ExpenseTrack on web and mobile. Every UI change
 should follow it; anything that needs to break a rule here should update this file first.
@@ -1104,9 +1105,16 @@ the imported `books.json`; each shows its own import step until a file exists.
     fill it in by hand — never a dead end.
   - **AI drafts (v3.1, several entries per sentence):** one bordered card per drafted entry,
     numbered (accent circle) "Entry 1 of 2" with an `AI` accent badge and an **Include** check on
-    the right; inside, the same form as above; under a line whose amount came from a bank or card
-    statement a `help` line with the landmark icon "from <statement name> statement <8 Oct>"; the
-    card's foot has ghost **Remove** and secondary **Post**. A card whose statement line is already
+    the right; under it the date · description, then **the entry as a journal** (2026-11-06,
+    owner's ask: read the journal, not boxes): a `table.data` with debit lines first ("Dr", code,
+    account name) and credit lines indented 40px ("Cr"), Debit and Credit columns (one Amount
+    column below 768px), and a `merchant-sub` line per row with the kind in plain words
+    ("Asset · goes up"), the memo, the currency badge and, for an amount from a bank or card
+    statement, the landmark icon "from <statement name> statement <8 Oct>"; a Total row with
+    `Balanced` / `Off by`; the checks. The card's foot has ghost **Edit** (opens the form above for
+    that card, with the same journal live under it; the button becomes **Done editing**), ghost
+    **Remove** and secondary **Post**. A card that fails the checks after a draft opens in Edit.
+    The manual form shows the same live journal under its lines ("The journal this makes"). A card whose statement line is already
     used by a posted voucher shows a warn note "Already in your book…" and starts unticked (the
     card dims); so does a card citing the same statement line as an earlier card ("Same bank line
     as entry 1…"). Under the cards: the proposed new accounts (editable code · name · kind · currency
@@ -1129,6 +1137,177 @@ the imported `books.json`; each shows its own import step until a file exists.
     "Changed / Voided / Accurate's version taken · <why>", sub-line "By you · <when>", and a
     `<details>` "Before: <date> · <total>" with the earlier lines; the last row says how it was
     created (with the owner's sentence for an AI entry).
+
+### 11.10b Books v4 — the ERP's books (2026-11-11)
+
+Question: *"What do my journals say, and is the book closed and sound?"* Since v4, Books copies the
+owner's ERP. Posted journals are the only source of every figure, and the reports work
+by date, not by month-end. Where this section and §11.10 disagree, this section wins. In
+particular:
+- the shared month-end picker, the tree tables with parent subtotals and the Balance sheet's
+  Market view are gone;
+- the draft form, AI cards, Edit, Void and History of §11.10 v3 stay.
+
+**Filter bar** (every Books page). One control row (§8.6 spacing) with:
+- **Search:** it runs 250 ms after typing stops.
+- **Native fields:** status, account, kind and dates.
+- **Preset chips:**
+  - ranges: Today · This month · Last month · This year;
+  - an as-of date: Today · End of last month · End of last year.
+
+  A preset applies at once and shows `aria-pressed`. Typed dates wait for the secondary **Show**
+  button.
+- **An inverted range** shows a `help err` line, and **Show** is disabled.
+- **Removable chips:** each active filter appears under the bar as a `chip` with a close icon
+  ("Status: Draft ×"). With two or more, a ghost **Clear all filters** follows.
+- **Paging:** any change returns to page 1, at 50 rows per page.
+- **Phones:** the presets scroll sideways inside the bar, never the page.
+
+**Sortable headers.** Each is a `<th aria-sort>` with a button.
+- Dates and amounts sort descending first; text sorts ascending.
+- A third click returns to the default (date, newest first).
+- Arrow icon: 16px, `--ink-3`, or `--accent` when active.
+
+**Compare with** (Balance sheet, Income statement, Trial balance). A select in the bar:
+**Off** (the default) · Previous period · Same period last year · Custom (two date fields).
+- On web, each amount gains a muted second column and a **Change** column.
+  - The change shows the amount and the %. Use `--good` / `--bad` only where up is clearly
+    better: income up, expenses down, net worth up.
+  - The % shows "—" when the earlier figure is 0.
+- Below 768px there is one amount column, with the compared figure and the change in a
+  `merchant-sub` line under it.
+- Exports carry both columns.
+
+**Status lines** use the `bk-check` row pattern (§11.10):
+- **Trial balance:** "Debits and credits balance" and "Opening balances balance".
+- **Balance sheet:** "Balanced".
+- Each is `good` or `bad`.
+
+**Journals:**
+- **Columns:** Number (tabular, `--ink-2`; "(draft)" in italics) · Date · Description · Kind badge
+  (Manual · AI · Month-end · Income · Opening · Year-end · From Accurate) · Status badge (Draft
+  `info`, Posted `good`, Void `neutral` struck through) · Amount (Σ debits).
+- **Filters:** search (number or description) · Status (All · Draft · Posted · Void) · Kind ·
+  Account · dates.
+- **Header:** primary **New journal**, secondary **Download Excel** (the filtered list).
+- **Empty:**
+  - "No journals match" with **Clear all filters**;
+  - with no filters, "No journals yet" with **New journal**.
+
+**Journal editor.** The §11.10 draft form becomes the one editor.
+- **Footer by state:**
+  - **Draft:** ghost **Delete draft** · secondary **Save draft** · primary **Post**.
+  - **Posted:** ghost **Copy** · ghost **Void** · secondary **Edit**.
+- **Rules:**
+  - **Save draft** needs two filled lines and may be unbalanced. **Post** needs a balanced entry
+    with a non-zero total.
+  - A warn strip "Dated more than 7 days ago" shows when the date is that far back; it never
+    blocks.
+  - Post confirms in place, in a `bk-check` row with the date, the total and "It gets the next
+    journal number".
+  - After posting, a good toast says "Posted as JV/2026/00042".
+  - In a closed or locked month, the form is read-only with a lock note: "October 2026 is closed.
+    Reopen it in Periods to change entries." **Periods** is a link.
+- **Shortcuts:** Ctrl+S saves the draft and Ctrl+Enter posts.
+
+**Chart of accounts** (supersedes the v1.3 table; the summary strip stays):
+- **One table, sorted by code:**
+  - columns: Code · Name · Type · Postable ✓ · Archived ✓ · actions (ghost icon buttons Edit ·
+    Archive · History, 36px);
+  - the name is indented 20px per level, and headers are semibold;
+  - the amount at the chosen as-of date sits between Type and Postable.
+- **Above the table:** search (code or name), a "Show archived" check and the as-of presets.
+- **Header:** secondary **New account** and **Download Excel**.
+- **Archive** asks inline, in a `bk-check` row. A refusal names the reason (still has a balance,
+  has accounts under it, or is your Retained earnings account).
+- **The account form:**
+  - code and type can be set only when the account is created;
+  - the parent list holds the same type only;
+  - a Postable check: an account that already has entries can't become a header.
+- **Phones:** a `.rows` list with the code under the name and the actions in a ⋯ menu.
+
+**General ledger:**
+- **Filters:** dates plus an account (All accounts, or one postable account).
+- **One card per account,** titled `code · name`.
+- **Table:** an **Opening** row, then Date · Number (opens the journal) · Description · Debit ·
+  Credit · Running.
+- **Footer:** "Closing", total debit, total credit and the closing balance (tabular, semibold).
+- Accounts with no opening and no entries are left out.
+- **Phones:** one `.rows` item per entry, showing the running balance.
+
+**Trial balance:**
+- **Filter:** dates (default 1 Jan – today).
+- **Table:** Code · Name · Opening · Debit · Credit · Closing, with a total row and its double
+  rule.
+- **Drill:** a row opens its account ledger in a sheet (Opening row, then the entries).
+- Zero accounts that can take entries are shown, muted.
+
+**Income statement:**
+- **Filter:** dates.
+- **Two cards:**
+  - **Income** and **Expenses**, each a flat table: Code · Name (link to its ledger for the same
+    range) · Amount, then its total.
+  - Then a **Net profit** row, or **Net loss** in `--bad` shown positive.
+- Year-end closing journals never count here.
+
+**Balance sheet:**
+- **Filter:** an as-of date.
+- **Web:** two columns. Assets on the left; on the right, Liabilities, Equity, then **Total
+  liabilities and equity**.
+- **Rows:** flat, Code · Name (ledger link) · Amount.
+- **Equity** ends with two lines:
+  - "Unclosed prior-year earnings" (only when not 0);
+  - "Current-year earnings".
+  A loss is relabelled "… loss", positive, in `--bad`.
+- **Phones:** one column.
+
+**Periods** (new page, Books group, icon `calendar-check`):
+- A year stepper, then 12 month rows: Month · Dates · State badge (Open `neutral`, Closed `info`,
+  Locked `good` with a lock icon) · Closed on · actions.
+- **Actions by state:**
+  - Open: **Close month**.
+  - Closed: **Reopen** and **Lock**.
+  - Locked: **Unlock**.
+  - The order rules disable the others, each with a tooltip saying why.
+- December's row says "· year end".
+- **The close sheet:**
+  - The checklist, as `bk-check` rows: previous month closed · no drafts in the month · trial
+    balance balances · opening balances balance.
+  - A reason box appears only when drafts exist.
+  - **Close month** is disabled while a blocking check fails.
+  - December adds "This makes the year-end entry: every income and expense account is moved into
+    Retained earnings." It links "View year-end entry" afterwards.
+- **Reopen and Unlock** ask for a reason. Reopening December says that its year-end entry will
+  be voided.
+- **Retained earnings account:** a select in the card header (equity accounts that can take
+  entries). It is required before the first December close.
+
+**Audit trail** (new page, Books group, icon `history`):
+- **Filters:** search · What (Journals · Accounts · Periods · Chart) · dates.
+- **Columns:** When · What · Item (a journal number, account code or month) · Action · Why ·
+  a ghost **View** that opens a sheet with the before / after details (the changed fields
+  highlighted).
+- 50 per page. Newest first.
+
+**Settings › Your book (v4):**
+- **Start my book:** the standard chart, plus an optional opening balances journal.
+- **Move to the ERP chart** (once; see §11.10c).
+- **Drafts from Accurate (n):** the list links to Journals, filtered to Status Draft · Kind From
+  Accurate.
+- The old review list (Add · Take Accurate's version · Dismiss) is gone.
+
+### 11.10c Move to the ERP chart (2026-11-11)
+
+A wide sheet from Settings › Your book.
+- **Intro:** "Your accounts get the ERP's numbering (1000 Assets … 9000 Income tax). Balances
+  don't change. Old codes are kept, so Month-end and Accurate still match."
+- **Table:** Old code · Name · Type · **New code** (an editable field with the standard header it
+  sits under as its `help` line) · a confidence badge (Sure `good`, Check `warn`).
+- **Filter chips:** All · To check.
+- **Footer:** Cancel and primary **Move my chart**. The button is disabled while any new code is
+  empty, duplicated, or under a header of another type.
+- **On confirm:** the gate runs. Any difference stops the move and lists the accounts. Success is
+  a good toast, "n accounts moved · balances unchanged".
 
 ### 11.11 Home (v2, 2026-11-03)
 

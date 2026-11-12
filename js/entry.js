@@ -1,12 +1,15 @@
-/* ExpenseTrack v3 — entries in the app's own book: New entry (typed by hand or drafted by Claude
-   from a sentence), Edit / Void with history, and the owner's Anthropic API key (Settings › AI).
-   Contract: docs/v3-ledger.md §6–§8. Loaded after js/books.js. No personal data in this file: the
-   repo is public.
+/* ExpenseTrack v4 — the journal editor of the app's own book: a new journal (typed by hand or
+   drafted by Claude from a sentence), drafts (Save draft · Post · Delete draft), posted journals
+   (Copy · Void · Edit with history), and the owner's Anthropic API key (Settings › AI).
+   Contract: docs/v4-books.md §2, §3, §8 (the book) and docs/v3-ledger.md §7–§8 (the AI request);
+   UX-GUIDELINE.md §11.10 and §11.10b. Loaded after js/books.js. No personal data in this file: the
+   repo is public. Nothing posts or saves in a closed or locked month (the book refuses it); the
+   editor says so and links to Books › Periods.
 
    The AI never posts. Claude only suggests drafts (one prompt may give several entries: a
    receipt, then a transfer, ...); the owner checks each in the same debit/credit form used for
    manual entries and posts it. A request sends today's date, the base currency, the chart of
-   accounts (id, name, kind, ccy, isParent of the non-suspended accounts), the current balance of
+   accounts (id, name, kind, ccy, isParent of the accounts neither suspended nor archived), the current balance of
    each posting account, the open receivables and payables, the last 60 days of statement lines
    (id, book account, statement name, date, amount, description, counterparty; at most 400) and
    the owner's sentence. Nothing else; never the key.
@@ -29,11 +32,16 @@
   const TIMEOUT_DRAFT=90000,TIMEOUT_TEST=20000;
   const KINDS=['asset','liability','equity','income','expense'];
   const KIND_LABEL={asset:'Asset',liability:'Liability',equity:'Equity',income:'Income',expense:'Expense'};
-  const ORIGIN={accurate:['From Accurate',''],app:['Manual',''],ai:['AI','accent'],'month-end':['Month-end',''],income:['Income','']};
+  // Journal kinds (v4) as badges; the v3 origin names map onto them.
+  const KIND_BADGE={manual:['Manual',''],ai:['AI','accent'],'month-end':['Month-end',''],income:['Income',''],opening:['Opening',''],'year-end':['Year-end','info'],accurate:['From Accurate','']};
+  const v3Name=k=>k==='manual'?'app':k;   // the v3 origin name of a kind (data-origin, kept for older readers)
 
   registerIcon('sparkles','<path d="M9.94 14.06 4 20"/><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M20 3v4"/><path d="M22 5h-4"/>');
   registerIcon('ban','<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>');
   registerIcon('key-round','<path d="M2.6 18.4A2 2 0 0 0 2 19.8V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.2a2 2 0 0 0 1.4-.6l.8-.8a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/>');
+  registerIcon('copy','<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>');
+  registerIcon('save','<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/>');
+  registerIcon('trash','<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>');
   registerIcon('history','<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>');
 
   /* ── Styles (tokens only, so light and dark both work) ── */
@@ -78,7 +86,26 @@
     .en-qs{display:flex;flex-direction:column;gap:8px}
     .en-q{white-space:normal;line-height:18px}
     .en-batch{font-size:13px;color:var(--text-2);margin-top:10px}
+    .en-when{font-size:13px;line-height:18px;color:var(--text-2);margin:-4px 0 8px;overflow-wrap:anywhere}
+    .en-jr{margin:4px 0 0}
+    .en-jr-h{margin:16px 0 4px}
+    .en-jr table.data{width:100%}
+    .en-jr table.data td.bk-acc{min-width:0}
+    .en-jr tr.cr td.bk-acc{padding-left:40px}
+    .en-jr .en-dc{display:inline-block;width:24px;font-size:12px;font-weight:600;color:var(--text-2)}
+    .en-jr tr.cr .en-dc{color:var(--text-3)}
+    .en-jr .merchant-sub{display:flex;flex-wrap:wrap;gap:2px 10px}
+    .en-jr .en-bad{color:var(--bad)}
+    .en-jr td.num{white-space:nowrap}
+    .en-confirm{flex-wrap:wrap;margin:4px 0 0}
+    .en-confirm .li-body{flex:1 1 220px;min-width:0}
+    .en-confirm .en-cbtns{display:flex;gap:6px;flex-wrap:wrap}
+    .en-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px;font-size:14px;color:var(--text-2)}
+    .en-head .en-no{font-variant-numeric:tabular-nums;color:var(--text-1);font-weight:600}
+    .en-head .en-no.draft{font-style:italic;font-weight:400;color:var(--text-2)}
+    .en-note .bk-link{font-size:13px;padding:0 2px;vertical-align:0}
     @media (max-width:767px){
+      .en-jr tr.cr td.bk-acc{padding-left:24px}
       .en-line{grid-template-columns:1fr 1fr}
       .en-line .en-acc{grid-column:1/-1}
       .en-line .en-btns{grid-column:1/-1;padding-top:0;justify-content:flex-end}
@@ -104,6 +131,24 @@
   const when=t=>{try{return fmtDateTime(t);}catch(_){return String(t||'');}};
   const modelOf=id=>MODELS.find(m=>m.id===id)||MODELS[0];
   const fx4=n=>Number(n||0).toLocaleString('id-ID',{maximumFractionDigits:4});
+  // v4 journal facts: the kind (a journal from before v4 may only carry its v3 origin), headers,
+  // archived accounts, and the state of a date's month in the book.
+  const kindOf=v=>v?(v.kind||(v.origin==='app'?'manual':v.origin)||'manual'):'';
+  const isHeader=a=>!!a&&(a.postable===false||(a.postable==null&&!!a.isParent));
+  const isArchived=a=>!!(a&&a.archivedAt);
+  const monthOfD=d=>/^\d{4}-\d{2}-\d{2}$/.test(String(d||''))?String(d).slice(0,7):'';
+  const periodOf=M=>M&&typeof ledgerPeriodState==='function'&&seeded()?ledgerPeriodState(M):'open';
+  const mLong=M=>{try{return monthLabel(M,true);}catch(_){return M;}};
+  const isLockMsg=m=>/\b(is|which is) (closed|locked)\b/.test(String(m||''));
+  // "October 2026 is closed. Reopen it in Periods to change entries." (UX §11.10b), Periods a link.
+  function lockNoteHTML(M,todo,id){
+    const st=periodOf(M);if(st==='open')return'';
+    return`<div class="en-note warn en-lock"${id?` id="${id}"`:''} role="status" data-lock="${escH(M)}">${ic('lock','s16')}<span>${escH(mLong(M))} is ${st}. Reopen it in <button class="bk-link" data-en-act="periods">Periods</button> to ${escH(todo||'change entries')}.</span></div>`;
+  }
+  function goPeriods(){if(typeof closeAllSheets==='function')closeAllSheets();setTab('periods');}
+  // A refusal from the book as a toast; a closed or locked month gets a Periods button.
+  function errToast(e){const m=((e&&e.errors)||[String(e&&e.message||e)]).join(' · ');
+    if(isLockMsg(m))toast(m,{action:'Periods',onAction:goPeriods,duration:9000});else toast(m);return m;}
 
   /* ══ The key: IndexedDB 'et-secret' on this device + Drive appData ai.json ══ */
   let SEC={owner:null,key:null,model:DEFAULT_MODEL,at:'',localDone:false,driveTried:false,busy:null,fileId:null,status:'idle'};
@@ -225,15 +270,17 @@
     '- If something is unclear (which account, the rate, a fee), make the most reasonable assumption, state it in assumptions, and ask about it in questions. Never invent an amount.',
     '- description: a short neutral description of each entry. memo: a few words per line.',
     'When the app sends back errors, fix those entries and return the whole answer again. On a follow-up (followUp true) the owner answers your questions and may have edited your draft (currentDraft): return the whole answer again with every entry still to post, using the answers and keeping the owner\'s edits unless the answers change them. Entries in postedAlready are in the book: never repeat them.'].join('\n');
-  // The chart sent to Claude: id, name, kind, ccy, isParent of every non-suspended account. Nothing else.
+  // The chart sent to Claude: id, name, kind, ccy, isParent of every account that is neither
+  // suspended nor archived (v4). Nothing else.
   function chartForAI(){
     const x=L();if(!x)return[];
-    return Object.values(x.accounts).filter(a=>a&&!a.suspended)
+    return Object.values(x.accounts).filter(a=>a&&!a.suspended&&!isArchived(a))
       .sort((p,q)=>String(p.id).localeCompare(String(q.id),undefined,{numeric:true}))
-      .map(a=>({id:String(a.id),name:String(a.name||a.id),kind:a.kind,ccy:a.ccy||'IDR',isParent:!!a.isParent}));
+      .map(a=>({id:String(a.id),name:String(a.name||a.id),kind:a.kind,ccy:a.ccy||'IDR',isParent:isHeader(a)}));
   }
   // The book's current balance per account: the views' cumulative balances at their latest month,
-  // which already hold every posted voucher up to the newest one (js/ledger.js coreOf).
+  // which hold every posted journal up to the newest one; drafts and void journals never count
+  // (js/ledger.js coreOf, v4 §6).
   function bookBalances(){
     const b=typeof BOOKS==='function'?BOOKS():null;
     if(!b||!b.fromLedger||!Array.isArray(b.months)||!b.months.length)return{};
@@ -328,17 +375,20 @@
     return{entries,newAccounts:na,assumptions:list(o.assumptions),questions};
   }
 
-  /* ══ The entry form (new, AI drafts, edit) ══
-     D holds the sheet: D.entries is one entry for a manual entry or an edit, and one per drafted
-     voucher after a Claude answer (D.ai). Ids: en<Name><i> for the single form, enE<k><Name><i>
-     for drafted entry k. */
+  /* ══ The journal editor (UX §11.10b): new, AI drafts, draft, posted (view / edit) ══
+     D holds the sheet: D.entries is one entry for a manual journal, a draft or an edit, and one per
+     drafted entry after a Claude answer (D.ai). D.mode: 'new' (nothing saved yet) · 'draft' (D.id is
+     a saved draft) · 'edit' (a posted journal being changed, with "Why the change") · 'view' (a
+     posted or void journal, read-only, Copy · Void · Edit) · 'locked' (posted in a closed or locked
+     month, or a year-end journal: read-only, Copy only). D.confirm: 'post' | 'delete' | null, the
+     in-place confirm row. Ids: en<Name><i> for the single form, enE<k><Name><i> for drafted entry k. */
   let D=null,SH=null;
   const blankLine=()=>({account:'',debit:0,credit:0,memo:'',fxOn:false,ccy:'',famt:'',rate:'',stmtLine:null});
   const blankEntry=(date)=>({date:date||todayISO(),description:'',lines:[blankLine(),blankLine()],include:true,dup:[]});
   function accounts(){const x=L();return x?x.accounts:{};}
   function accOf(code){return accounts()[code]||null;}
   function postable(){
-    return Object.values(accounts()).filter(a=>a&&!a.isParent&&!a.suspended).sort((p,q)=>String(p.id).localeCompare(String(q.id),undefined,{numeric:true}));
+    return Object.values(accounts()).filter(a=>a&&!isHeader(a)&&!a.suspended&&!isArchived(a)).sort((p,q)=>String(p.id).localeCompare(String(q.id),undefined,{numeric:true}));
   }
   function lineFrom(l){
     const a=Math.round(l.amount||0),f=l.fx||null;
@@ -376,8 +426,19 @@
   }
   const pendingNew=()=>D.newAccounts.filter(a=>!a.added);
   // The book's checks on one entry, with "add the proposed account" in place of "not in your book".
+  // Lines with both a debit and a credit (the form keeps both inputs; the book wants one side).
+  const bothSides=E=>E.lines.map((l,i)=>(l.debit||0)>0&&(l.credit||0)>0?`Line ${i+1}: enter either a debit or a credit, not both`:null).filter(Boolean);
+  // Save draft (v4 §2): a valid date and at least two filled lines (an account each); may be unbalanced.
+  function draftErrorsOf(E){
+    const e=[],v=voucherOf(E);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(E.date||'')))e.push('Enter a valid date');
+    if(v.lines.filter(l=>l.account).length<2)e.push('A draft needs at least two lines with an account');
+    v.lines.forEach((l,i)=>{if(!l.account)e.push(`Line ${i+1}: choose an account`);});
+    return e.concat(bothSides(E));
+  }
   function errorsOf(E){
     let e=typeof ledgerValidate==='function'?ledgerValidate(voucherOf(E)):['Your book is not set up yet'];
+    e=bothSides(E).concat(e.filter(m=>!/not both/.test(m)));
     const pend=new Map(pendingNew().map(a=>[a.id,a]));
     e=e.map(m=>{const r=/^Line (\d+): account (.+) is not in your book$/.exec(m);return r&&pend.has(r[2])?`Line ${r[1]}: add the new account ${r[2]} to your book first (below)`:m;});
     if(pend.size&&E.lines.some(l=>pend.has(l.account)))e.push(`Confirm or remove the proposed new account${pend.size===1?'':'s'} before posting`);
@@ -397,9 +458,10 @@
   }
   const pre=k=>D&&D.ai?`E${k}`:'';
   const remaining=()=>D.entries.filter(E=>E.include);
-  function sheetTitle(){return D.mode==='edit'?'Edit voucher':'New entry';}
+  function sheetTitle(){return D.mode==='edit'?'Edit journal':D.mode==='draft'?'Draft journal':D.mode==='view'||D.mode==='locked'?'Journal':'New journal';}
+  const readOnly=()=>D&&(D.mode==='view'||D.mode==='locked');
   function askHTML(){
-    if(D.mode==='edit')return'';
+    if(D.mode!=='new')return'';
     if(!hasKey())return`<div class="en-note" id="enNoKey">${ic('info','s16')}<span>Claude can draft entries from a sentence once you add your own Anthropic API key in <button class="bk-link" data-en="settings">Settings › AI</button>. For now, fill this one in by hand.</span></div>`;
     return`<div class="en-ask"><label class="label" for="enText">Tell me what happened</label>
       <textarea class="input" id="enText" rows="2" placeholder="e.g. the money my friend owed me came into my bank account, then I moved it to my ••5678 account">${escH(D.prompt||'')}</textarea>
@@ -410,11 +472,11 @@
     if(!D.note)return'';
     return`<div class="en-note ${D.note.tone||''}" id="enNote" role="status">${ic(D.note.tone==='warn'||D.note.tone==='bad'?'triangle-alert':'info','s16')}<span>${escH(D.note.text)}</span></div>`;
   }
-  function accLabel(a){return`${a.name}${a.isParent?' · parent account':''}${a.ccy&&a.ccy!=='IDR'?' · '+a.ccy:''}`;}
+  function accLabel(a){return`${a.name}${isHeader(a)?' · parent account':''}${isArchived(a)?' · archived':''}${a.ccy&&a.ccy!=='IDR'?' · '+a.ccy:''}`;}
   function lineHTML(E,k,l,i){
     const p=pre(k),a=accOf(l.account),pend=D.newAccounts.find(n=>n.id===l.account&&!n.added);
     const nm=!l.account?'':a?escH(accLabel(a)):pend?'New account (confirm below)':'Not in your book';
-    const bad=l.account&&(!a||a.isParent)&&!pend;
+    const bad=l.account&&(!a||isHeader(a)||isArchived(a))&&!pend;
     const src=srcNote(l.stmtLine);
     return`<div class="en-line" data-i="${i}">
       <div class="field en-acc"><label class="label" for="en${p}Acc${i}">Account</label><input class="input" id="en${p}Acc${i}" data-f="account" list="enAccList" autocomplete="off" spellcheck="false" placeholder="Code or name" value="${escH(l.account)}">
@@ -437,9 +499,43 @@
     return`from ${cashAccOf(t.account).label||t.account} statement ${d}`;
   }
   function fxHint(l){const a=num(l.famt),r=num(l.rate);return a&&r?`= ${fmtIDR(Math.round(Math.abs(a)*r))}`:'';}
+  // The entry as a journal: debit lines first, then the credit lines indented, each with its
+  // account, what it does to that account in plain words, memo, currency and statement source.
+  // ids=true only where it is the card's own view (journal mode), so the form's totals keep their ids.
+  const UP_ON_DEBIT={asset:true,expense:true,liability:false,equity:false,income:false};
+  function effectOf(a,isDr){
+    if(!a||!KIND_LABEL[a.kind])return'';
+    const up=UP_ON_DEBIT[a.kind]===isDr;
+    return`${KIND_LABEL[a.kind]} · goes ${up?'up':'down'}`;
+  }
+  function journalHTML(E,k,ids){
+    const p=pre(k),rows=E.lines.map((l,i)=>({l,i})).filter(({l})=>l.account||l.debit||l.credit);
+    const dr=rows.filter(({l})=>(l.debit||0)>=(l.credit||0)),cr=rows.filter(({l})=>(l.debit||0)<(l.credit||0));
+    let tDr=0,tCr=0;
+    const row=({l,i},isDr)=>{
+      const amt=isDr?(l.debit||0)-(l.credit||0):(l.credit||0)-(l.debit||0);if(isDr)tDr+=amt;else tCr+=amt;
+      const a=accOf(l.account),pend=D.newAccounts.find(n=>n.id===l.account&&!n.added);
+      const name=!l.account?'<span class="en-bad">No account yet</span>':a?escH(a.name)+(isHeader(a)?' <span class="en-bad">· parent account, pick one under it</span>':isArchived(a)?' <span class="en-bad">· archived</span>':'')
+        :pend?`${escH(pend.name||pend.id)} <span class="badge warn">New</span>`:'<span class="en-bad">Not in your book</span>';
+      const eff=a&&!isHeader(a)?effectOf(a,isDr):pend?effectOf(pend,isDr):'',src=srcNote(l.stmtLine);
+      const sub=[eff?`<span>${escH(eff)}</span>`:'',l.memo?`<span>${escH(l.memo)}</span>`:'',
+        l.fxOn&&l.ccy?`<span class="badge">${escH(l.ccy)} ${escH(fx4(num(l.famt)))} @ ${escH(fx4(num(l.rate)))}</span>`:'',
+        src?`<span class="en-src">${ic('landmark','s16')}${escH(src)}</span>`:'',!amt?'<span class="en-bad">No amount</span>':''].filter(Boolean).join('');
+      return`<tr class="${isDr?'dr':'cr'}" data-i="${i}"${ids?` id="en${p}Jr${i}"`:''}><td class="bk-acc"><div class="merchant-name"><span class="en-dc">${isDr?'Dr':'Cr'}</span>${l.account?`<span class="bk-code">${escH(l.account)}</span>`:''}${name}</div>${sub?`<div class="merchant-sub">${sub}</div>`:''}</td>
+        <td class="num hide-sm">${isDr&&amt?rp(amt):''}</td><td class="num hide-sm">${!isDr&&amt?rp(amt):''}</td><td class="num only-sm">${amt?rp(amt):''}</td></tr>`;
+    };
+    const body=dr.map(r=>row(r,true)).join('')+cr.map(r=>row(r,false)).join('');
+    const bal=tDr===tCr&&tDr>0,id=s=>ids?` id="en${p}${s}"`:'';
+    return`<div class="table-wrap en-jr"${id('Jr')}><table class="data"><thead><tr><th scope="col">Account</th><th scope="col" class="num hide-sm">Debit</th><th scope="col" class="num hide-sm">Credit</th><th scope="col" class="num only-sm">Amount</th></tr></thead>
+      <tbody>${body||'<tr><td colspan="4" class="muted">No lines yet</td></tr>'}</tbody>
+      <tfoot><tr class="bk-tot"><td>Total ${bal?'<span class="badge good">Balanced</span>':`<span class="badge bad"${id('Diff')} data-raw="${tDr-tCr}">Off by ${rpSigned(Math.abs(tDr-tCr))}</span>`}</td>
+        <td class="num hide-sm"${id('DrTot')} data-raw="${tDr}">${rp(tDr)}</td><td class="num hide-sm"${id('CrTot')} data-raw="${tCr}">${rp(tCr)}</td><td class="num only-sm">${rp(tDr)}</td></tr></tfoot></table></div>`;
+  }
+  // A card shows the journal unless the owner tapped Edit.
+  const journalMode=E=>!!(D&&D.ai&&!E.editing);
   function naHTML(){
     if(!D.newAccounts.length)return'';
-    const parents=Object.values(accounts()).filter(a=>a&&a.isParent).sort((p,q)=>String(p.id).localeCompare(String(q.id),undefined,{numeric:true}));
+    const parents=Object.values(accounts()).filter(a=>a&&isHeader(a)&&!isArchived(a)).sort((p,q)=>String(p.id).localeCompare(String(q.id),undefined,{numeric:true}));
     return`<div class="en-sec" id="enNew"><h3 class="label">New account${D.newAccounts.length===1?'':'s'} Claude proposes</h3>
       <p class="help" style="margin:0 0 4px">Not in your book yet. Check each one and add it, or remove it and pick an existing account.</p>
       ${D.newAccounts.map((a,j)=>a.added?`<div class="en-na" data-j="${j}"><div class="li-body" style="grid-column:1/-1"><span class="bk-code">${escH(a.id)}</span>${escH(a.name)} <span class="badge good">Added to your book</span></div></div>`
@@ -474,6 +570,16 @@
       <div class="en-lines" id="en${p}Lines">${E.lines.map((l,i)=>lineHTML(E,k,l,i)).join('')}</div>
       <div><button class="btn btn-ghost btn-sm" data-en="addline" data-k="${k}">${ic('plus','s16')}Add line</button></div>
       <div class="en-tot" id="en${p}Tot"></div>
+      <h3 class="label en-jr-h">The journal this makes</h3><div id="en${p}JrPrev">${journalHTML(E,k,false)}</div>
+      <div id="en${p}Warn"></div><div id="en${p}Lock"></div>
+      <div class="en-checks" id="en${p}Checks" role="status" aria-live="polite"></div>`;
+  }
+  // A drafted card read as a journal: date and description on top, the lines, the checks.
+  function journalCardHTML(E,k){
+    const p=pre(k);
+    return`<div class="en-when" id="en${p}When">${escH(dayLong(E.date))}${E.description?` · ${escH(E.description)}`:''}</div>
+      ${journalHTML(E,k,true)}
+      <div id="en${p}Warn"></div><div id="en${p}Lock"></div>
       <div class="en-checks" id="en${p}Checks" role="status" aria-live="polite"></div>`;
   }
   function cardHTML(E,k){
@@ -483,35 +589,68 @@
         <label class="check"><input type="checkbox" data-e="inc" id="enE${k}Inc" ${E.include?'checked':''}> Include</label></div>
       ${dup?`<div class="en-note warn en-dup" id="enE${k}Dup">${ic('triangle-alert','s16')}<span>Already in your book: ${E.dup.length===1?'its statement line is':'its statement lines are'} used by an entry you posted before. It is left out unless you tick Include.</span></div>`:''}
       ${E.same&&E.same.length?`<div class="en-note warn en-dup" id="enE${k}Same">${ic('triangle-alert','s16')}<span>Same bank line as entry ${E.same.join(' and ')}: one statement line can back only one entry. It is left out unless you tick Include.</span></div>`:''}
-      ${entryFieldsHTML(E,k)}
-      <div class="en-card-foot"><button class="btn btn-ghost btn-sm" data-en="remove" data-k="${k}" id="enE${k}Remove">${ic('x','s16')}Remove</button>
+      ${journalMode(E)?journalCardHTML(E,k):entryFieldsHTML(E,k)}
+      <div class="en-card-foot"><button class="btn btn-ghost btn-sm" data-en="edit1" data-k="${k}" id="enE${k}Edit">${journalMode(E)?`${ic('pencil','s16')}Edit`:`${ic('check','s16')}Done editing`}</button>
+        <button class="btn btn-ghost btn-sm" data-en="remove" data-k="${k}" id="enE${k}Remove">${ic('x','s16')}Remove</button>
+        <button class="btn btn-ghost btn-sm" data-en="draft1" data-k="${k}" id="enE${k}Draft" disabled title="Keep it as a draft journal: it touches no balance until you post it">${ic('save','s16')}Save as draft</button>
         <button class="btn btn-secondary btn-sm" data-en="post1" data-k="${k}" id="enE${k}Post" disabled>${ic('check','s16')}Post</button></div></section>`;
   }
   function postedHTML(){
-    if(!D.posted||!D.posted.length)return'';
-    return`<div class="en-note good" id="enPosted">${ic('square-check','s16')}<span>Posted from this prompt: ${D.posted.map(p=>`${escH(p.description||'Entry '+p.n)}`).join(' · ')}</span></div>`;
+    const ps=(D.posted||[]).filter(p=>!p.draft),ds=(D.posted||[]).filter(p=>p.draft);
+    return(ps.length?`<div class="en-note good" id="enPosted">${ic('square-check','s16')}<span>Posted from this prompt: ${ps.map(p=>`${escH(p.description||'Entry '+p.n)}${p.number?` (${escH(p.number)})`:''}`).join(' · ')}</span></div>`:'')
+      +(ds.length?`<div class="en-note" id="enSavedDrafts">${ic('save','s16')}<span>Saved as drafts from this prompt: ${ds.map(p=>escH(p.description||'Entry '+p.n)).join(' · ')}. They wait in Journals until you post them.</span></div>`:'');
+  }
+  // A posted (or void) journal read in the editor: number, status and kind, then the journal.
+  function readHTML(){
+    const v=ledgerVoucher(D.id),E=D.entries[0];if(!v)return'';
+    const st=v.status==='void'?'<span class="badge" style="text-decoration:line-through">Void</span>':'<span class="badge good">Posted</span>';
+    const yearEnd=kindOf(v)==='year-end',M=monthOfD(v.date);
+    const lock=yearEnd?`<div class="en-note warn en-lock" id="enLock" role="status">${ic('lock','s16')}<span>Made by the year-end close. Reopen December in <button class="bk-link" data-en-act="periods">Periods</button> to change it.</span></div>`
+      :v.status==='posted'?lockNoteHTML(M,'change entries','enLock'):'';
+    return`<div class="en-head" id="enHead"><span class="en-no">${escH(v.number||'')}</span>${st}${originBadge(v)}${v.refNo?`<span class="faint">Accurate ${escH(v.refNo)}</span>`:''}</div>
+      ${lock}<div class="en-when" id="enWhen">${escH(dayLong(E.date))}${E.description?` · ${escH(E.description)}`:''}</div>
+      ${journalHTML(E,0,true)}${historyHTML(v)}`;
   }
   function formHTML(){
-    const warn=D.mode==='edit'&&D.origin==='accurate'
-      ?`<div class="en-note warn" id="enAccWarn">${ic('triangle-alert','s16')}<span>This voucher came from Accurate. Once you change it here your book differs from Accurate from now on; a later Accurate export flags it but never overwrites it.</span></div>`:'';
+    if(readOnly())return readHTML();
+    const warn=D.mode==='edit'&&D.kind==='accurate'
+      ?`<div class="en-note warn" id="enAccWarn">${ic('triangle-alert','s16')}<span>This journal came from Accurate. Once you change it here your book differs from Accurate from now on; a later Accurate export notes it but never overwrites it.</span></div>`:'';
+    const head=D.mode==='draft'?`<div class="en-head" id="enHead"><span class="en-no draft">(draft)</span><span class="badge info">Draft</span>${originBadge({kind:D.kind})}${D.refNo?`<span class="faint">Accurate ${escH(D.refNo)}</span>`:''}</div>`
+      :D.mode==='edit'?`<div class="en-head" id="enHead"><span class="en-no">${escH(D.number||'')}</span><span class="badge good">Posted</span>${originBadge({kind:D.kind})}</div>`:'';
     const list=`<datalist id="enAccList">${postable().map(a=>`<option value="${escH(a.id)}">${escH(a.id)} · ${escH(a.name)}${a.ccy&&a.ccy!=='IDR'?' · '+escH(a.ccy):''}</option>`).join('')}</datalist>`;
-    if(!D.ai)return`${warn}<div class="en-entry" data-k="0">${entryFieldsHTML(D.entries[0],0)}</div>${naHTML()}${list}`;
+    if(!D.ai)return`${head}${warn}<div class="en-entry" data-k="0">${entryFieldsHTML(D.entries[0],0)}</div>${naHTML()}${list}`;
     const cards=D.entries.length?`<div class="en-cards" id="enCards">${D.entries.map(cardHTML).join('')}</div>`
       :`<div class="en-empty" id="enNoEntries"><p class="muted" style="margin:0 0 8px">${D.posted&&D.posted.length?'Nothing left to post from this prompt.':'No entries drafted yet: Claude needs your answers first.'}</p>
         <button class="btn btn-ghost btn-sm" data-en="manual" id="enManual">${ic('pencil','s16')}Fill one in by hand instead</button></div>`;
     return`${postedHTML()}${cards}${naHTML()}${aqHTML()}${list}`;
   }
   function footHTML(){
-    if(D.ai)return`<button class="btn btn-secondary" data-en="cancel">Cancel</button><button class="btn btn-primary" data-en="postall" id="enPostAll" disabled>${ic('check','s16')}Post all (${remaining().length})</button>`;
-    return`<button class="btn btn-secondary" data-en="cancel">Cancel</button><button class="btn btn-primary" data-en="post" id="enPost" disabled>${ic('check','s16')}${D.mode==='edit'?'Save changes':'Post'}</button>`;
+    if(D.ai)return`<button class="btn btn-ghost" data-en="cancel">Cancel</button><button class="btn btn-secondary" data-en="saveall" id="enSaveAll" disabled>${ic('save','s16')}Save all as drafts (${remaining().length})</button><button class="btn btn-primary" data-en="postall" id="enPostAll" disabled>${ic('check','s16')}Post all (${remaining().length})</button>`;
+    if(D.mode==='edit')return`<button class="btn btn-secondary" data-en="cancel">Cancel</button><button class="btn btn-primary" data-en="post" id="enPost" disabled>${ic('check','s16')}Save changes</button>`;
+    if(D.mode==='view'){const v=ledgerVoucher(D.id),posted=v&&v.status==='posted';
+      return`<button class="btn btn-ghost" data-en="copy" id="enCopy">${ic('copy','s16')}Copy</button>${posted?`<button class="btn btn-ghost" data-en="voidj" id="enVoidBtn" style="color:var(--bad)">${ic('ban','s16')}Void</button><button class="btn btn-secondary" data-en="editj" id="enEditBtn">${ic('pencil','s16')}Edit</button>`:''}`;}
+    if(D.mode==='locked')return`<button class="btn btn-ghost" data-en="copy" id="enCopy">${ic('copy','s16')}Copy</button><button class="btn btn-secondary" data-en="cancel">Close</button>`;
+    const first=D.mode==='draft'?`<button class="btn btn-ghost" data-en="deldraft" id="enDelDraft" style="color:var(--bad)">${ic('trash','s16')}Delete draft</button>`
+      :`<button class="btn btn-ghost" data-en="cancel">Cancel</button>`;
+    return`${first}<button class="btn btn-secondary" data-en="savedraft" id="enSaveDraft" disabled title="Ctrl+S">${ic('save','s16')}Save draft</button><button class="btn btn-primary" data-en="post" id="enPost" disabled title="Ctrl+Enter">${ic('check','s16')}Post</button>`;
   }
-  function bodyHTML(){return`<div id="enRoot">${askHTML()}<div id="enNoteHost">${noteHTML()}</div><div id="enForm">${formHTML()}</div></div>`;}
+  // The in-place confirm (a bk-check row above the footer): Post with its date, total and the number
+  // it will get; Delete draft. Nothing changes until the owner confirms here.
+  function confirmHTML(){
+    if(!D||!D.confirm||D.ai)return'';
+    if(D.confirm==='delete')return`<div class="bk-check en-confirm" id="enConfirm" data-c="delete">${ic('trash','s16')}<span class="li-body"><span class="li-title" style="display:block">Delete this draft?</span><span class="li-sub" style="display:block">It isn’t in your book; once deleted it can’t be opened again.</span></span>
+      <span class="en-cbtns"><button class="btn btn-ghost btn-sm" data-en="confirmno">Keep it</button><button class="btn btn-danger btn-sm" data-en="delgo" id="enDelGo">${ic('trash','s16')}Delete draft</button></span></div>`;
+    const E=D.entries[0],dr=E.lines.reduce((t,l)=>t+Math.max(0,(l.debit||0)-(l.credit||0)),0);
+    return`<div class="bk-check en-confirm" id="enConfirm" data-c="post">${ic('info','s16')}<span class="li-body"><span class="li-title" style="display:block">Post on ${escH(dayLong(E.date))} · total ${rp(dr)}</span><span class="li-sub" style="display:block">It gets the next journal number and counts in every balance and report.</span></span>
+      <span class="en-cbtns"><button class="btn btn-ghost btn-sm" data-en="confirmno">Not yet</button><button class="btn btn-primary btn-sm" data-en="postgo" id="enPostGo">${ic('check','s16')}Post now</button></span></div>`;
+  }
+  function bodyHTML(){return`<div id="enRoot">${askHTML()}<div id="enNoteHost">${noteHTML()}</div><div id="enForm">${formHTML()}</div><div id="enConfirmHost">${confirmHTML()}</div></div>`;}
   function rerender(focusSel){
     if(!SH)return;const host=SH.sheet.querySelector('.sheet-body');if(!host)return;
     host.innerHTML=bodyHTML();renderFoot();updateChecks();
     if(focusSel){const f=host.querySelector(focusSel);if(f)try{f.focus();}catch(_){}}
   }
-  function renderFoot(){const f=SH&&SH.sheet.querySelector('.sheet-foot');if(f)f.innerHTML=footHTML();}
+  function renderFoot(){const f=SH&&SH.sheet.querySelector('.sheet-foot');if(f)f.innerHTML=footHTML();const c=SH&&SH.sheet.querySelector('#enConfirmHost');if(c)c.innerHTML=confirmHTML();}
   function renderForm(){const f=SH&&SH.sheet.querySelector('#enForm');if(f){f.innerHTML=formHTML();renderFoot();updateChecks();}}
   function setNote(text,tone){D.note=text?{text,tone}:null;const h=SH&&SH.sheet.querySelector('#enNoteHost');if(h)h.innerHTML=noteHTML();}
   function sync(){
@@ -531,46 +670,78 @@
     SH.sheet.querySelectorAll('.en-na').forEach(el=>{const a=D.newAccounts[+el.dataset.j];if(!a||a.added)return;
       el.querySelectorAll('[data-na]').forEach(inp=>{a[inp.dataset.na]=inp.dataset.na==='ccy'?String(inp.value).toUpperCase():inp.value.trim();});});
   }
+  // Splits the book's checks: a closed or locked month shows as the lock note (with the Periods
+  // link), everything else as help lines.
+  const lockOf=errs=>errs.find(isLockMsg)||null;
   function updateChecks(){
     if(!SH||!D)return;const q=s=>SH.sheet.querySelector(s);
-    let allOk=true;
+    if(readOnly())return;
+    let allOk=true,allDraft=true;
     D.entries.forEach((E,k)=>{
       const p=pre(k);
       E.lines.forEach((l,i)=>{const el=q(`#en${p}AccName${i}`);if(el){const a=accOf(l.account),pend=D.newAccounts.find(n=>n.id===l.account&&!n.added);
           el.textContent=!l.account?'':a?accLabel(a):pend?'New account (confirm below)':'Not in your book';
-          el.classList.toggle('bad',!!l.account&&(!a||a.isParent)&&!pend);}
+          el.classList.toggle('bad',!!l.account&&(!a||isHeader(a)||isArchived(a))&&!pend);}
         const h=q(`#en${p}FxHint${i}`);if(h)h.textContent=fxHint(l);});
+      const jp=q(`#en${p}JrPrev`);if(jp)jp.innerHTML=journalHTML(E,k,false);
       const dr=E.lines.reduce((s,l)=>s+(l.debit||0),0),cr=E.lines.reduce((s,l)=>s+(l.credit||0),0);
       const tot=q(`#en${p}Tot`);
       if(tot)tot.innerHTML=`<span>Debits <b id="en${p}DrTot" data-raw="${dr}">${rp(dr)}</b></span><span>Credits <b id="en${p}CrTot" data-raw="${cr}">${rp(cr)}</b></span>
         ${dr===cr&&dr>0?'<span class="badge good">Balanced</span>':`<span class="badge bad" id="en${p}Diff" data-raw="${dr-cr}">Off by ${rpSigned(Math.abs(dr-cr))}</span>`}`;
-      const errs=errorsOf(E),ch=q(`#en${p}Checks`);E.ok=!errs.length;
+      const errs=errorsOf(E),ch=q(`#en${p}Checks`),lock=lockOf(errs),rest=errs.filter(m=>m!==lock);E.ok=!errs.length;
+      E.draftOk=!draftErrorsOf(E).length;
       if(E.include&&errs.length)allOk=false;
-      if(ch)ch.innerHTML=errs.length?errs.map(m=>`<div class="help err">${ic('triangle-alert','s16')}<span>${escH(m)}</span></div>`).join('')
-        :`<div class="help" style="color:var(--good)">${ic('square-check','s16')} Ready to ${D.mode==='edit'?'save':'post'}: balanced, every account is in your book</div>`;
+      if(E.include&&!E.draftOk)allDraft=false;
+      // A backdate of more than 7 days is a warning only (v4 §2); it never blocks.
+      const w=q(`#en${p}Warn`),bd=typeof ledgerWarnings==='function'&&ledgerWarnings({date:E.date}).includes('backdated');
+      if(w)w.innerHTML=bd?`<div class="en-note warn" id="en${p}Backdate" role="status">${ic('triangle-alert','s16')}<span>Dated more than 7 days ago. You can still ${D.mode==='edit'?'save':'post'} it.</span></div>`:'';
+      const lk=q(`#en${p}Lock`);
+      if(lk)lk.innerHTML=lock?lockNoteHTML(monthOfD(E.date)||monthOfD(D.origDate),D.mode==='edit'?'change this journal':'post into it',`en${p}LockNote`)
+        ||`<div class="en-note warn en-lock" id="en${p}LockNote">${ic('lock','s16')}<span>${escH(lock)} <button class="bk-link" data-en-act="periods">Periods</button></span></div>`:'';
+      if(ch)ch.innerHTML=rest.length?rest.map(m=>`<div class="help err">${ic('triangle-alert','s16')}<span>${escH(m)}</span></div>`).join('')
+        :lock?'':`<div class="help" style="color:var(--good)">${ic('square-check','s16')} Ready to ${D.mode==='edit'?'save':'post'}: balanced, every account is in your book</div>`;
       const b=q(`#enE${k}Post`);if(b)b.disabled=!!errs.length||!E.include||!!D.busy;
+      const bd2=q(`#enE${k}Draft`);if(bd2)bd2.disabled=!E.draftOk||!E.include||!!D.busy;
       const card=q(`#enE${k}`);if(card)card.classList.toggle('off',!E.include);
     });
     const p=q('#enPost');if(p){const errs=D.entries[0]?errorsOf(D.entries[0]):['No entry'];p.disabled=!!errs.length||!!D.busy;p.dataset.errors=String(errs.length);}
+    const sd=q('#enSaveDraft');if(sd){const de=D.entries[0]?draftErrorsOf(D.entries[0]):['No entry'];sd.disabled=!!de.length||!!D.busy;sd.dataset.errors=String(de.length);sd.title=de.length?de[0]:'Ctrl+S';}
+    // A confirm row whose entry stopped passing the checks goes away.
+    if(D.confirm==='post'&&p&&p.disabled){D.confirm=null;const c=q('#enConfirmHost');if(c)c.innerHTML='';}
     const pa=q('#enPostAll');if(pa){const n=remaining().length;pa.disabled=!n||!allOk||!!D.busy;pa.dataset.n=String(n);
       pa.innerHTML=`${ic('check','s16')}Post all (${n})`;}
+    const sa=q('#enSaveAll');if(sa){const n=remaining().length;sa.disabled=!n||!allDraft||!!D.busy;sa.dataset.n=String(n);
+      sa.innerHTML=`${ic('save','s16')}Save all as drafts (${n})`;}
     const rd=q('#enRedraft');if(rd)rd.disabled=!!D.busy;
   }
+  // What the editor holds now, to tell a saved draft from unsaved changes.
+  const sigOfE=()=>D&&D.entries[0]?JSON.stringify([D.entries[0].date,D.entries[0].description,voucherOf(D.entries[0]).lines]):'';
   function openForm(d){
-    D=d;
-    SH=openSheet({title:sheetTitle(),body:bodyHTML(),foot:footHTML(),wide:true,focus:D.mode==='edit'?'#enDate':hasKey()?'#enText':'#enDate',onClose:()=>{SH=null;D=null;}});
-    SH.sheet.id='enSheet';
+    D=d;D.confirm=D.confirm||null;
+    SH=openSheet({title:sheetTitle(),body:bodyHTML(),foot:footHTML(),wide:true,focus:readOnly()?'.sheet-foot .btn':D.mode!=='new'?'#enDate':hasKey()?'#enText':'#enDate',onClose:()=>{SH=null;D=null;}});
+    SH.sheet.id='enSheet';SH.sheet.dataset.mode=D.mode;
+    D.savedSig=D.mode==='draft'?sigOfE():null;
     SH.sheet.addEventListener('input',e=>{if(e.target&&e.target.closest('[data-f],[data-na],[data-e],[data-qa],#enText,#enMore')){sync();updateChecks();}});
     SH.sheet.addEventListener('change',e=>{if(e.target&&e.target.closest('[data-na],[data-e]')){sync();updateChecks();}});
     SH.sheet.addEventListener('click',e=>{const b=e.target.closest('[data-en]');if(!b||b.disabled)return;e.preventDefault();act(b);});
+    // Ctrl+S saves the draft, Ctrl+Enter posts (UX §11.10b).
+    SH.sheet.addEventListener('keydown',e=>{
+      if(!(e.ctrlKey||e.metaKey)||!D||D.ai||readOnly())return;
+      const k=String(e.key||'').toLowerCase(),q=s=>SH&&SH.sheet.querySelector(s);
+      if(k==='s'){e.preventDefault();e.stopPropagation();sync();updateChecks();const b=q('#enSaveDraft');if(b&&!b.disabled)act(b);}
+      else if(k==='enter'){e.preventDefault();e.stopPropagation();sync();updateChecks();const b=q('#enPostGo')||q('#enPost');if(b&&!b.disabled)act(b);}
+    });
     updateChecks();
+    if(D.confirm){const c=SH.sheet.querySelector('#enConfirmHost');if(c)c.innerHTML=confirmHTML();if(D.confirm==='post'&&SH.sheet.querySelector('#enPost').disabled)D.confirm=null,c.innerHTML='';}
     return SH;
   }
+  function showConfirm(c){D.confirm=c;const h=SH&&SH.sheet.querySelector('#enConfirmHost');if(h){h.innerHTML=confirmHTML();const f=h.querySelector(c==='delete'?'#enDelGo':'#enPostGo');if(f)try{f.focus();}catch(_){}}}
   async function act(b){
     const a=b.dataset.en,k=+(b.dataset.k||0),i=+b.dataset.i,j=+b.dataset.j,E=D.entries[k];
-    sync();
+    if(!readOnly())sync();
     switch(a){
-      case'cancel':SH.close();return;
+      // Cancel: a draft saved as it is closes without asking; unsaved changes ask first.
+      case'cancel':SH.close(readOnly()||(D.mode==='draft'&&sigOfE()===D.savedSig));return;
       case'settings':SH.close(true);goSettings();return;
       case'addline':if(E){E.lines.push(blankLine());renderForm();const f=SH.sheet.querySelector(`#en${pre(k)}Acc${E.lines.length-1}`);if(f)f.focus();}return;
       case'del':if(E&&E.lines.length>2){E.lines.splice(i,1);renderForm();}return;
@@ -580,10 +751,21 @@
       case'ask':return ask(b,false);
       case'redraft':return ask(b,true);
       case'remove':if(E){D.entries.splice(k,1);renderForm();}return;
+      case'edit1':if(E){E.editing=!E.editing;renderForm();const f=SH.sheet.querySelector(E.editing?`#enE${k}Acc0`:`#enE${k}Edit`);if(f)try{f.focus();}catch(_){}}return;
       case'manual':D.ai=false;D.entries=[blankEntry()];D.newAccounts=[];setNote('Fill the entry in by hand below.','');renderForm();return;
-      case'post':return post();
+      case'post':if(D.mode==='edit')return post();updateChecks();if(errorsOf(D.entries[0]).length)return;showConfirm('post');return;
+      case'postgo':return post();
+      case'confirmno':D.confirm=null;{const h=SH.sheet.querySelector('#enConfirmHost');if(h)h.innerHTML='';}return;
+      case'savedraft':return saveDraft();
+      case'deldraft':showConfirm('delete');return;
+      case'delgo':return deleteDraft();
+      case'copy':return copyJournal(D.id);
+      case'voidj':{const id=D.id;SH.close(true);openVoid(id);return;}
+      case'editj':{const id=D.id;SH.close(true);openEdit(id);return;}
       case'post1':return postEntries([k],false);
       case'postall':return postEntries(D.entries.map((x,n)=>x.include?n:-1).filter(n=>n>=0),true);
+      case'draft1':return saveEntries([k],false);
+      case'saveall':return saveEntries(D.entries.map((x,n)=>x.include?n:-1).filter(n=>n>=0),true);
     }
   }
   function addNew(j){
@@ -659,10 +841,12 @@
       }
       if(!D.batch)D.batch=`b-${todayISO().replace(/-/g,'')}-${Math.floor(Math.random()*16777216).toString(16).padStart(6,'0')}`;
       D.convo=msgs;D.prompt=text;D.drafted=text;D.fromAI=true;applyAnswer(got);
+      // An entry that still fails the book's checks opens in Edit, so what to fix is in front of the owner.
+      D.entries.forEach(E=>{E.editing=aiErrorsOf({entries:[E],newAccounts:D.newAccounts}).length>0;});
       const n=D.entries.length,dups=D.entries.filter(E=>E.dup.length).length,same=D.entries.filter(E=>!E.dup.length&&E.same.length).length;
       D.note=stuck?{text:`Claude couldn’t fix ${stuck.length===1?'one entry':stuck.length+' entries'}${stuck.err?' ('+stuck.err+')':''}: ${stuck.map(s=>`entry ${s.entry}: ${s.errors.join('; ')}`).join(' · ')}. Correct ${stuck.length===1?'it':'them'} below, remove ${stuck.length===1?'it':'them'}, or answer and redraft.`,tone:'warn'}
         :!n?{text:'Claude needs more before it can draft this. Answer its questions below and tap Answer & redraft.',tone:'warn'}
-        :{text:`Claude drafted ${n===1?'one entry':n+' entries'}${dups?`; ${dups===1?'one is':dups+' are'} already in your book and left out`:''}${same?`; ${same===1?'one uses':same+' use'} the same bank line as an earlier entry and ${same===1?'is':'are'} left out`:''}. Check every line, change anything that’s wrong, then post.`,tone:dups||same?'warn':''};
+        :{text:`Claude drafted ${n===1?'one entry':n+' entries'}${dups?`; ${dups===1?'one is':dups+' are'} already in your book and left out`:''}${same?`; ${same===1?'one uses':same+' use'} the same bank line as an earlier entry and ${same===1?'is':'are'} left out`:''}. Read each journal below; tap Edit to change one, then post.`,tone:dups||same?'warn':''};
     }catch(e){
       if(D!==me)return;
       const msg=clean(e&&e.message||e);
@@ -676,20 +860,51 @@
       else{btn.disabled=false;btn.innerHTML=lbl;btn.removeAttribute('aria-busy');}
     }
   }
+  const noteBackdate=v=>typeof ledgerWarnings==='function'&&ledgerWarnings(v).includes('backdated')?' · dated more than 7 days ago':'';
+  const numberOf=id=>{const v=ledgerVoucher(id);return v&&v.number||'';};
+  // Post (new or draft, after the confirm row) or Save changes (edit). Posting takes the next number.
   function post(){
     const E=D.entries[0],v=voucherOf(E),errs=errorsOf(E);
-    if(errs.length){updateChecks();return;}
+    if(errs.length){D.confirm=null;renderFoot();updateChecks();return;}
     try{
       if(D.mode==='edit'){
         const id=D.id,key=D.key;ledgerEdit(id,v,String(E.why).trim());
-        SH.close(true);toast('Saved · the earlier version stays in its history');openVoucherKey(key);
+        SH.close(true);toast(`Saved${numberOf(id)?' '+numberOf(id):''} · the earlier version stays in its history`);openVoucherKey(key);
+      }else if(D.mode==='draft'){
+        const id=D.id;
+        if(sigOfE()!==D.savedSig)ledgerSaveDraft(v,{id,why:'Changed before posting'});
+        D.savedSig=sigOfE();
+        ledgerPostDraft(id,{why:'Posted from the editor'});
+        SH.close(true);toast(`Posted as ${numberOf(id)}${noteBackdate(v)}`);openVoucherKey(id);
       }else{
-        const id=ledgerPost(v,{origin:'app',why:'Entered by hand'});
-        SH.close(true);toast('Posted to your book');openVoucherKey(id);
+        const id=ledgerPost(v,{kind:'manual',why:'Entered by hand'});
+        SH.close(true);toast(`Posted as ${numberOf(id)}${noteBackdate(v)}`);openVoucherKey(id);
       }
+    }catch(e){D.confirm=null;renderFoot();const m=((e&&e.errors)||[String(e&&e.message||e)]).join(' · ');setNote(m,isLockMsg(m)?'warn':'bad');updateChecks();}
+  }
+  // Save draft (Ctrl+S): never touches a balance; the editor stays open on the saved draft.
+  function saveDraft(){
+    const E=D.entries[0],errs=draftErrorsOf(E);if(errs.length){updateChecks();return;}
+    try{
+      const v=voucherOf(E),first=D.mode!=='draft';
+      const id=ledgerSaveDraft(v,first?{kind:'manual',why:'Saved as a draft'}:{id:D.id,why:'Changed in the editor'});
+      D.mode='draft';D.id=id;D.kind=D.kind||'manual';D.savedSig=sigOfE();D.confirm=null;
+      SH.sheet.dataset.mode='draft';const t=SH.sheet.querySelector('.sheet-title');if(t)t.textContent=sheetTitle();
+      if(first){const f=SH.sheet.querySelector('#enForm');if(f)f.innerHTML=formHTML();}
+      setNote(first?'Saved as a draft. It touches no balance until you post it.':'Draft saved.','good');renderFoot();updateChecks();
+      toast(first?'Saved as a draft':'Draft saved');
     }catch(e){setNote(((e&&e.errors)||[String(e&&e.message||e)]).join(' · '),'bad');updateChecks();}
   }
-  // Posts drafted entries (one card, or every included one): each its own voucher, origin ai, the
+  function deleteDraft(){
+    try{ledgerDeleteDraft(D.id,'Deleted in the editor');SH.close(true);toast('Draft deleted');}
+    catch(e){D.confirm=null;renderFoot();setNote(((e&&e.errors)||[String(e&&e.message||e)]).join(' · '),'bad');}
+  }
+  // Copy: a new draft dated today with the same description and lines (kind manual), opened at once.
+  function copyJournal(id){
+    let nid;try{nid=ledgerCopy(id);}catch(e){errToast(e);return null;}
+    if(SH)SH.close(true);toast('Copied to a new draft dated today');return openDraft(nid);
+  }
+  // Posts drafted entries (one card, or every included one): each its own journal, kind ai, the
   // drafted sentence as prompt and the shared batch id. Stops at the first refusal and keeps the
   // sheet open: posted entries leave the cards (listed as posted, never posted again), the rest stay.
   function postEntries(ks,all){
@@ -698,8 +913,8 @@
     if(!list.length||list.some(E=>errorsOf(E).length)){updateChecks();return;}
     const ids=[];let failed=null;
     for(const E of list){
-      try{const id=ledgerPost({...voucherOf(E),prompt:D.drafted||D.prompt,batch:D.batch},{origin:'ai',why:'Drafted by Claude, checked and posted by you'});
-        ids.push(id);(D.posted||(D.posted=[])).push({id,n:E.n,date:E.date,description:E.description});D.entries.splice(D.entries.indexOf(E),1);}
+      try{const id=ledgerPost({...voucherOf(E),prompt:D.drafted||D.prompt,batch:D.batch},{kind:'ai',why:'Drafted by Claude, checked and posted by you'});
+        ids.push(id);(D.posted||(D.posted=[])).push({id,n:E.n,date:E.date,description:E.description,number:numberOf(id)});D.entries.splice(D.entries.indexOf(E),1);}
       catch(e){failed={E,why:((e&&e.errors)||[String(e&&e.message||e)]).join(' · ')};break;}
     }
     if(failed){
@@ -708,58 +923,104 @@
       renderForm();return;
     }
     if(!ids.length){renderForm();return;}
+    const nos=ids.map(numberOf).filter(Boolean);
     if(all||!D.entries.length){
       const left=D.entries.length;SH.close(true);
-      toast(ids.length===1?`Posted to your book${left?` · ${left} left out`:''}`:`Posted ${ids.length} entries to your book${left?` · ${left} left out`:''}`);
+      toast(ids.length===1?`Posted as ${nos[0]||'a journal'}${left?` · ${left} left out`:''}`:`Posted ${ids.length} entries as ${nos[0]}–${nos[nos.length-1]}${left?` · ${left} left out`:''}`);
       openVoucherKey(ids[0]);return;
     }
-    setNote(`Posted entry ${list[0].n}. ${D.entries.length===1?'One entry is':D.entries.length+' entries are'} still to check.`,'good');
-    toast('Posted to your book');renderForm();
+    setNote(`Posted entry ${list[0].n} as ${nos[0]}. ${D.entries.length===1?'One entry is':D.entries.length+' entries are'} still to check.`,'good');
+    toast(`Posted as ${nos[0]}`);renderForm();
+  }
+  // "Save as draft" for drafted entries (one card, or every included one): each its own draft
+  // journal, kind ai, with the sentence and the batch id. A draft may be unbalanced and touches no
+  // balance; it waits in Journals. Saved entries leave the cards like posted ones.
+  function saveEntries(ks,all){
+    if(!D||D.busy)return;
+    const list=ks.map(k=>D.entries[k]).filter(E=>E&&E.include);
+    if(!list.length||list.some(E=>draftErrorsOf(E).length)){updateChecks();return;}
+    const ids=[];let failed=null;
+    for(const E of list){
+      try{const id=ledgerSaveDraft({...voucherOf(E),prompt:D.drafted||D.prompt,batch:D.batch},{kind:'ai',why:'Drafted by Claude, saved as a draft by you'});
+        ids.push(id);(D.posted||(D.posted=[])).push({id,n:E.n,date:E.date,description:E.description,draft:true});D.entries.splice(D.entries.indexOf(E),1);}
+      catch(e){failed={E,why:((e&&e.errors)||[String(e&&e.message||e)]).join(' · ')};break;}
+    }
+    if(failed){setNote(`${ids.length} saved, 1 failed: entry ${failed.E.n}: ${failed.why}.`,'bad');renderForm();return;}
+    if(!ids.length){renderForm();return;}
+    if(all||!D.entries.length){const left=D.entries.length;SH.close(true);
+      toast(`Saved ${ids.length===1?'as a draft':ids.length+' drafts'}${left?` · ${left} left out`:''} · post ${ids.length===1?'it':'them'} from Journals`);openVoucherKey(ids[0]);return;}
+    setNote(`Saved entry ${list[0].n} as a draft. ${D.entries.length===1?'One entry is':D.entries.length+' entries are'} still to check.`,'good');
+    toast('Saved as a draft');renderForm();
   }
   function openVoucherKey(key){if(typeof window.openVoucher==='function')window.openVoucher(key);}
   function goSettings(){setTab('settings');setTimeout(()=>{const e=document.getElementById('set-ai');if(e)e.scrollIntoView({behavior:'smooth',block:'start'});},60);}
 
   /* ── Entry points ── */
   function canPost(){return seeded();}
-  function openNew(){
+  function openNew(o){
     if(!canPost()){toast('Set up your book first (Settings › Your book)');return null;}
-    aiEnsure();
-    return openForm({mode:'new',ai:false,entries:[blankEntry()],newAccounts:[],assumptions:[],questions:[],answers:[],more:'',prompt:'',fromAI:false,note:null,posted:[],convo:null,batch:null});
+    aiEnsure();o=o||{};
+    return openForm({mode:'new',kind:'manual',ai:false,entries:[blankEntry(o.date)],newAccounts:[],assumptions:[],questions:[],answers:[],more:'',prompt:'',fromAI:false,note:null,posted:[],convo:null,batch:null});
   }
-  function ledgerVoucher(id){const x=L();return x&&x.vouchers[id]||null;}
-  function keyOf(v){return v.origin==='accurate'?(v.srcKey||v.id):v.id;}
+  function ledgerVoucher(id){const x=L();const v=x&&x.vouchers[id]||null;return v&&v.status!=='deleted'?v:null;}
+  function keyOf(v){return kindOf(v)==='accurate'?(v.srcKey||v.id):v.id;}
+  const entryOf=v=>{const lines=(v.lines||[]).map(lineFrom);while(lines.length<2)lines.push(blankLine());return{date:v.date,description:v.description||'',lines,why:'',include:true,dup:[]};};
+  const lockedV=v=>kindOf(v)==='year-end'||periodOf(monthOfD(v.date))!=='open';
+  // A draft in the editor: Delete draft · Save draft · Post. o.confirm 'post' | 'delete' opens with
+  // that confirm row showing (the Journals panel's Post / Delete draft buttons).
+  function openDraft(id,o){
+    const v=ledgerVoucher(id);if(!v){toast('That journal isn’t in your book');return null;}
+    if(v.status!=='draft')return openJournal(id);
+    o=o||{};
+    return openForm({mode:'draft',ai:false,id,key:v.id,kind:kindOf(v),refNo:v.refNo||'',entries:[entryOf(v)],newAccounts:[],assumptions:[],questions:[],note:null,posted:[],confirm:o.confirm||null});
+  }
+  // A posted or void journal, read-only: Copy · Void · Edit (posted, open month), Copy only when its
+  // month is closed or locked or it is a year-end journal.
+  function openJournal(id){
+    const v=ledgerVoucher(id);if(!v){toast('That journal isn’t in your book');return null;}
+    if(v.status==='draft')return openDraft(id);
+    return openForm({mode:v.status==='posted'&&lockedV(v)?'locked':'view',ai:false,id,key:keyOf(v),kind:kindOf(v),entries:[entryOf(v)],newAccounts:[],assumptions:[],questions:[],note:null,posted:[]});
+  }
   function openEdit(id){
-    const v=ledgerVoucher(id);if(!v){toast('That voucher isn’t in your book');return null;}
-    if(v.status!=='posted'){toast('A void voucher can’t be edited');return null;}
-    const lines=(v.lines||[]).map(lineFrom);while(lines.length<2)lines.push(blankLine());
-    return openForm({mode:'edit',ai:false,id,key:keyOf(v),origin:v.origin,entries:[{date:v.date,description:v.description||'',lines,why:'',include:true,dup:[]}],newAccounts:[],assumptions:[],questions:[],note:null,posted:[]});
+    const v=ledgerVoucher(id);if(!v){toast('That journal isn’t in your book');return null;}
+    if(v.status==='draft')return openDraft(id);
+    if(v.status!=='posted'){toast('A void journal can’t be edited');return null;}
+    // The book refuses the edit in a closed or locked month (and of a year-end journal): read-only.
+    if(lockedV(v))return openJournal(id);
+    return openForm({mode:'edit',ai:false,id,key:keyOf(v),kind:kindOf(v),number:v.number||'',origDate:v.date,entries:[entryOf(v)],newAccounts:[],assumptions:[],questions:[],note:null,posted:[]});
   }
   function openVoid(id){
     const v=ledgerVoucher(id);if(!v||v.status!=='posted')return null;
+    if(kindOf(v)==='year-end'){toast('A year-end journal can’t be voided by hand; reopen December in Periods instead',{action:'Periods',onAction:goPeriods,duration:9000});return null;}
+    const M=monthOfD(v.date),st=periodOf(M);
+    if(st!=='open'){toast(`This journal is in ${mLong(M)}, which is ${st}`,{action:'Periods',onAction:goPeriods,duration:9000});return null;}
     const dr=(v.lines||[]).reduce((s,l)=>s+(l.amount>0?l.amount:0),0);
-    const body=`${v.origin==='accurate'?`<div class="en-note warn">${ic('triangle-alert','s16')}<span>This voucher came from Accurate. Voiding it here means your book differs from Accurate from now on.</span></div>`:''}
-      <p class="muted" style="margin:0 0 12px">${escH(v.description||v.number||'Voucher')} · ${escH(dayLong(v.date))} · ${rp(dr)}</p>
+    const body=`${kindOf(v)==='accurate'?`<div class="en-note warn">${ic('triangle-alert','s16')}<span>This journal came from Accurate. Voiding it here means your book differs from Accurate from now on.</span></div>`:''}
+      <p class="muted" style="margin:0 0 12px">${v.number?`${escH(v.number)} · `:''}${escH(v.description||'Journal')} · ${escH(dayLong(v.date))} · ${rp(dr)}</p>
       <div class="field"><label class="label" for="enVoidWhy">Why void it</label><input class="input" id="enVoidWhy" autocomplete="off" placeholder="e.g. entered twice"></div>
-      <p class="help" style="margin-top:8px">It stays in your book marked void, with its history; balances and reports leave it out. Nothing is deleted.</p>`;
-    const s=openSheet({title:'Void voucher',body,foot:`<button class="btn btn-secondary" data-close-void>Cancel</button><button class="btn btn-danger" id="enVoidGo" disabled>${ic('ban','s16')}Void voucher</button>`,focus:'#enVoidWhy'});
+      <p class="help" style="margin-top:8px">It stays in your book marked void, with its number and history; balances and reports leave it out. Nothing is deleted.</p>`;
+    const s=openSheet({title:'Void journal',body,foot:`<button class="btn btn-secondary" data-close-void>Cancel</button><button class="btn btn-danger" id="enVoidGo" disabled>${ic('ban','s16')}Void journal</button>`,focus:'#enVoidWhy'});
     const inp=s.sheet.querySelector('#enVoidWhy'),go=s.sheet.querySelector('#enVoidGo');
     inp.addEventListener('input',()=>{go.disabled=!inp.value.trim();});
     s.sheet.querySelector('[data-close-void]').addEventListener('click',()=>s.close(true));
     go.addEventListener('click',()=>{const why=inp.value.trim();if(!why)return;
-      try{ledgerVoid(id,why);s.close(true);toast('Voided · it stays in your book with its history');openVoucherKey(keyOf(v));}catch(e){toast(String(e&&e.message||e));}});
+      try{ledgerVoid(id,why);s.close(true);toast(`Voided${v.number?' '+v.number:''} · it stays in your book with its history`);openVoucherKey(keyOf(v));}catch(e){errToast(e);}});
     return s;
   }
 
   /* ── Voucher detail extras (js/books.js calls these) ── */
+  // The kind badge (UX §11.10b): Manual · AI · Month-end · Income · Opening · Year-end · From Accurate.
+  // data-kind is the v4 kind; data-origin keeps the v3 name for older readers.
   function originBadge(v){
-    if(!v||!v.origin||!ORIGIN[v.origin])return'';
-    const[t,tone]=ORIGIN[v.origin];return`<span class="badge${tone?' '+tone:''}" data-origin="${escH(v.origin)}">${escH(t)}</span>`;
+    const k=kindOf(v);if(!k||!KIND_BADGE[k])return'';
+    const[t,tone]=KIND_BADGE[k];return`<span class="badge${tone?' '+tone:''}" data-kind="${escH(k)}" data-origin="${escH(v3Name(k))}">${escH(t)}</span>`;
   }
   // A books-shaped voucher for a key the view leaves out (a void one), straight from the ledger.
   function voucherByKey(key){
     const x=L();if(!x||key==null)return null;key=String(key);
     const v=Object.values(x.vouchers).find(y=>y&&keyOf(y)===key);if(!v)return null;
-    return{key,id:v.id,origin:v.origin,status:v.status,date:v.date,number:v.number||'',source:v.origin==='accurate'?(v.source||''):'App',type:v.type||'',description:v.description||'',
+    const k=kindOf(v);
+    return{key,id:v.id,kind:k,origin:v3Name(k),status:v.status,date:v.date,number:v.number||'',refNo:v.refNo||'',source:k==='accurate'?(v.source||''):'App',type:v.type||'',description:v.description||'',
       lines:(v.lines||[]).map(l=>({account:l.account,amount:l.amount,description:l.memo||'',...(l.fx?{fx:{...l.fx}}:{})}))};
   }
   function voidList(){const x=L();if(!x)return[];return Object.values(x.vouchers).filter(v=>v&&v.status==='void').sort((p,q)=>q.date.localeCompare(p.date)||String(q.id).localeCompare(String(p.id)))
@@ -777,7 +1038,8 @@
       if(b.status==='posted'&&after(k).status==='void')return'Voided';
       return/Accurate/.test(e.why||'')?'Accurate’s version taken':'Changed';};
     const h=all.map((e,k)=>({e,label:kind(k)})).reverse();
-    const created=v.origin==='accurate'?'Imported from Accurate':v.origin==='ai'?'Drafted by Claude, posted by you':v.origin==='app'?'Entered by hand':`Posted from ${ORIGIN[v.origin]?ORIGIN[v.origin][0]:v.origin}`;
+    const k=kindOf(v),created=k==='accurate'?'Imported from Accurate':k==='ai'?(v.status==='draft'?'Drafted by Claude, saved as a draft':'Drafted by Claude, posted by you'):k==='manual'?(v.status==='draft'?'Saved as a draft':'Entered by hand')
+      :k==='year-end'?'Made by the year-end close':`Posted from ${KIND_BADGE[k]?KIND_BADGE[k][0]:k}`;
     return`<div class="en-sec" id="enHist"><h3 class="label">${ic('history','s16')} History</h3><ol class="en-hist">
       ${h.map(({e,label})=>{const b=e.before||{},dr=(b.lines||[]).reduce((s,l)=>s+(l.amount>0?l.amount:0),0);
         return`<li data-at="${escH(e.at)}"><div class="li-title">${escH(label)}${e.why?` · ${escH(e.why)}`:''}</div><div class="li-sub">${escH(who(e.why))} · ${escH(when(e.at))}</div>
@@ -803,21 +1065,39 @@
     return`<div class="en-batch" id="enBatch">${ic('sparkles','s16')} Entry ${b.i+1} of ${b.list.length} from one prompt: ${b.list.map((y,n)=>n===b.i?`<b>${n+1}. ${escH(y.description||'This entry')}</b>`
       :`<button class="bk-link" data-en-act="open" data-id="${escH(y.id)}">${n+1}. ${escH(y.description||'Entry')}</button>`).join(' · ')}</div>`;
   }
-  // Tools under a voucher in Journals / the voucher sheet: Edit, Void, the status and the history.
+  // Tools under a journal in the Journals panel (js/books.js), by state (UX §11.10b):
+  //   posted, open month → ghost Copy · ghost Void · secondary Edit;
+  //   posted in a closed/locked month → ghost Copy and the lock note (class en-lock, Periods link);
+  //   year-end → the note only (reopen December in Periods);
+  //   draft → primary Post · secondary Open draft · ghost Delete draft (Post / Delete confirm in the editor);
+  //   void → the Void badge and Copy. Then the batch line and the history.
   function voucherTools(bv){
     if(!bv||!bv.id||!seeded())return'';
     const v=ledgerVoucher(bv.id);if(!v)return'';
-    const isVoid=v.status==='void';
-    return`<div class="en-tools" data-vid="${escH(v.id)}">${isVoid?`<span class="badge bad" id="enVoidBadge">Void</span>`:`<button class="btn btn-secondary btn-sm" data-en-act="edit" data-id="${escH(v.id)}">${ic('pencil','s16')}Edit</button>
-        <button class="btn btn-ghost btn-sm" data-en-act="void" data-id="${escH(v.id)}" style="color:var(--bad)">${ic('ban','s16')}Void</button>`}</div>
+    const id=escH(v.id),k=kindOf(v),M=monthOfD(v.date),copy=`<button class="btn btn-ghost btn-sm" data-en-act="copy" data-id="${id}" id="enToolCopy">${ic('copy','s16')}Copy</button>`;
+    let tools='',note='';
+    if(k==='year-end'){note=`<div class="en-note warn en-lock" role="status">${ic('lock','s16')}<span>Made by the year-end close. Reopen December in <button class="bk-link" data-en-act="periods">Periods</button> to change it.</span></div>`;}
+    else if(v.status==='void')tools=`<span class="badge bad" id="enVoidBadge">Void</span>${copy}`;
+    else if(v.status==='draft'){
+      const lock=periodOf(M)!=='open';
+      tools=`<button class="btn btn-primary btn-sm" data-en-act="postdraft" data-id="${id}" id="enToolPost"${lock?' disabled':''}>${ic('check','s16')}Post</button>
+        <button class="btn btn-secondary btn-sm" data-en-act="draft" data-id="${id}" id="enToolOpen">${ic('pencil','s16')}Open draft</button>
+        <button class="btn btn-ghost btn-sm" data-en-act="deldraft" data-id="${id}" id="enToolDel" style="color:var(--bad)">${ic('trash','s16')}Delete draft</button>`;
+      if(lock)note=lockNoteHTML(M,'post this draft, or change its date');
+    }else if(periodOf(M)!=='open'){tools=copy;note=lockNoteHTML(M,'change entries');}
+    else tools=`${copy}<button class="btn btn-ghost btn-sm" data-en-act="void" data-id="${id}" style="color:var(--bad)">${ic('ban','s16')}Void</button>
+        <button class="btn btn-secondary btn-sm" data-en-act="edit" data-id="${id}">${ic('pencil','s16')}Edit</button>`;
+    return`${note}<div class="en-tools" data-vid="${id}" data-status="${escH(v.status)}">${tools}</div>
       ${batchHTML(bv)}${historyHTML(v)}`;
   }
-  function newEntryBtn(cls){return canPost()?`<button class="btn ${cls||'btn-primary'} btn-sm" data-en-act="new" id="enNewBtn">${ic('plus','s16')}New entry</button>`:'';}
+  function newEntryBtn(cls){return canPost()?`<button class="btn ${cls||'btn-primary'} btn-sm" data-en-act="new" id="enNewBtn">${ic('plus','s16')}New journal</button>`:'';}
   document.addEventListener('click',e=>{
     const b=e.target.closest&&e.target.closest('[data-en-act]');if(!b||b.disabled)return;
     e.preventDefault();e.stopPropagation();
-    const a=b.dataset.enAct;
-    if(a==='new')openNew();else if(a==='edit')openEdit(b.dataset.id);else if(a==='void')openVoid(b.dataset.id);else if(a==='open')openVoucherKey(b.dataset.id);
+    const a=b.dataset.enAct,id=b.dataset.id;
+    if(a==='new')openNew();else if(a==='edit')openEdit(id);else if(a==='void')openVoid(id);else if(a==='open')openVoucherKey(id);
+    else if(a==='copy')copyJournal(id);else if(a==='draft')openDraft(id);else if(a==='postdraft')openDraft(id,{confirm:'post'});
+    else if(a==='deldraft')openDraft(id,{confirm:'delete'});else if(a==='journal')openJournal(id);else if(a==='periods')goPeriods();
   },true);
   registerHook('homeActions',()=>canPost()?`<button class="btn btn-secondary btn-sm" data-en-act="new" id="enHomeBtn">${ic('sparkles','s16')}Tell me what happened</button>`:null);
   registerHook('beforeRender',()=>{if(owner()&&(SEC.owner!==owner()||(!SEC.localDone)||(signedIn()&&!SEC.driveTried)))aiEnsure();});
@@ -878,5 +1158,5 @@
   };
   window.etAI=AI;
   window.aiSettingsHTML=aiSettingsHTML;
-  window.etEntry={open:openNew,edit:openEdit,void:openVoid,canPost,originBadge,voucherTools,voucherByKey,voidList,newEntryBtn,batchBadge};
+  window.etEntry={open:openNew,openDraft,openJournal,copy:copyJournal,edit:openEdit,void:openVoid,canPost,originBadge,kindOf,voucherTools,voucherByKey,voidList,newEntryBtn,batchBadge};
 })();
