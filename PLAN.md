@@ -62,6 +62,14 @@ Six gaps flagged before continuing: hourly re-login friction, the "unverified ap
 12. **[DONE, 2026-11-12, not pushed] Books v4 — copy the owner's ERP books**
     Journals are the only source of the ledger (drafts, numbering, periods with close/lock, year-end close into Retained earnings, account rules, audit trail), the ERP's chart structure with a re-code, the ERP report layouts and filter kit, and a Compare with column. Contract: `docs/v4-books.md`; design: `UX-GUIDELINE.md` §11.10b–c.
 
+13. **[IN PROGRESS, 2026-11-12] Ask Claude — the assistant across the app**
+    One assistant on every page (button, Ctrl+K). It can navigate, make small edits (categories of
+    listed transactions, notes, budgets, goals, month-end balances, cash types, ticks) and draft
+    new entries (journals, income, manual transactions, card paid-through). Everything goes into one
+    change set with all it affects; one approval applies it, with Undo all. It cannot delete, change
+    rules, the chart, periods, imports or Settings. Contract: `docs/v5-assistant.md`; design:
+    `UX-GUIDELINE.md` §11.13.
+
 ## Reference
 
 Full spec and business logic (parsers, categories, data model, filtering, UI layout) is documented in the original conversation and mirrored in the existing artifact at `../Artifacts/maybank-cc-tracker/index.html`.

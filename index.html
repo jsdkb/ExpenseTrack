@@ -1205,7 +1205,9 @@ function defaultState(){
     // v3: when the last full backup was downloaded, and the reminder snoozed until.
     lastBackupAt: null, backupRemindAfter: null,
     // v2 (docs/v2-interfaces.md §3). The books themselves live in their own appData file, books.json.
-    booksMeta: null, stmtFix: {}, cardMap: {}, budgets: {}, goals: []
+    booksMeta: null, stmtFix: {}, cardMap: {}, budgets: {}, goals: [],
+    // v5 (docs/v5-assistant.md §6): applied Ask Claude change sets, newest 200 (summaries only).
+    aiLog: []
   };
 }
 
@@ -1366,6 +1368,8 @@ function mergeStates(remote, local){
     merged.patternRules = [...lp, ...(remote.patternRules||[]).filter(r => !seen.has(String(r.match).toUpperCase()))];
   }
   merged.catChangeLog = unionById(remote.catChangeLog, local.catChangeLog).sort((a,b) => String(a.at).localeCompare(String(b.at))).slice(-CAT_LOG_MAX);
+  // v5: applied Ask Claude change sets from both devices, newest 200 (docs/v5-assistant.md §6).
+  merged.aiLog = unionById(remote.aiLog, local.aiLog).sort((a,b) => String(a.at).localeCompare(String(b.at))).slice(-200);
   merged.dismissedSuggestions = [...new Set([...(remote.dismissedSuggestions||[]), ...(local.dismissedSuggestions||[])])];
   // Wealth snapshot: keep whichever device holds the newer one.
   const lw = local.wealth, rw = remote.wealth;
@@ -5962,5 +5966,6 @@ window.addEventListener('load', initAuth);
 <script src="js/home.js"></script>
 <script src="js/statements.js"></script>
 <script src="js/extras.js"></script>
+<script src="js/assistant.js"></script>
 </body>
 </html>

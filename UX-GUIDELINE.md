@@ -4,7 +4,8 @@
 brand and home-screen revision) approved 2026-10-16; v1.2 (wealth tracker v2: Home, Books, Plan,
 statement-corrected spending) 2026-11-03; v1.3 (simpler Chart of accounts and Month-end, §11.7,
 §11.10) 2026-11-06; v1.4 (Books copied from the owner's ERP: journals, periods, ERP chart,
-filter kit, compare, §11.10b–c) 2026-11-11**
+filter kit, compare, §11.10b–c) 2026-11-11; v1.5 (Ask Claude assistant on every page, §11.13)
+2026-11-12**
 
 This document is the design source of truth for ExpenseTrack on web and mobile. Every UI change
 should follow it; anything that needs to break a rule here should update this file first.
@@ -1363,6 +1364,112 @@ Home                                       [Book | Market]  [hide]
   holdings without a market value show `Book only`; the method footnote (§9.3a).
 - **SPT pack:** year picker in the header; year-end assets and liabilities (the "Declared" ticks),
   receivables with age, currency exposure; statement-table rules (§8.8); Excel export.
+
+### 11.13 Ask Claude — the assistant (v5, 2026-11-12)
+
+Question: *"Can you do this for me?"* One assistant for the whole app. It can take you to a page,
+make small edits and draft new entries. It **never applies anything on its own**: every change goes
+into one change set that you review and approve together. Contract: `docs/v5-assistant.md`.
+
+```
+Web: the drawer opens on the right; the page stays visible and usable on the left
+┌ page …………………………………………┐┌ Ask Claude ─────────────── ✕ ┐
+│                          ││ you: put Oct rides under …   │
+│                          ││ ◦ Looked up October spending │
+│                          ││ Claude: 6 rides found …      │
+│                          ││┌ Change set · 7 changes ────┐│
+│                          │││ ☑ Category · 6 transactions ││
+│                          │││   RIDE 3 Oct  Food → Transp.││
+│                          │││ ☑ Budget · Transport        ││
+│                          │││   none → Rp 1,5 jt          ││
+│                          │││ Everything affected ▾       ││
+│                          │││   Oct Transport 0,4 → 0,9 jt││
+│                          │││   Oct Food      2,1 → 1,6 jt││
+│                          │││   Transport budget  — → 60% ││
+│                          │││ [Leave all out] [Apply all 7]││
+│                          ││└─────────────────────────────┘│
+│                     (✦)  ││ [ Ask Claude…            ↑ ] │
+└──────────────────────────┘└──────────────────────────────┘
+```
+
+- **Entry points:**
+  - **Web and tablet:** a 48px round button with the `sparkles` icon, fixed at the bottom right.
+    It uses `--accent` on `--surface-3` with a 1px `--border`, the same quiet style as the icon
+    buttons, and no glow. It sits 24px from the edges, and its tooltip reads "Ask Claude (Ctrl+K)".
+  - **Phones:** a `sparkles` icon button in the top app bar, before the `+` (§3.3). The bottom
+    bar stays at exactly five tabs.
+  - **Everywhere:** Ctrl+K (⌘K on a Mac) opens the assistant and Esc closes it. The button is
+    hidden while the panel is open.
+- **Panel:**
+  - **Web (≥ 1024px):** a right drawer, 420px wide, full height, on `--surface-2` with a
+    `--border` left edge, and no scrim, so the page beside it stays usable and navigation shows
+    straight away. The page content shifts left by the drawer's width (no overlap) when the window
+    is ≥ 1280px; below that the drawer floats over the page with a soft shadow.
+  - **Phones and tablet portrait:** a full-height sheet (§8.11, snap 92%).
+  - The header has the title "Ask Claude", the model name in small `--text-3`, a **New chat**
+    button and ✕.
+  - The input is pinned at the bottom: a textarea that grows to 5 lines, where Enter sends and
+    Shift+Enter adds a new line.
+- **Conversation:**
+  - Your messages are on `--surface-3` bubbles, right-aligned. Claude's replies are plain text on
+    the panel, left-aligned, with no bubble; short markdown (bold, lists) is rendered and no raw
+    HTML is shown.
+  - While Claude works, each look-up shows as one quiet `--text-3` line with a small icon, for
+    example "◦ Looked up October spending" or "◦ Read card position · Maybank". They stay in the
+    transcript, collapsed into "n look-ups" when there are more than 3.
+  - A spinner line reads "Claude is thinking…", next to a **Stop** button that cancels the
+    request.
+  - The chat lives for this tab only and is not saved. **New chat** clears it. Applied change sets
+    are kept in the log (below).
+- **Empty state:** "Ask me to find, fix or add something." Three example chips depend on the page,
+  for example on Daily spending "Recategorise this month's ride-app trips", on Budgets "Suggest
+  budgets from my last 3 months", on Journals "Record a transfer between my accounts". A tap fills
+  the input; it does not send.
+- **No key yet:** the panel says "Add your Anthropic API key in Settings › AI to use Claude" and
+  shows an **Open Settings** button; the input is disabled.
+- **Navigation:** when Claude opens a page, it happens at once and needs no approval, because it
+  changes no data. A line "→ Opened Spending · October · Transport" appears in the chat. On phones
+  the sheet closes so the page can be seen; reopening it brings the chat back.
+- **Change set card** (one per Claude answer that proposes changes; a later answer replaces it
+  while it is unapplied):
+  - **Title:** "Change set · n changes", then a one-line summary from Claude.
+  - **Groups**, each with its own tick box, in this order: Categories, Notes, Budgets, Goals,
+    Journals, Income, Manual transactions, Card paid-through, Month-end balances, Cash movement
+    types, Checklist and SPT ticks.
+  - **Each item** shows what changes, before → after: the old value struck through in `--text-3`,
+    then the new value in `--text-1`.
+  - **Transactions** use the compact transaction row (§8.9): date · merchant · amount ·
+    from → to. More than 5 rows fold into "Show all n".
+  - **Journals** show the debit/credit lines as a small table, with the number "JV/… (given when
+    posted)".
+  - **Everything affected** opens by default when there are ≤ 6 lines. Each line is before →
+    after:
+    - category totals per affected month;
+    - budget used this month (%, with the §8.10 status badge);
+    - each account balance a journal or income touches;
+    - the card's current outstanding;
+    - the month-end difference per account;
+    - cash in/out per affected month.
+    A change that moves a total by more than 20%, or puts a budget over, is marked with a
+    `--warn` dot.
+  - **Blocked item:** `--bad-soft` background, the reason in plain words ("October is closed —
+    reopen it in Books › Periods first"), its tick box disabled, and a link to the page.
+    **Apply all** stays disabled until it is ticked off or Claude fixes it.
+  - **Footer:** **Apply all (n)** (primary, counting the ticked items) and **Leave all out**
+    (secondary). There is no per-item Apply: approval is one action, as the owner asked.
+- **After Apply:**
+  - The card turns into a summary, "Applied · 7 changes · 14:32", with an **Undo all** button.
+  - A toast reads "Applied 7 changes" with **Undo**.
+  - Undo of a posted journal voids it with the reason "Undo of Ask Claude change set"; the voucher
+    stays in its history.
+  - When an item can't be undone because it changed since, the summary says which ones were skipped.
+- **Never on offer:** Claude has no way to delete, hide, void, change rules, change the chart of
+  accounts, renumber, close periods, import, restore or change Settings. When asked, it says so and
+  offers to open the page where you can do it yourself.
+- **Errors:** they reuse the AI messages of §11.10b (no key, 401/403/429, offline, timeout, cut
+  off) as a `--bad-soft` note in the chat with **Try again**. A failed request never leaves a
+  half-built change set.
+- **Hide amounts (§20):** every figure in the panel blurs too.
 
 ### 11.9 Settings
 

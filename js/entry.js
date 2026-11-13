@@ -210,18 +210,23 @@
 
   /* ══ Calling Claude (browser-direct, the owner's own key) ══ */
   function aiErr(kind,msg,status){const e=new Error(msg);e.kind=kind;if(status)e.status=status;return e;}
-  async function callClaude(body,timeout){
+  // signal (optional): an outside AbortController's signal (Ask Claude's Stop), chained to the timeout.
+  async function callClaude(body,timeout,signal){
     if(!SEC.key)throw aiErr('nokey','No Anthropic API key yet. Add one in Settings › AI.');
+    if(signal&&signal.aborted)throw aiErr('aborted','Stopped.');
     if(typeof navigator!=='undefined'&&navigator.onLine===false)throw aiErr('offline','You’re offline, so Claude can’t be asked right now.');
     const m=modelOf(body.model),headers={'content-type':'application/json','x-api-key':SEC.key,'anthropic-version':API_VERSION,
       'anthropic-dangerous-direct-browser-access':'true'};
     if(m.fallback){headers['anthropic-beta']=FALLBACK_BETA;body={...body,fallbacks:'default'};}
-    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),timeout);
+    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),timeout),stop=()=>ctl.abort();
+    if(signal)signal.addEventListener('abort',stop);
+    const unhook=()=>{clearTimeout(t);if(signal)signal.removeEventListener('abort',stop);};
     let r;
     try{r=await fetch(API_URL,{method:'POST',headers,body:JSON.stringify(body),signal:ctl.signal,credentials:'omit',referrerPolicy:'no-referrer'});}
-    catch(e){clearTimeout(t);throw e&&e.name==='AbortError'?aiErr('timeout','Claude took too long to answer.'):aiErr('network','Couldn’t reach Anthropic. Check your connection.');}
+    catch(e){unhook();if(signal&&signal.aborted)throw aiErr('aborted','Stopped.');throw e&&e.name==='AbortError'?aiErr('timeout','Claude took too long to answer.'):aiErr('network','Couldn’t reach Anthropic. Check your connection.');}
     let data=null;
-    try{data=await r.json();}catch(_){data=null;}finally{clearTimeout(t);}
+    try{data=await r.json();}catch(_){data=null;}finally{unhook();}
+    if(signal&&signal.aborted)throw aiErr('aborted','Stopped.');
     if(!r.ok){
       const s=r.status,detail=data&&data.error&&data.error.message?clean(String(data.error.message).slice(0,200)):'';
       if(s===401)throw aiErr('auth','Anthropic didn’t accept the key (401). Check or replace it in Settings › AI.',s);
@@ -1117,7 +1122,7 @@
         <button class="btn btn-primary" onclick="etAI.save()" id="aiSave">${ic('key-round','s16')}Save key</button></div>
       <div class="setting-row"><div><div class="li-title">Model</div><div class="li-sub">${escH(modelOf(SEC.model).sub)}</div></div>
         <select class="input" id="aiModel" style="width:auto" onchange="etAI.setModel(this.value)" aria-label="Model">${MODELS.map(m=>`<option value="${m.id}"${m.id===SEC.model?' selected':''}>${escH(m.label)}</option>`).join('')}</select></div>
-      <p class="help" id="aiNote">Your key is stored in your private Google Drive app folder and this device; set a spend limit on it at console.anthropic.com; when you ask the AI, it is sent your chart of accounts, account balances, open receivables and payables, the last 60 days of statement lines and your sentence (to Anthropic only, never the key in any of it).</p>
+      <p class="help" id="aiNote">Your key is stored in your private Google Drive app folder and this device; set a spend limit on it at console.anthropic.com; when you use “Tell me what happened”, it is sent your chart of accounts, account balances, open receivables and payables, the last 60 days of statement lines and your sentence; when you use Ask Claude, it is sent only what each request needs — the data it looks up (for example the transactions, balances or journals in question) and your message. Both go to Anthropic only, never the key.</p>
       <div class="help" id="aiStatus" role="status" aria-live="polite"></div></section>`;
   }
   function status(msg,tone){const el=document.getElementById('aiStatus');if(el){el.textContent=msg||'';el.style.color=tone==='bad'?'var(--bad)':tone==='good'?'var(--good)':'';}}
@@ -1150,6 +1155,10 @@
     // For tests and other modules: plain facts, never the key itself.
     state(){return{hasKey:!!SEC.key,masked:masked(),model:SEC.model,at:SEC.at,status:SEC.status};},
     ensure:aiEnsure,
+    // For js/assistant.js (docs/v5-assistant.md §2): the same request path (headers, fallback beta,
+    // error kinds; the key only ever in the x-api-key header) and the owner's model.
+    call:(body,timeout,signal)=>callClaude(body,timeout,signal),
+    model:()=>SEC.model,
     request:draftRequest,
     // Counts only, for checks on real data: what a request for a sentence would carry. No call.
     requestCounts(sentence){const r=draftRequest(sentence||'test'),u=JSON.parse(r.messages[0].content);

@@ -411,7 +411,8 @@ Models (Settings › AI): Claude Sonnet 5.5 `claude-sonnet-5-5` (default), Claud
   your private Google Drive app folder and this device; set a spend limit on it at
   console.anthropic.com; when you ask the AI, it is sent your chart of accounts, account balances,
   open receivables and payables, the last 60 days of statement lines and your sentence (to Anthropic
-  only, never the key in any of it)."
+  only, never the key in any of it)." Since v5 (2026-11-12) the note also covers Ask Claude; the
+  current wording is in `docs/v5-assistant.md` §8.
 - Stored as `{key, model, at}` in its own Drive appData file `ai.json` (through `driveFindFileByName`
   / `driveReadJson` / `driveUploadJson`) and in IndexedDB database `et-secret`, store `secret`, key
   `ai|<account e-mail>`, value `{key, model, at, owner}`. Signed out (no Drive token): IndexedDB only.
