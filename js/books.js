@@ -57,6 +57,38 @@
     .bk-cmpsub{justify-content:flex-end;gap:4px;font-weight:400}
     table.data td.bk-nm{padding-left:calc(16px + var(--lvl,0) * 20px)}
     table.data tr.bk-hdr td{font-weight:600}
+    /* Chart of accounts v4.1 (§11.10d): class bands, group headers, accounts with guide lines */
+    table.bk-coa td.bk-no{color:var(--text-3);font-variant-numeric:tabular-nums}
+    table.bk-coa td.bk-nm{background-image:repeating-linear-gradient(90deg,var(--border-strong) 0 1px,transparent 1px 20px);background-size:calc(var(--lvl,0) * 20px) 100%;background-position:24px 0;background-repeat:no-repeat}
+    .bk-nmrow{display:flex;align-items:center;gap:0;min-width:0}
+    .bk-nmtxt{min-width:0;flex:1 1 auto}
+    .bk-sp{flex:0 0 26px}
+    .icon-btn.bk-fold{width:36px;height:36px;flex:0 0 36px;margin-left:-10px;color:var(--text-2)}
+    .bk-fold svg.i{width:16px;height:16px;transition:transform .15s ease}
+    .bk-fold[aria-expanded="false"] svg.i{transform:rotate(-90deg)}
+    @media (prefers-reduced-motion:reduce){.bk-fold svg.i{transition:none}}
+    table.bk-coa tr.bk-hdr .merchant-name{font-weight:600;font-size:14px}
+    table.bk-coa tr.bk-hdr td.num{font-weight:600}
+    table.bk-coa tr.bk-accrow .merchant-name{font-weight:400;font-size:14px}
+    table.bk-coa tr.bk-accrow td{font-weight:400}
+    table.bk-coa tr.bk-band td{background:var(--surface-2);box-shadow:inset 3px 0 0 var(--accent);height:44px;padding-top:0;padding-bottom:0}
+    .bk-band-in{display:flex;align-items:center;gap:8px;min-height:44px;padding-left:6px;min-width:0}
+    .bk-band-l{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-1);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bk-band-l .bk-code{color:var(--text-3);margin-right:4px;font-variant-numeric:tabular-nums}
+    .bk-band-v{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;margin-left:auto}
+    .bk-grow{flex:1 1 auto}
+    table.bk-coa tr.bk-muted td,table.bk-coa tr.bk-muted .merchant-name,table.bk-coa tr.bk-muted .bk-band-l{color:var(--text-3)}
+    .badge.bk-muted-b{background:var(--surface-3);color:var(--text-3)}
+    td.bk-decl,th.bk-decl{text-align:center;width:64px}
+    table.bk-coa tr:not(.bk-band) td:last-child{width:48px;padding-left:0;padding-right:8px;text-align:right}
+    .bk-dchk{width:20px;height:20px;accent-color:var(--accent);cursor:pointer;vertical-align:middle;margin:0}
+    .bk-dchk.sm{width:18px;height:18px}
+    .bk-dsub{display:inline-flex;align-items:center;gap:6px}
+    table.bk-coa .merchant-sub{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center}
+    @media (max-width:767px){table.bk-coa td.num{white-space:nowrap;padding-left:4px}table.bk-coa td.bk-nm{padding-right:4px}}
+    .bk-accname{font-weight:600;font-size:16px;margin-top:6px;overflow-wrap:anywhere}
+    .bk-accval{font-size:28px;line-height:34px}
+    .bk-accbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
     table.data td.bk-tick{text-align:center;color:var(--good)}
     .bk-acts{display:flex;gap:2px;justify-content:flex-end}
     .bk-acts .icon-btn{width:36px;height:36px}
@@ -94,7 +126,7 @@
   const PAGE_KEYS=['coa','journals','ledger','bs','pl','tb','periods','audit'];
   const KIND_LABEL={asset:'Asset',liability:'Liability',equity:'Equity',income:'Income',expense:'Expense'};
   const KINDS=['asset','liability','equity','income','expense'];
-  const JKIND={manual:['Manual',''],ai:['AI','accent'],'month-end':['Month-end',''],income:['Income',''],opening:['Opening',''],'year-end':['Year-end',''],accurate:['From Accurate','']};
+  const JKIND={manual:['Manual',''],ai:['AI','accent'],'month-end':['Month-end',''],income:['Income',''],opening:['Opening',''],spending:['Spending',''],'year-end':['Year-end',''],accurate:['From Accurate','']};
   const JSTAT={draft:['Draft','info'],posted:['Posted','good'],void:['Void','bk-void']};
   const sgn=k=>(k==='asset'||k==='expense')?1:-1;
   const isPL=k=>k==='income'||k==='expense';
@@ -170,7 +202,7 @@
 
   /* ── Page filters (remembered per page for the session) and UI state ── */
   const DEF={
-    coa:()=>({q:'',arch:false,kind:'',asOf:todayISO(),asOfP:'today'}),
+    coa:()=>({q:'',hid:false,kind:'',show:'all',asOf:todayISO(),asOfP:'today'}),
     journals:()=>({q:'',status:'',jkind:'',acc:'',from:'',to:'',preset:null}),
     ledger:()=>{const[f,t]=rangeFor('thisYear');return{acc:'',from:f,to:t,preset:'thisYear'};},
     tb:()=>{const[f,t]=rangeFor('thisYear');return{from:f,to:t,preset:'thisYear',cmp:'off',cf:'',ct:''};},
@@ -180,7 +212,7 @@
   };
   const F={};
   const st=p=>F[p]||(F[p]=DEF[p]());
-  const U={journals:{page:0,sort:null,sel:null},audit:{page:0},ledger:{more:new Set()},coa:{confirm:null,err:''},periods:{year:null},pend:{}};
+  const U={journals:{page:0,sort:null,sel:null},audit:{page:0},ledger:{more:new Set()},coa:{confirm:null,err:'',sel:null,fold:null,scroll:null},periods:{year:null},pend:{}};
   const PAGE_SIZE=50;
   function resetPage(p){if(U[p]&&'page'in U[p])U[p].page=0;}
 
@@ -225,16 +257,19 @@
   const journals=()=>(typeof ledgerView==='function'&&ledgerView('journals'))||[];
   function findJournal(k){if(k==null)return null;k=String(k);return journals().find(j=>j.id===k)||journals().find(j=>j.key===k)||null;}
   // Account options for a picker: every account (or postable only), by code, indented by level.
+  // Suspended accounts are left out (unless picked already); archived ones unless asked for.
   function accOptions(sel,o){
     o=o||{};const A=ax();let h=o.blank!=null?`<option value="">${escH(o.blank)}</option>`:'';
     h+=o.extra||'';
-    for(const c of A.codes){const a=A.acc.get(c);if(o.postable&&!a.postable)continue;if(a.archived&&c!==sel&&!o.archived)continue;
+    for(const c of A.codes){const a=A.acc.get(c);if(o.postable&&!a.postable)continue;if(a.archived&&c!==sel&&!o.archived)continue;if(a.suspended&&c!==sel)continue;
       h+=`<option value="${attr(c)}"${c===sel?' selected':''}>${o.postable?'':'  '.repeat(A.dep.get(c)||0)}${escH(c)} · ${escH(a.name)}${a.archived?' (archived)':''}</option>`;}
     return h;
   }
   const kindBadge=k=>{const[t,tone]=JKIND[k]||[k,''];return`<span class="badge${tone?' '+tone:''}" data-kind="${attr(k)}">${escH(t)}</span>`;};
   const statBadge=s=>{const[t,tone]=JSTAT[s]||[s,''];return`<span class="badge${tone?' '+tone:''}" data-status="${attr(s)}">${escH(t)}</span>`;};
   const numHTML=j=>j.number?escH(j.number):'<span class="bk-draftno">(draft)</span>';
+  // A suspended account still in a report (it holds figures there): muted badge.
+  const suspB=on=>on?' <span class="badge bk-muted-b" data-badge="suspended">Suspended</span>':'';
 
   /* ── Filter bar parts ── */
   function searchBox(p,ph){return`<input class="input bk-search" type="search" data-bk="q" data-p="${p}" placeholder="${attr(ph)}" aria-label="${attr(ph)}" value="${attr(st(p).q)}">`;}
@@ -269,7 +304,8 @@
     if('acc'in f&&f.acc)out.push(['acc',`Account: ${f.acc.startsWith('kind:')?'any '+f.acc.slice(5)+' account':f.acc+' '+nameOf(f.acc)}`]);
     if('from'in f&&(f.from!==d.from||f.to!==d.to))out.push(['dates',`Dates: ${rangeLabel(f.from,f.to)}`]);
     if('asOf'in f&&f.asOf!==d.asOf)out.push(['asof',`As of: ${dLong(f.asOf)}`]);
-    if('arch'in f&&f.arch)out.push(['arch','Showing archived']);
+    if('show'in f&&f.show!=='all')out.push(['show',`Show: ${f.show==='bs'?'Own & owe':'Not declared'}`]);
+    if('hid'in f&&f.hid)out.push(['hid','Showing hidden']);
     if('kind'in f&&f.kind)out.push(['kind',`Type: ${KIND_LABEL[f.kind]}`]);
     if('cmp'in f&&f.cmp!=='off')out.push(['cmp',`Compare: ${CMP.find(c=>c[0]===f.cmp)[1]}`]);
     return out;
@@ -467,7 +503,7 @@
     const f=st('ledger');if(f.acc&&!accOf(f.acc))f.acc='';
     const d=report(()=>ledgerLib.gl(null,f.acc||null,f.from||null,f.to||null),{accounts:[]});
     const acc=`<select class="input me-select" data-bk="acc" data-p="ledger" aria-label="Account">${accOptions(f.acc,{blank:'All accounts',postable:true,archived:true})}</select>`;
-    const cards=d.accounts.map(a=>`<section class="card flush span-12 bk-gl" data-code="${attr(a.code)}">${cardHead('file-text',`${escH(a.code)} · ${escH(a.name)}`,`${escH(KIND_LABEL[a.kind]||'Not in your chart')} · ${escH(rangeLabel(f.from,f.to))} · debit +, credit −`)}
+    const cards=d.accounts.map(a=>`<section class="card flush span-12 bk-gl" data-code="${attr(a.code)}">${cardHead('file-text',`${escH(a.code)} · ${escH(a.name)}${suspB(a.suspended)}`,`${escH(KIND_LABEL[a.kind]||'Not in your chart')} · ${escH(rangeLabel(f.from,f.to))} · debit +, credit −`)}
         ${glTable(a,f.from,U.ledger.more.has(a.code)?0:200)}</section>`).join('');
     return`${pageHead('General ledger','Each account’s entries with a running balance, from posted journals.',`${xlBtn('ledger')}${hideBtn()}`)}
       <div class="bk-bar">${acc}${presetChips('ledger','range')}${dateFields('ledger','range')}</div>${chipsHTML('ledger')}
@@ -500,7 +536,7 @@
     const rows=codes.map(code=>{const r=tm.get(code)||{...z,code,name:(cm.get(code)||{}).name||code,kind:(cm.get(code)||{}).kind},q=cm.get(code)||z;
       const zero=!r.opening&&!r.debit&&!r.credit&&!r.closing&&(!on||!q.closing);
       return`<tr class="clickable${zero?' bk-zero':''}" data-bk="tbled" data-code="${attr(code)}" data-row="${attr(code)}" tabindex="0"><td class="bk-no hide-sm">${escH(code)}</td>
-        <td class="bk-acc"><div class="merchant-name"><span class="bk-code only-sm">${escH(code)}</span>${escH(r.name)}${r.unknown?' <span class="badge warn">Not in your chart</span>':''}</div><div class="merchant-sub only-sm flex" style="gap:6px;flex-wrap:wrap"><span>Opening ${money(r.opening)}</span><span>Dr ${money(r.debit)}</span><span>Cr ${money(r.credit)}</span></div></td>
+        <td class="bk-acc"><div class="merchant-name"><span class="bk-code only-sm">${escH(code)}</span>${escH(r.name)}${r.unknown?' <span class="badge warn">Not in your chart</span>':''}${suspB(r.suspended||(cm.get(code)||{}).suspended)}</div><div class="merchant-sub only-sm flex" style="gap:6px;flex-wrap:wrap"><span>Opening ${money(r.opening)}</span><span>Dr ${money(r.debit)}</span><span>Cr ${money(r.credit)}</span></div></td>
         <td class="num hide-sm" data-k="opening" data-raw="${r.opening}">${money(r.opening)}</td><td class="num hide-sm" data-k="debit" data-raw="${r.debit}">${plain(r.debit)}</td><td class="num hide-sm" data-k="credit" data-raw="${r.credit}">${plain(r.credit)}</td>
         ${amtTDs(r.closing,q.closing,on,null,'bk-cl')}</tr>`;}).join('');
     const T=t.totals,CT=on?c.totals:z;
@@ -534,12 +570,12 @@
   function plData(){
     const f=st('pl'),p=report(()=>ledgerLib.pl(null,f.from||null,f.to||null),null),cr=cmpRange(f);
     const c=f.cmp!=='off'&&cr?report(()=>ledgerLib.pl(null,cr[0],cr[1]),null):null;
-    const merge=(a,b)=>{const m=new Map();for(const r of a)m.set(r.code,{code:r.code,name:r.name,cur:r.amount,prev:0});for(const r of b||[]){const x=m.get(r.code)||{code:r.code,name:r.name,cur:0,prev:0};x.prev=r.amount;m.set(r.code,x);}return[...m.values()].sort((x,y)=>cmpCode(x.code,y.code));};
+    const merge=(a,b)=>{const m=new Map();for(const r of a)m.set(r.code,{code:r.code,name:r.name,cur:r.amount,prev:0,suspended:!!r.suspended});for(const r of b||[]){const x=m.get(r.code)||{code:r.code,name:r.name,cur:0,prev:0,suspended:!!r.suspended};x.prev=r.amount;m.set(r.code,x);}return[...m.values()].sort((x,y)=>cmpCode(x.code,y.code));};
     return p&&{f,p,c,cr,inc:merge(p.income,c&&c.income),exp:merge(p.expense,c&&c.expense)};
   }
   function plSection(id,title,icon,rows,tot,ctot,on,dir,cmpLabel,link){
     const body=rows.map(r=>`<tr class="clickable bk-row" data-bk="led" data-code="${attr(r.code)}" data-from="${attr(link.from)}" data-to="${attr(link.to)}" data-row="${attr(r.code)}" tabindex="0">
-        <td class="bk-no hide-sm">${escH(r.code)}</td><td class="bk-acc"><div class="merchant-name"><span class="bk-code only-sm">${escH(r.code)}</span>${escH(r.name)}</div></td>${amtTDs(r.cur,r.prev,on,dir)}</tr>`).join('');
+        <td class="bk-no hide-sm">${escH(r.code)}</td><td class="bk-acc"><div class="merchant-name"><span class="bk-code only-sm">${escH(r.code)}</span>${escH(r.name)}${suspB(r.suspended)}</div></td>${amtTDs(r.cur,r.prev,on,dir)}</tr>`).join('');
     return`<section class="card flush span-12" id="${id}">${cardHead(icon,title,'')}
       <div class="table-wrap"><table class="data bk-stmt"><thead><tr><th scope="col" class="hide-sm">Code</th><th scope="col">Name</th>${amtTHs(on,'Amount',cmpLabel)}</tr></thead>
       <tbody>${body||`<tr><td colspan="${on?5:3}" class="muted">Nothing in this range</td></tr>`}</tbody>
@@ -572,7 +608,7 @@
   /* ══ Balance sheet ══ */
   function bsData(){
     const f=st('bs'),b=report(()=>ledgerLib.bs(null,f.asOf),null),ca=f.cmp!=='off'?cmpAsOf(f):null,c=ca?report(()=>ledgerLib.bs(null,ca),null):null;
-    const merge=(a,x)=>{const m=new Map();for(const r of a)m.set(r.code,{code:r.code,name:r.name,cur:r.amount,prev:0,unknown:r.unknown});for(const r of x||[]){const y=m.get(r.code)||{code:r.code,name:r.name,cur:0,prev:0};y.prev=r.amount;m.set(r.code,y);}return[...m.values()].sort((p,q)=>cmpCode(p.code,q.code));};
+    const merge=(a,x)=>{const m=new Map();for(const r of a)m.set(r.code,{code:r.code,name:r.name,cur:r.amount,prev:0,unknown:r.unknown,suspended:!!r.suspended});for(const r of x||[]){const y=m.get(r.code)||{code:r.code,name:r.name,cur:0,prev:0,suspended:!!r.suspended};y.prev=r.amount;m.set(r.code,y);}return[...m.values()].sort((p,q)=>cmpCode(p.code,q.code));};
     return b&&{f,b,c,ca,A:merge(b.assets,c&&c.assets),L:merge(b.liabilities,c&&c.liabilities),E:merge(b.equity,c&&c.equity)};
   }
   // The two earnings lines; a negative one is relabelled as a loss, shown positive.
@@ -584,7 +620,7 @@
   }
   function bsRows(list,link,on,dir){
     return list.map(r=>`<tr class="clickable bk-row" data-bk="led" data-code="${attr(r.code)}" data-from="${attr(link.from)}" data-to="${attr(link.to)}" data-row="${attr(r.code)}" tabindex="0">
-      <td class="bk-no hide-sm">${escH(r.code)}</td><td class="bk-acc"><div class="merchant-name"><span class="bk-code only-sm">${escH(r.code)}</span>${escH(r.name)}${r.unknown?' <span class="badge warn">Not in your chart</span>':''}</div></td>${amtTDs(r.cur,r.prev,on,dir)}</tr>`).join('');
+      <td class="bk-no hide-sm">${escH(r.code)}</td><td class="bk-acc"><div class="merchant-name"><span class="bk-code only-sm">${escH(r.code)}</span>${escH(r.name)}${r.unknown?' <span class="badge warn">Not in your chart</span>':''}${suspB(r.suspended)}</div></td>${amtTDs(r.cur,r.prev,on,dir)}</tr>`).join('');
   }
   function renderBS(){
     const g=gateHTML('Balance sheet');if(g)return g;
@@ -621,12 +657,56 @@
       head:['Code','Account','Amount',...(on?[dLong(ca),'Change','Change %']:[])],widths:[12,46,20,...(on?[20,18,11]:[])],rows});
   }
 
-  /* ══ Chart of accounts ══ */
+  /* ══ Chart of accounts (UX-GUIDELINE §11.10d) ══
+     Three row kinds: class bands (1000 Assets … 9000 Income tax, or one band per type while the chart
+     is not on the ERP structure yet), group headers with a chevron and their total, and the postable
+     accounts under thin guide lines. Every header folds (a per-device convenience in localStorage);
+     search and the filters always show their matches. Suspended and archived accounts are hidden
+     until "Show hidden (n)". Merged from the old Wealth › Accounts page: All · Own & owe · Not
+     declared, the Book / Market switch, the Declared ticks (STATE.declared, read by the SPT pack) and
+     the account detail (value, change, 12-month chart, month-end balances, next statement). */
+  const FOLD_KEY='et_coa_fold';
+  const BAND_LABEL={asset:'Assets',liability:'Liabilities',equity:'Equity',income:'Income',expense:'Expenses'};
+  const SHOW=[['all','All'],['bs','Own & owe'],['undecl','Not declared']];
+  const isHidden=a=>!!(a&&(a.archived||a.suspended));
+  const isBS=k=>k==='asset'||k==='liability';
+  const declaredMap=()=>(typeof STATE==='object'&&STATE&&STATE.declared)||{};
+  const wAccOf=c=>{try{return typeof wAcc==='function'?wAcc(String(c))||null:null;}catch(_){return null;}};
+  function foldSet(){
+    if(U.coa.fold)return U.coa.fold;let v=[];
+    try{const x=JSON.parse(localStorage.getItem(FOLD_KEY)||'[]');if(Array.isArray(x))v=x.map(String);}catch(_){}
+    return U.coa.fold=new Set(v);
+  }
+  function foldSave(){try{localStorage.setItem(FOLD_KEY,JSON.stringify([...foldSet()]));}catch(_){}}
+  function ancestorsOf(c){const A=ax(),out=[];let x=A.acc.get(c),n=0;while(x&&x.parent&&A.acc.has(String(x.parent))&&n++<30){out.push(String(x.parent));x=A.acc.get(String(x.parent));}return out;}
+  function unfoldTo(c){const fs=foldSet(),a=accOf(c);let ch=false;for(const p of ancestorsOf(c))if(fs.delete(p))ch=true;if(a&&fs.delete('kind:'+a.kind))ch=true;if(ch)foldSave();}
+  // Tree order (roots by code, each header's accounts by code) and whether the chart is on the ERP
+  // structure (every top-level account a class header 1000 … 9000).
+  function coaTree(){
+    const A=ax();if(A.tree)return A.tree;
+    const isRoot=c=>{const a=A.acc.get(c);return!a.parent||!A.acc.has(String(a.parent))||String(a.parent)===c;};
+    const roots=A.codes.filter(isRoot),order=[],seen=new Set(),root=new Map();
+    const walk=(c,r)=>{if(seen.has(c))return;seen.add(c);order.push(c);root.set(c,r);for(const k of(A.kids.get(c)||[]).slice().sort(cmpCode))walk(k,r);};
+    for(const r of roots)walk(r,r);for(const c of A.codes)walk(c,c);
+    const erp=roots.length>0&&roots.every(c=>!A.acc.get(c).postable&&/^[1-9]000$/.test(c));
+    return A.tree={order,root,erp};
+  }
+  // The Market view applies when the as-of month is a Net worth month that has market values.
+  function coaMarket(f){
+    const out={has:false,on:false,mi:-1};
+    try{if(typeof W!=='function'||!W()||typeof wMonths!=='function')return out;const ms=wMonths(),M=f.asOf.slice(0,7);
+      out.mi=ms.findIndex(m=>m.month===M);out.has=out.mi>=0&&typeof hasMarket==='function'&&!!hasMarket(out.mi);
+      out.on=out.has&&typeof NW_VIEW!=='undefined'&&NW_VIEW==='market';}catch(_){}
+    return out;
+  }
   // Amount at the as-of date, natural sign: balance-sheet accounts their balance, income and
-  // expense accounts the year to date (both from the trial balance); a header sums the accounts under it.
-  function coaAmounts(asOf){
+  // expense accounts the year to date (both from the trial balance); in the Market view an asset
+  // with a market value that month shows it. A header sums the accounts under it.
+  function coaAmounts(asOf,mk){
     const t=report(()=>ledgerLib.tb(null,asOf.slice(0,4)+'-01-01',asOf),{rows:[]}),raw=new Map();
     for(const r of t.rows){const a=accOf(r.code),k=a?a.kind:r.kind;raw.set(r.code,sgn(k)*(isPL(k)?r.closing-r.opening:r.closing));}
+    if(mk&&mk.on&&typeof wValue==='function')for(const c of ax().codes){const a=accOf(c);if(a.kind!=='asset'||!a.postable)continue;const w=wAccOf(c);if(!w)continue;
+      try{const m=wValue(w,mk.mi,'market'),b=wValue(w,mk.mi,'book');if(m!==b)raw.set(c,m);}catch(_){}}
     const A=ax(),out=new Map();
     const walk=c=>{if(out.has(c))return out.get(c);const ks=A.kids.get(c);let v=raw.get(c)||0;if(ks)for(const k of ks)v+=walk(k);out.set(c,v);return v;};
     for(const c of A.codes)walk(c);return out;
@@ -640,41 +720,157 @@
       return`<button class="strip-cell k-${k}" data-bk="coa-kind" data-k="${k}" aria-pressed="${on}" title="${on?'Show every type':`Show only ${escH(KIND_LABEL[k].toLowerCase())} accounts`}">
         <span class="eyebrow">${l}</span><span class="strip-val" data-raw="${v}">${short(v)}</span><span class="strip-sub">${isPL(k)?escH(ytd):`On ${escH(dShort(f.asOf))}`}</span></button>`;}).join('')}</div></div>`;
   }
-  function coaList(f){
-    const q=f.q.trim().toLowerCase();
-    return ax().codes.filter(c=>{const a=accOf(c);if(a.archived&&!f.arch)return false;if(f.kind&&a.kind!==f.kind)return false;
-      return!q||c.toLowerCase().includes(q)||String(a.name).toLowerCase().includes(q);});
+  function undeclared(c,dec){const a=accOf(c);if(!a||!isBS(a.kind)||!a.postable||isHidden(a)||dec[c])return false;const w=wAccOf(c);return!!(w&&w.active&&!w.suspended);}
+  const filtering=f=>!!(f.q.trim()||f.kind||f.show!=='all');
+  // The accounts to show, in tree order: the matches plus every header above them. Folded headers
+  // hide what is under them unless a search or a filter is on.
+  function coaList(f,noFold){
+    const A=ax(),T=coaTree(),q=f.q.trim().toLowerCase(),dec=declaredMap();
+    const match=c=>{const a=A.acc.get(c);
+      if(isHidden(a)&&!f.hid)return false;if(f.kind&&a.kind!==f.kind)return false;
+      if(f.show==='bs'&&!isBS(a.kind))return false;if(f.show==='undecl'&&!undeclared(c,dec))return false;
+      return!q||c.toLowerCase().includes(q)||String(a.name).toLowerCase().includes(q);};
+    const vis=new Set();for(const c of T.order)if(match(c)){vis.add(c);for(const p of ancestorsOf(c))vis.add(p);}
+    const out=T.order.filter(c=>vis.has(c));
+    if(noFold||filtering(f))return out;
+    const fs=foldSet();return out.filter(c=>!ancestorsOf(c).some(p=>fs.has(p)));
+  }
+  const NCOL=5;   // Code · Name · Amount · Declared · ⋯ (the band says the type)
+  function coaBadges(c,a){
+    return[a.suspended?'<span class="badge bk-muted-b" data-badge="suspended">Suspended</span>':'',a.archived?'<span class="badge bk-muted-b" data-badge="archived">Archived</span>':'',
+      a.ccy&&a.ccy!=='IDR'?`<span class="badge">${escH(a.ccy)}</span>`:'',a.oldCode?`<span class="help">was ${escH(a.oldCode)}</span>`:''].join('');
+  }
+  // One ⋯ menu per row (Open ledger · Edit · Archive · History): the chart shares the width with the
+  // account detail, so the three icon buttons of v4 became one.
+  function coaActs(c,a){
+    if(typeof ledgerEditAccount!=='function')return'';
+    return`<button class="icon-btn bk-more" data-bk="coa-more" data-code="${attr(c)}" aria-label="Actions for ${attr(c)}" title="Actions">${ic('ellipsis')}</button>`;
+  }
+  const chevron=(key,label,folded)=>`<button class="icon-btn bk-fold" data-bk="coa-fold" data-hdr="${attr(key)}" aria-expanded="${!folded}" aria-label="${folded?'Expand':'Collapse'} ${attr(label)}" title="${folded?'Expand':'Collapse'}">${ic('chevron-down')}</button>`;
+  function declBox(c,a,dec,cls){
+    return`<input type="checkbox" class="bk-dchk${cls?' '+cls:''}" data-bk="coa-decl" data-code="${attr(c)}"${dec[c]?' checked':''} aria-label="Declared in your tax return: ${attr(a.name)}" title="Declared in your tax return">`;
+  }
+  function coaRowHTML(c,o){
+    const A=ax(),a=A.acc.get(c),v=o.amt.get(c)||0,hdr=!a.postable,u=U.coa,fs=o.fold,folded=fs.has(c)&&!o.filt,muted=isHidden(a)?' bk-muted':'',sel=u.sel===c?' selected':'';
+    if(o.band){
+      return`<tr class="bk-band clickable${muted}${sel}" data-bk="coa-sel" data-code="${attr(c)}" data-row="${attr(c)}" data-hdr="${attr(c)}" data-kind="class" tabindex="0"><td colspan="${NCOL}"><div class="bk-band-in">
+        ${chevron(c,a.name,folded)}<span class="bk-band-l"><span class="bk-code">${escH(c)}</span> ${escH(a.name)}</span>${coaBadges(c,a)}<span class="bk-grow"></span>
+        <span class="bk-band-v" data-raw="${v}">${money(v)}</span></div></td></tr>`;}
+    const bs=isBS(a.kind)&&a.postable,dec=o.dec,lvl=o.lvl;
+    const hook=bs&&typeof runHooks==='function'?runHooks('accountsExtraCol',wAccOf(c)||{id:c,name:a.name,side:a.kind,ccy:a.ccy||'IDR'}).join(''):'';
+    const sub=`<span class="only-sm">${escH(c)}</span>${coaBadges(c,a)}${hook}${bs?`<span class="bk-dsub only-sm">${declBox(c,a,dec,'sm')}<span>Declared</span></span>`:''}`;
+    let h=`<tr class="clickable ${hdr?'bk-hdr':'bk-accrow'}${muted}${sel}" data-bk="coa-sel" data-code="${attr(c)}" data-row="${attr(c)}"${hdr?` data-hdr="${attr(c)}" data-kind="group"`:' data-kind="account"'} tabindex="0">
+      <td class="bk-no hide-sm">${escH(c)}</td>
+      <td class="bk-acc bk-nm" style="--lvl:${lvl}"><div class="bk-nmrow">${hdr?chevron(c,a.name,folded):'<span class="bk-sp" aria-hidden="true"></span>'}<div class="bk-nmtxt"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${sub}</div></div></div></td>
+      <td class="num" data-raw="${v}">${money(v)}</td>
+      <td class="bk-decl hide-sm" data-declared="${bs?(dec[c]?1:0):''}">${bs?declBox(c,a,dec):''}</td><td>${coaActs(c,a)}</td></tr>`;
+    if(u.confirm===c)h+=`<tr class="bk-confirm" id="bkArchConfirm" data-code="${attr(c)}"><td colspan="${NCOL}"><div class="bk-check">${ic('archive')}<span class="li-body"><span class="li-title" style="display:block">Archive ${escH(c)} ${escH(a.name)}?</span>
+        <span class="li-sub" style="display:block">It leaves the account pickers and can’t take entries. There is no restore.</span>${u.err?`<span class="help err" id="bkArchErr">${ic('triangle-alert','s16')}<span>${escH(u.err)}</span></span>`:''}</span>
+        <button class="btn btn-ghost btn-sm" data-bk="coa-arch-no">Cancel</button><button class="btn btn-danger btn-sm" data-bk="coa-arch-go" data-code="${attr(c)}">Archive</button></div></td></tr>`;
+    return h;
+  }
+  // A band per type while the chart is not on the ERP structure (it has no class headers yet).
+  function kindBandHTML(k,amt,o){
+    const key='kind:'+k,folded=o.fold.has(key)&&!o.filt;let v=0;for(const c of ax().codes){const a=accOf(c);if(a.kind===k&&a.postable)v+=amt.get(c)||0;}
+    return`<tr class="bk-band" data-row="${key}" data-hdr="${key}" data-kind="class"><td colspan="${NCOL}"><div class="bk-band-in">${chevron(key,BAND_LABEL[k],folded)}<span class="bk-band-l">${escH(BAND_LABEL[k])}</span><span class="bk-grow"></span><span class="bk-band-v" data-raw="${v}">${money(v)}</span></div></td></tr>`;
+  }
+  function coaBodyHTML(f,amt){
+    const A=ax(),T=coaTree(),o={amt,fold:foldSet(),filt:filtering(f),dec:declaredMap()},list=coaList(f);let h='';
+    if(T.erp){for(const c of list){const d=A.dep.get(c)||0;h+=coaRowHTML(c,{...o,band:d===0,lvl:Math.max(0,d-1)});}return{h,n:list.length};}
+    const byK=new Map(KINDS.map(k=>[k,[]]));for(const c of list){const k=A.acc.get(T.root.get(c)).kind;(byK.get(k)||byK.set(k,[]).get(k)).push(c);}
+    for(const[k,cs]of byK){if(!cs.length)continue;h+=kindBandHTML(k,amt,o);if(o.fold.has('kind:'+k)&&!o.filt)continue;
+      for(const c of cs)h+=coaRowHTML(c,{...o,lvl:A.dep.get(c)||0});}
+    return{h,n:list.length};
+  }
+  // Monthly figures of one account (a header: the accounts under it), natural sign: month-end
+  // balances for balance-sheet accounts, the month's movement for income and expenses. The Market
+  // view uses the market value of an asset where one was recorded.
+  function coaSeries(code,n,endM,mk){
+    const b=BOOKS(),a=accOf(code),k=a.kind,leaves=leavesOf(code),ms=b.months||[];
+    const months=[];let M=endM;for(let i=0;i<n;i++){months.unshift(M);M=meShift(M,-1);}
+    const bal=m=>{let j=-1;for(let i=ms.length-1;i>=0;i--)if(ms[i]<=m){j=i;break;}if(j<0)return 0;const row=(b.balances||{})[ms[j]]||{};return leaves.reduce((s,c)=>s+(row[c]||0),0);};
+    const act=m=>{const row=(b.activity||{})[m]||{};return leaves.reduce((s,c)=>s+(row[c]||0),0);};
+    const w=mk&&mk.on&&k==='asset'&&a.postable?wAccOf(code):null,wm=w&&typeof wMonths==='function'?new Map(wMonths().map((x,i)=>[x.month,i])):null;
+    return months.map(m=>{let v=sgn(k)*(isPL(k)?act(m):bal(m));if(w&&wm.has(m)){try{v=wValue(w,wm.get(m),'market');}catch(_){}}return{month:m,v};});
+  }
+  function coaDetailHTML(code,f,amt,mk){
+    const a=code&&accOf(code);if(!a)return emptyHTML('list-tree','Select an account to see its value and history');
+    const k=a.kind,bs=isBS(k),endM=f.asOf.slice(0,7),ser=coaSeries(code,12,endM,mk),last=ser[ser.length-1],prev=ser[ser.length-2];
+    const v=amt.get(code)||0,dir=k==='liability'||k==='expense'?'down':'up',w=bs?wAccOf(code):null,dec=declaredMap();
+    const kindTxt=`${KIND_LABEL[k]||k}${a.postable?'':' · header'}${w&&typeof wGroup==='function'?' · '+wGroup(w.group).label:''}${a.ccy&&a.ccy!=='IDR'?` · ${a.ccy} account (shown in Rp)`:''}`;
+    const head=isPL(k)?`Year to date, ${escH(dLong(f.asOf.slice(0,4)+'-01-01').replace(/ \d{4}$/,''))} – ${escH(dShort(f.asOf))}`:`${mk&&mk.on&&k==='asset'?'Value':'Balance'} on ${escH(dLong(f.asOf))}`;
+    const chg=isPL(k)?`<span class="muted">${escH(monthLabel(endM,true))}</span> ${money(last.v)} · ${chgHTML(last.v,prev.v,dir)} <span class="muted">vs ${escH(monthLabel(prev.month,true))}</span>`
+      :`${chgHTML(v,prev.v,dir)} <span class="muted">vs end of ${escH(monthLabel(prev.month,true))}</span>`;
+    const rows=ser.slice().reverse().map(p=>`<tr><td>${escH(monthLabel(p.month))}</td><td class="num" data-raw="${p.v}">${money(p.v)}</td></tr>`).join('');
+    const hook=bs&&a.postable&&typeof runHooks==='function'?runHooks('accountsExtraCol',w||{id:code,name:a.name,side:k,ccy:a.ccy||'IDR'}).join(''):'';
+    const edit=typeof ledgerEditAccount==='function'?`<button class="btn btn-ghost btn-sm" data-bk="coa-edit" data-code="${attr(code)}">${ic('pencil','s16')}Edit</button>`:'';
+    return`<div class="bk-acchead" id="bkAccDetail" data-code="${attr(code)}"><div class="eyebrow">${escH(code)} · ${escH(kindTxt)}</div>
+        <div class="bk-accname">${escH(a.name)}</div><div class="bk-badges">${coaBadges(code,a)}</div>
+        <div class="help" style="margin-top:6px">${head}</div><div class="display bk-accval" id="bkAccVal" data-raw="${v}">${money(v)}</div>
+        <div class="summary-line" id="bkAccChg">${chg}</div></div>
+      <div class="chart-box" style="height:160px;margin:14px 0"><canvas id="bkAccChart" data-ser="${attr(JSON.stringify(ser))}" role="img" aria-label="${attr(`${isPL(k)?'Monthly totals':'Month-end balances'} of ${a.name}`)}"></canvas></div>
+      <div class="table-wrap" style="max-height:260px"><table class="data" id="bkAccMonths"><thead><tr><th scope="col">${isPL(k)?'Month':'Month-end'}</th><th scope="col" class="num">${isPL(k)?'Amount':'Balance'}</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${bs&&a.postable?`<label class="check" style="margin-top:14px"><input type="checkbox" data-bk="coa-decl" data-code="${attr(code)}" id="bkAccDecl"${dec[code]?' checked':''}> Declared in your tax return (SPT)</label>`:''}
+      ${hook?`<div class="bk-acchook merchant-sub" id="bkAccHook" style="margin-top:10px">${hook}</div>`:''}
+      <div class="bk-accbtns"><button class="btn btn-secondary btn-sm" data-bk="led" data-code="${attr(code)}" id="bkAccLed">${ic('file-text','s16')}Open ledger</button>${edit}</div>`;
+  }
+  function drawCoaChart(){
+    const el=$('bkAccChart');if(!el||typeof Chart!=='function')return;
+    let ser=[];try{ser=JSON.parse(el.dataset.ser||'[]');}catch(_){return;}
+    try{if(CHARTS.bkAccChart){try{CHARTS.bkAccChart.destroy();}catch(_){}}
+      const acc=cssVar('--accent');
+      CHARTS.bkAccChart=new Chart(el,{type:'line',data:{labels:ser.map(p=>monthLabel(p.month).replace(/ \d{4}$/,'')),datasets:[{data:ser.map(p=>p.v),fill:true,borderColor:acc,backgroundColor:c=>gradientFill(c.chart),pointHitRadius:12}]},
+        options:{responsive:true,maintainAspectRatio:false,...animOnce(),plugins:{tooltip:{displayColors:false,callbacks:{title:it=>monthLabel(ser[it[0].dataIndex].month,true),label:c=>moneyTip(c.parsed.y)}}},
+          scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:6,maxRotation:0}},y:{border:{display:false},ticks:{maxTicksLimit:4,callback:moneyTick}}}}});}
+    catch(e){console.warn('Account chart',e);}
   }
   function renderCOA(){
     const g=gateHTML('Chart of accounts');if(g)return g;
-    const f=st('coa'),amt=coaAmounts(f.asOf),list=coaList(f),A=ax(),u=U.coa;
-    const canEdit=typeof ledgerEditAccount==='function';
-    const rows=list.map(c=>{const a=A.acc.get(c),v=amt.get(c)||0,hdr=!a.postable;
-      const acts=canEdit?`<div class="bk-acts hide-sm"><button class="icon-btn" data-bk="coa-edit" data-code="${attr(c)}" aria-label="Edit ${attr(c)}" title="Edit">${ic('pencil')}</button>
-          ${a.archived?'':`<button class="icon-btn" data-bk="coa-arch" data-code="${attr(c)}" aria-label="Archive ${attr(c)}" title="Archive">${ic('archive')}</button>`}
-          <button class="icon-btn" data-bk="coa-hist" data-code="${attr(c)}" aria-label="History of ${attr(c)}" title="History">${ic('history')}</button></div>
-        <button class="icon-btn only-sm" data-bk="coa-more" data-code="${attr(c)}" aria-label="Actions for ${attr(c)}">${ic('ellipsis')}</button>`:'';
-      const badges=[a.suspended?'<span class="badge">Suspended</span>':'',a.archived?'<span class="badge">Archived</span>':'',a.ccy&&a.ccy!=='IDR'?`<span class="badge">${escH(a.ccy)}</span>`:'',a.oldCode?`<span class="help">was ${escH(a.oldCode)}</span>`:''].join('');
-      let h=`<tr class="clickable${hdr?' bk-hdr':''}" data-bk="led" data-code="${attr(c)}" data-row="${attr(c)}" tabindex="0">
-        <td class="bk-no hide-sm">${escH(c)}</td>
-        <td class="bk-acc bk-nm" style="--lvl:${A.dep.get(c)||0}"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub"><span class="only-sm">${escH(c)} · ${escH(KIND_LABEL[a.kind])}${hdr?' · header':''}</span>${badges}</div></td>
-        <td class="hide-sm">${escH(KIND_LABEL[a.kind]||a.kind)}</td><td class="num" data-raw="${v}">${money(v)}</td>
-        <td class="bk-tick hide-sm" data-postable="${a.postable?1:0}">${a.postable?ic('check'):''}</td><td class="bk-tick hide-sm" data-archived="${a.archived?1:0}">${a.archived?ic('check'):''}</td><td>${acts}</td></tr>`;
-      if(u.confirm===c)h+=`<tr class="bk-confirm" id="bkArchConfirm" data-code="${attr(c)}"><td colspan="7"><div class="bk-check">${ic('archive')}<span class="li-body"><span class="li-title" style="display:block">Archive ${escH(c)} ${escH(a.name)}?</span>
-          <span class="li-sub" style="display:block">It leaves the account pickers and can’t take entries. There is no restore.</span>${u.err?`<span class="help err" id="bkArchErr">${ic('triangle-alert','s16')}<span>${escH(u.err)}</span></span>`:''}</span>
-          <button class="btn btn-ghost btn-sm" data-bk="coa-arch-no">Cancel</button><button class="btn btn-danger btn-sm" data-bk="coa-arch-go" data-code="${attr(c)}">Archive</button></div></td></tr>`;
-      return h;}).join('');
-    const total=A.codes.length,nArch=A.codes.filter(c=>accOf(c).archived).length;
-    const desc=`${list.length===total?`${total} accounts`:`${list.length} of ${total} accounts`} · amounts as of ${escH(dLong(f.asOf))}`;
+    const f=st('coa'),u=U.coa,A=ax();
+    // Links to the old Accounts page (setTab('accounts') with ACC_SEL) open the chart on that account.
+    try{if(typeof ACC_SEL!=='undefined'&&ACC_SEL){const c=String(ACC_SEL);ACC_SEL=null;if(accOf(c)){u.sel=c;unfoldTo(c);u.scroll=c;}}}catch(_){}
+    if(u.sel&&!accOf(u.sel))u.sel=null;
+    const mk=coaMarket(f),amt=coaAmounts(f.asOf,mk),body=coaBodyHTML(f,amt),dec=declaredMap();
+    const total=A.codes.length,nHid=A.codes.filter(c=>isHidden(accOf(c))).length,nUndecl=A.codes.filter(c=>undeclared(c,dec)).length;
+    const desc=`${total} accounts${nHid?` · ${nHid} hidden`:''} · amounts as of ${escH(dLong(f.asOf))}${mk.on?' · market values where recorded':''}`;
     const newBtn=typeof ledgerAddAccount==='function'?`<button class="btn btn-secondary btn-sm" data-bk="coa-new">${ic('plus','s16')}New account</button>`:'';
-    return`${pageHead('Chart of accounts','Every account in your book, by code. Tap one to see its entries.',`${newBtn}${xlBtn('coa')}${hideBtn()}`)}
-      <div class="bk-bar">${searchBox('coa','Search code or name')}<label class="check"><input type="checkbox" data-bk="arch" data-p="coa" ${f.arch?'checked':''}> Show archived${nArch?` (${nArch})`:''}</label>${presetChips('coa','asof')}${dateFields('coa','asof')}</div>
+    const show=`<div class="bk-presets" role="group" aria-label="Show accounts">${SHOW.map(([v,l])=>`<button class="chip" data-bk="coa-show" data-v="${v}" aria-pressed="${f.show===v}">${escH(l)}${v==='undecl'?` (${nUndecl})`:''}</button>`).join('')}</div>`;
+    const seg=mk.has&&typeof nwViewSeg==='function'?`<span id="bkCoaView">${nwViewSeg()}</span>`:'';
+    const tools=`<button class="btn btn-ghost btn-sm" data-bk="coa-foldall" data-v="collapse" id="bkCoaCollapse">Collapse all</button><button class="btn btn-ghost btn-sm" data-bk="coa-foldall" data-v="expand" id="bkCoaExpand">Expand all</button>`;
+    const table=body.n?`<div class="table-wrap"><table class="data bk-stmt bk-coa" id="bkCoa" data-erp="${coaTree().erp?1:0}"><thead><tr><th scope="col" class="hide-sm">Code</th><th scope="col">Name</th><th scope="col" class="num">${mk.on?'Value':'Amount'}</th><th scope="col" class="hide-sm bk-decl" title="Declared in your tax return">Declared</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${body.h}</tbody></table></div>`
+      :`<div style="padding:0 var(--card-pad) var(--card-pad)">${emptyBk('search','No account matches','Clear all filters','clearall',' data-p="coa"')}</div>`;
+    return`${pageHead('Chart of accounts','Every account in your book, by code. Tap one to see its value, history and ledger.',`${newBtn}${xlBtn('coa')}${hideBtn()}`)}
+      <div class="bk-bar">${searchBox('coa','Search code or name')}${show}<label class="check"><input type="checkbox" data-bk="hid" data-p="coa" ${f.hid?'checked':''}> Show hidden (${nHid})</label>${seg}${presetChips('coa','asof')}${dateFields('coa','asof')}</div>
       ${chipsHTML('coa')}${coaStrip(f,amt)}
-      <div class="grid"><section class="card flush span-12">${cardHead('list-tree','Accounts',desc)}
-        ${rows?`<div class="table-wrap"><table class="data bk-stmt bk-coa" id="bkCoa"><thead><tr><th scope="col" class="hide-sm">Code</th><th scope="col">Name</th><th scope="col" class="hide-sm">Type</th><th scope="col" class="num">Amount</th><th scope="col" class="hide-sm">Postable</th><th scope="col" class="hide-sm">Archived</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
-          :`<div style="padding:0 var(--card-pad) var(--card-pad)">${emptyBk('search','No account matches','Clear all filters','clearall',' data-p="coa"')}</div>`}
-        <p class="help bk-foot">Amounts read the normal way: what you own, owe, earned or spent shows positive; income and expenses are the year to date. A minus means the opposite, e.g. an overdrawn account. Headers (bold) add up the accounts under them and take no entries.</p>
-      </section></div>`;
+      <div class="grid"><section class="card flush span-7" id="bkCoaCard">${cardHead('list-tree','Accounts',desc,tools)}
+        ${table}
+        <p class="help bk-foot">Amounts read the normal way: what you own, owe, earned or spent shows positive; income and expenses are the year to date. A minus means the opposite, e.g. an overdrawn account. Headers add up the accounts under them and take no entries. Suspended and archived accounts are hidden; they still count while they hold a balance.</p>
+      </section>
+      <section class="card span-5 hide-sm bk-panel" id="bkCoaPanel">${coaDetailHTML(u.sel,f,amt,mk)}</section></div>`;
+  }
+  function coaAfter(){
+    drawCoaChart();
+    const c=U.coa.scroll;U.coa.scroll=null;
+    if(c){const r=document.querySelector(`#bkCoa tr[data-row="${CSS.escape(c)}"]`);if(r&&r.scrollIntoView)r.scrollIntoView({block:'center'});}
+  }
+  function coaSelect(c){
+    if(!accOf(c))return;U.coa.sel=c;
+    if(isMobile()){const f=st('coa'),mk=coaMarket(f),amt=coaAmounts(f.asOf,mk);
+      openSheet({title:`${c} · ${nameOf(c)}`,body:coaDetailHTML(c,f,amt,mk)});requestAnimationFrame(drawCoaChart);return;}
+    const p=$('bkCoaPanel');if(!p){renderAll();return;}
+    const f=st('coa'),mk=coaMarket(f);p.innerHTML=coaDetailHTML(c,f,coaAmounts(f.asOf,mk),mk);
+    document.querySelectorAll('#bkCoa tr.selected').forEach(r=>r.classList.remove('selected'));
+    const r=document.querySelector(`#bkCoa tr[data-row="${CSS.escape(c)}"]`);if(r)r.classList.add('selected');
+    drawCoaChart();
+  }
+  function coaFoldAll(collapse){
+    const fs=foldSet();fs.clear();
+    if(collapse){const A=ax(),T=coaTree();for(const c of A.codes)if(!accOf(c).postable)fs.add(c);if(!T.erp)for(const k of KINDS)fs.add('kind:'+k);}
+    foldSave();renderAll();
+  }
+  function toggleDecl(c){
+    if(typeof toggleDeclared==='function'){toggleDeclared(c);return;}
+    if(typeof STATE!=='object'||!STATE)return;const d=STATE.declared||(STATE.declared={});d[c]=!d[c];if(typeof scheduleDriveSave==='function')scheduleDriveSave();renderAll();
   }
   function usedCodes(){const s=new Set();for(const j of journals())for(const l of j.lines)s.add(String(l.account));return s;}
   function archiveReason(msg){
@@ -686,8 +882,8 @@
   function openAccountForm(code){
     const a=code?accOf(code):null,used=usedCodes(),A=ax();
     const parentOpts=kind=>{const bad=new Set(code?leavesOfAll(code):[]);
-      return`<option value="">None (top level)</option>`+A.codes.filter(c=>{const x=A.acc.get(c);return x.kind===kind&&!x.archived&&!bad.has(c);})
-        .map(c=>`<option value="${attr(c)}"${a&&a.parent===c?' selected':''}>${'  '.repeat(A.dep.get(c)||0)}${escH(c)} · ${escH(A.acc.get(c).name)}</option>`).join('');};
+      return`<option value="">None (top level)</option>`+A.codes.filter(c=>{const x=A.acc.get(c);return x.kind===kind&&!x.archived&&(!x.suspended||(a&&a.parent===c))&&!bad.has(c);})
+        .map(c=>`<option value="${attr(c)}"${a&&a.parent===c?' selected':''}>${'  '.repeat(A.dep.get(c)||0)}${escH(c)} · ${escH(A.acc.get(c).name)}</option>`).join('');};
     const kind0=a?a.kind:'asset',lines=!!(a&&used.has(code));
     const body=`<div class="bk-form" id="bkAccForm">
       <div class="row2"><div class="field"><label class="label" for="bkAfCode">Code</label><input class="input" id="bkAfCode" autocomplete="off" value="${attr(code||'')}" ${a?'readonly aria-readonly="true"':''} placeholder="e.g. 1121.03"></div>
@@ -713,6 +909,7 @@
         s.close(true);renderAll();
       }catch(e){er.innerHTML=`${ic('triangle-alert','s16')}<span>${escH(errText(e))}</span>`;er.hidden=false;}
     });
+    return s;
   }
   function leavesOfAll(c){const A=ax(),out=[c],st=[...(A.kids.get(c)||[])];while(st.length){const k=st.pop();out.push(k);for(const x of A.kids.get(k)||[])st.push(x);}return out;}
   const ACTION={save:'Saved as draft',post:'Posted',edit:'Edited',void:'Voided','delete-draft':'Draft deleted',renumber:'Renumbered','accurate-differs':'Accurate’s version differs',
@@ -727,11 +924,12 @@
     openSheet({title:`History · ${code} ${a?a.name:''}`,body});
   }
   function xlCOA(){
-    const f=st('coa'),amt=coaAmounts(f.asOf),A=ax();
-    const rows=coaList(f).map(c=>{const a=A.acc.get(c);return{v:[c,a.name,KIND_LABEL[a.kind],amt.get(c)||0,a.postable?'Yes':'No',a.archived?'Yes':'',a.oldCode||''],s:a.postable?'acc':'par',indent:A.dep.get(c)||0};});
+    const f=st('coa'),mk=coaMarket(f),amt=coaAmounts(f.asOf,mk),A=ax(),dec=declaredMap();
+    const rows=coaList(f,true).map(c=>{const a=A.acc.get(c),bs=isBS(a.kind)&&a.postable;
+      return{v:[c,a.name,KIND_LABEL[a.kind],amt.get(c)||0,a.postable?'Yes':'No',bs?(dec[c]?'Yes':'No'):'',a.suspended?'Yes':'',a.archived?'Yes':'',a.oldCode||''],s:a.postable?'acc':'par',indent:A.dep.get(c)||0};});
     return xlReport({file:`chart-of-accounts-${f.asOf}.xlsx`,sheet:'Chart of accounts',numCols:[4],
-      title:'Chart of accounts',sub:`Amounts as of ${dLong(f.asOf)}, natural sign (income and expenses: the year to date)`,
-      head:['Code','Name','Type','Amount','Postable','Archived','Old code'],widths:[14,46,12,20,10,10,14],rows});
+      title:'Chart of accounts',sub:`Amounts as of ${dLong(f.asOf)}, natural sign (income and expenses: the year to date)${mk.on?' · market values where recorded':''}`,
+      head:['Code','Name','Type','Amount','Postable','Declared','Suspended','Archived','Old code'],widths:[14,46,12,20,10,10,11,10,14],rows});
   }
 
   /* ══ Periods ══ */
@@ -744,7 +942,7 @@
   function renderPeriods(){
     const g=gateHTML('Periods');if(g)return g;
     const{y,y0,y1}=periodYear(),rows=ledgerPeriods(y),set=ledgerSettings()||{},re=set.retainedEarnings||'';
-    const eq=ax().codes.filter(c=>{const a=accOf(c);return a.kind==='equity'&&a.postable&&!a.archived;});
+    const eq=ax().codes.filter(c=>{const a=accOf(c);return a.kind==='equity'&&a.postable&&!a.archived&&(!a.suspended||c===re);});
     const reSel=`<label class="label" for="bkRE" style="margin-right:6px">Retained earnings</label><select class="input" id="bkRE" data-bk="re" style="width:auto;max-width:100%">${re?'':'<option value="">Pick an equity account…</option>'}${eq.map(c=>`<option value="${attr(c)}"${c===re?' selected':''}>${escH(c)} · ${escH(nameOf(c))}</option>`).join('')}</select>`;
     const btn=(act,label,ok,why,M,cls)=>`<button class="btn ${cls||'btn-secondary'} btn-sm" data-bk="${act}" data-m="${M}"${ok?'':` disabled title="${attr(why)}" aria-label="${attr(label+': '+why)}"`}>${escH(label)}</button>`;
     const tr=rows.map(r=>{const M=r.month,dec=M.endsWith('-12');
@@ -885,6 +1083,8 @@
     if(isMobile()&&U.journals.sel)setTimeout(()=>openVoucherSheet(U.journals.sel),60);
   }
   window.openVoucher=openVoucher;
+  // The chart's New account form, for other pages (Month-end › More › Add account). → the sheet or null.
+  window.openCoaNewAccount=()=>bookReady()&&typeof ledgerAddAccount==='function'?openAccountForm(null):null;
 
   /* ── Events (one delegated listener per type) ── */
   function applyPreset(p,v){
@@ -930,6 +1130,11 @@
       case'glmore':U.ledger.more.add(el.dataset.code);renderAll();return;
       case'tbled':openTBLedger(el.dataset.code);return;
       case'coa-kind':{const f=st('coa');f.kind=f.kind===el.dataset.k?'':el.dataset.k;renderAll();return;}
+      case'coa-show':{const f=st('coa');f.show=SHOW.some(s=>s[0]===el.dataset.v)?el.dataset.v:'all';renderAll();return;}
+      case'coa-sel':coaSelect(el.dataset.code);return;
+      case'coa-fold':{ev&&ev.stopPropagation();const k=el.dataset.hdr,fs=foldSet();if(fs.has(k))fs.delete(k);else fs.add(k);foldSave();renderAll();return;}
+      case'coa-foldall':coaFoldAll(el.dataset.v==='collapse');return;
+      case'coa-decl':ev&&ev.stopPropagation();toggleDecl(el.dataset.code);return;
       case'coa-new':openAccountForm(null);return;
       case'coa-edit':ev&&ev.stopPropagation();openAccountForm(el.dataset.code);return;
       case'coa-hist':ev&&ev.stopPropagation();openAccountHistory(el.dataset.code);return;
@@ -939,7 +1144,7 @@
         try{ledgerArchiveAccount(c,'Archived from the chart of accounts');U.coa.confirm=null;U.coa.err='';toast(`${c} archived`);}
         catch(e){U.coa.err=archiveReason(errText(e));}renderAll();return;}
       case'coa-more':{ev&&ev.stopPropagation();const c=el.dataset.code,acc=accOf(c);
-        openMenu(el,{title:`${c} · ${acc?acc.name:''}`,items:[{label:'Edit',icon:'pencil',onSelect:()=>openAccountForm(c)},...(acc&&!acc.archived?[{label:'Archive',icon:'archive',onSelect:()=>{U.coa.confirm=c;U.coa.err='';renderAll();}}]:[]),{label:'History',icon:'history',onSelect:()=>openAccountHistory(c)}]});return;}
+        openMenu(el,{title:`${c} · ${acc?acc.name:''}`,items:[{label:'Open ledger',icon:'file-text',onSelect:()=>openLedger(c)},{label:'Edit',icon:'pencil',onSelect:()=>openAccountForm(c)},...(acc&&!acc.archived?[{label:'Archive',icon:'archive',onSelect:()=>{U.coa.confirm=c;U.coa.err='';renderAll();}}]:[]),{label:'History',icon:'history',onSelect:()=>openAccountHistory(c)}]});return;}
       case'pyear':U.periods.year+=Number(el.dataset.d);renderAll();return;
       case'pclose':openCloseSheet(el.dataset.m);return;
       case'preopen':openReasonSheet(el.dataset.m,'reopen');return;
@@ -953,7 +1158,7 @@
     const a=el.dataset.bk,p=el.dataset.p,f=p?st(p):null;
     switch(a){
       case'status':case'jkind':case'acc':case'entity':f[a]=el.value;resetPage(p);if(p==='ledger')U.ledger.more.clear();break;
-      case'arch':f.arch=el.checked;break;
+      case'hid':f.hid=el.checked;break;
       case'cmp':f.cmp=el.value;break;
       case'cfrom':f.cf=el.value;break;case'cto':f.ct=el.value;break;case'casof':f.cAsOf=el.value;break;
       case're':try{ledgerSetRetainedEarnings(el.value);toast(`Retained earnings: ${el.value}`);}catch(e){toast(errText(e));}break;
@@ -961,7 +1166,7 @@
     }
     renderAll();
   }
-  const CHANGE=new Set(['status','jkind','acc','entity','arch','cmp','cfrom','cto','casof','re']);
+  const CHANGE=new Set(['status','jkind','acc','entity','hid','cmp','cfrom','cto','casof','re']);
   const INPUTS=new Set(['q','dfrom','dto','dasof']);
   const onPage=()=>PAGE_KEYS.includes(ACTIVE_TAB)||ACTIVE_TAB==='accounts';
   document.addEventListener('click',e=>{
@@ -991,7 +1196,7 @@
     const b=document.querySelector(`button[data-bk="dshow"][data-p="${el.dataset.p}"]`);if(b&&!b.disabled){e.preventDefault();b.click();}});
 
   /* ── Pages and hooks ── */
-  registerPage({key:'coa',label:'Chart of accounts',icon:'list-tree',group:'books',order:10,needs:'books',render:renderCOA});
+  registerPage({key:'coa',label:'Chart of accounts',icon:'list-tree',group:'books',order:10,needs:'books',render:renderCOA,afterRender:coaAfter});
   registerPage({key:'journals',label:'Journals',icon:'book-open',group:'books',order:20,needs:'books',render:renderJournals});
   registerPage({key:'ledger',label:'General ledger',short:'Ledger',icon:'file-text',group:'books',order:30,needs:'books',render:renderLedger});
   registerPage({key:'bs',label:'Balance sheet',icon:'scale',group:'books',order:40,needs:'books',render:renderBS});
@@ -999,6 +1204,6 @@
   registerPage({key:'tb',label:'Trial balance',icon:'square-check',group:'books',order:60,needs:'books',render:renderTB});
   registerPage({key:'periods',label:'Periods',icon:'calendar-check',group:'books',order:70,needs:'books',render:renderPeriods});
   registerPage({key:'audit',label:'Audit trail',icon:'history',group:'books',order:80,needs:'books',render:renderAudit});
-  // Accounts page: a ledger link under each account the book has.
-  registerHook('accountsExtraCol',a=>bookReady()&&a&&accOf(String(a.id))?`<button class="bk-link" data-bk="led" data-code="${attr(String(a.id))}" aria-label="Open ledger for ${attr(String(a.id))}">Ledger${ic('chevron-right')}</button>`:null);
+  // (v4.1) The Accounts page is merged into the chart, whose account detail has Open ledger, so
+  // books.js no longer adds a Ledger link through the accountsExtraCol hook.
 })();

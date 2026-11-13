@@ -288,7 +288,7 @@
     setWhenUsed(id,on){put('whenUsed',id,on?{on:true}:{deleted:true});commit(on?'Marked as only sending a statement when used':'Back to a statement every month');},
     openStmt,
     // For tests and other modules (read-only).
-    reconcile,strip,unapply,apply,calendar,calendarRows:()=>calRows(),cycleDay,expectedNext,comingUp,LAG_DEFAULT,LATE_GRACE,WINDOW_PERIODS,last:()=>LAST,refresh,
+    reconcile,strip,unapply,apply,calendar,linkFor,calendarRows:()=>calRows(),cycleDay,expectedNext,comingUp,LAG_DEFAULT,LATE_GRACE,WINDOW_PERIODS,last:()=>LAST,refresh,
   };
   window.ETStatements=API;
 

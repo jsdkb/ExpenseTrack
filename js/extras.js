@@ -319,7 +319,8 @@
   function invData(){
     const ms=wMonths();if(!W()||!ms.length)return null;
     const li=ms.length-1,book=(a,i)=>wValue(a,i,'book');
-    const accs=wAccounts().filter(a=>a.investment);
+    // A suspended investment shows only while it still holds a value (UX §11.10d).
+    const accs=(typeof wAccountsAll==='function'?wAccountsAll():wAccounts()).filter(a=>a.investment&&(!a.suspended||Math.abs(book(a,li))>=1));
     const holdings=accs.map(a=>{
       let first=-1,last=-1;
       for(let i=0;i<ms.length;i++)if(mkOf(a.id,ms[i].month)!=null){if(first<0)first=i;last=i;}
@@ -367,11 +368,11 @@
         sub:`<span class="vs">${d.ret?`${d.ret.n} holding${d.ret.n===1?'':'s'} · simple, see method`:'needs market values in two months'}</span>`}),
     ].join('');
     const row=h=>h.last>=0
-      ?`<tr><td class="merchant ex-full"><div class="merchant-name">${escH(h.a.name)}</div><div class="merchant-sub">${escH(wGroup(h.a.group).label)} · ${escH(h.a.id)}${h.asOf!==wMonths()[wMonths().length-1].month?` · <span class="badge warn">market as of ${escH(monthLabel(h.asOf))}</span>`:''}</div></td>
+      ?`<tr><td class="merchant ex-full"><div class="merchant-name">${escH(h.a.name)}${h.a.suspended?' <span class="badge susp-badge">Suspended</span>':''}</div><div class="merchant-sub">${escH(wGroup(h.a.group).label)} · ${escH(h.a.id)}${h.asOf!==wMonths()[wMonths().length-1].month?` · <span class="badge warn">market as of ${escH(monthLabel(h.asOf))}</span>`:''}</div></td>
         <td class="num amt" data-label="Cost (book)">${fmtIDR(h.cost)}</td><td class="num amt" data-label="Market">${fmtIDR(h.market)}</td>
         <td class="num" data-label="Gain">${gainSpan(h.gain)}</td><td class="num" data-label="Gain %">${gainPct(h.pct)}</td>
         <td class="num" data-label="Return since first">${gainPct(h.ret)}</td></tr>`
-      :`<tr><td class="merchant ex-full"><div class="merchant-name">${escH(h.a.name)}</div><div class="merchant-sub">${escH(wGroup(h.a.group).label)} · ${escH(h.a.id)} · <span class="badge">Book only</span></div></td>
+      :`<tr><td class="merchant ex-full"><div class="merchant-name">${escH(h.a.name)}${h.a.suspended?' <span class="badge susp-badge">Suspended</span>':''}</div><div class="merchant-sub">${escH(wGroup(h.a.group).label)} · ${escH(h.a.id)} · <span class="badge">Book only</span></div></td>
         <td class="num amt" data-label="Cost (book)">${fmtIDR(h.bookNow)}</td><td class="num faint" data-label="Market">—</td><td class="num faint" data-label="Gain">—</td><td class="num faint" data-label="Gain %">—</td><td class="num faint" data-label="Return since first">—</td></tr>`;
     const holdings=`<div class="table-wrap"><table class="data ex-rows" id="ivHoldings"><thead><tr><th scope="col">Holding</th><th scope="col" class="num">Cost (book)</th><th scope="col" class="num">Market</th><th scope="col" class="num">Gain</th><th scope="col" class="num">Gain %</th><th scope="col" class="num">Return since first</th></tr></thead>
       <tbody>${[...d.valued,...d.bookOnly].map(row).join('')}
@@ -391,7 +392,7 @@
   /* ══════════════════════════════════════════════════════════════════
      SPT PACK (annual tax return worksheet)
      Year-end balances from the wealth snapshot (book value, market value where recorded), the
-     "Declared in tax return" ticks from Accounts, receivables with their age, and the currency mix.
+     "Declared in tax return" ticks from the Chart of accounts, receivables with their age, and the currency mix.
      Read-only: nothing here is written back to the books.
      ══════════════════════════════════════════════════════════════════ */
   let SPT_YEAR=null;
@@ -412,8 +413,9 @@
     if(mi<0)return out;
     const declared=STATE.declared||{},groups=W().groups;
     const gi=id=>{const i=groups.findIndex(g=>g.id===id);return i<0?99:i;};
-    const rows=wAccounts().map(a=>{const book=wValue(a,mi,'book'),market=a.side==='asset'?mkOf(a.id,out.month):null;
-      return{id:a.id,name:a.name,group:a.group,groupLabel:wGroup(a.group).label,side:a.side,ccy:a.ccy||'IDR',book,market,declared:!!declared[a.id]};})
+    // Every account with a balance, suspended ones too (the tax return needs every balance; they get a badge).
+    const rows=(typeof wAccountsAll==='function'?wAccountsAll():wAccounts()).map(a=>{const book=wValue(a,mi,'book'),market=a.side==='asset'?mkOf(a.id,out.month):null;
+      return{id:a.id,name:a.name,suspended:!!a.suspended,group:a.group,groupLabel:wGroup(a.group).label,side:a.side,ccy:a.ccy||'IDR',book,market,declared:!!declared[a.id]};})
       .filter(r=>r.book||r.market).sort((a,b)=>gi(a.group)-gi(b.group)||a.id.localeCompare(b.id));
     out.assets=rows.filter(r=>r.side==='asset');out.liabs=rows.filter(r=>r.side!=='asset');
     const sum=(l,k)=>l.reduce((s,r)=>s+(r[k]||0),0);
@@ -438,7 +440,7 @@
     let body='',lastG=null;
     for(const r of list){
       if(r.group!==lastG){lastG=r.group;body+=`<tr class="group-row"><th scope="rowgroup" colspan="${withMarket?6:5}">${escH(r.groupLabel)}</th></tr>`;}
-      body+=`<tr><td class="sel-col ex-full" data-label="Declared">${decl(r)}</td><td class="merchant ex-full"><div class="merchant-name">${escH(r.name)}</div><div class="merchant-sub">${escH(r.id)}</div></td>
+      body+=`<tr><td class="sel-col ex-full" data-label="Declared">${decl(r)}</td><td class="merchant ex-full"><div class="merchant-name">${escH(r.name)}${r.suspended?' <span class="badge susp-badge">Suspended</span>':''}</div><div class="merchant-sub">${escH(r.id)}</div></td>
         <td data-label="Currency">${escH(r.ccy)}</td><td class="num amt" data-label="Dec balance (book)">${fmtIDR(r.book)}</td>${withMarket?`${r.market!=null?`<td class="num amt" data-label="Market">${fmtIDR(r.market)}</td>`:'<td class="num hide-sm"><span class="faint">—</span></td>'}`:''}</tr>`;
     }
     return`<div class="table-wrap"><table class="data ex-rows" id="${id}"><thead><tr><th scope="col">Declared</th><th scope="col">Account</th><th scope="col">Currency</th><th scope="col" class="num">Dec balance (book)</th>${withMarket?'<th scope="col" class="num">Market</th>':''}</tr></thead>
@@ -459,7 +461,7 @@
       kpiCard({icon:'wallet',label:'Harta (assets)',value:kpiMoney(T.assets),sub:`<span class="vs">${d.assets.length} accounts${T.marketRows?` · <span class="amt">${fmtIDRShort(T.assetsMarket)}</span> at market where recorded`:''}</span>`}),
       kpiCard({icon:'receipt',label:'Utang (liabilities)',value:kpiMoney(T.liabs),sub:`<span class="vs">${d.liabs.length} accounts</span>`}),
       kpiCard({icon:'trending-up',label:'Net (book)',value:kpiMoney(T.net),sub:`<span class="vs">${escH(monthLabel(d.month,true))}</span>`}),
-      kpiCard({icon:'square-check',label:'Declared in tax return',value:`<span>${d.declaredCount}</span><span class="faint" style="font-size:16px"> of ${d.rowCount}</span>`,sub:`<span class="vs">tick accounts below, or on Accounts</span>`}),
+      kpiCard({icon:'square-check',label:'Declared in tax return',value:`<span>${d.declaredCount}</span><span class="faint" style="font-size:16px"> of ${d.rowCount}</span>`,sub:`<span class="vs">tick accounts below, or in the Chart of accounts</span>`}),
     ].join('');
     const recvRows=d.recv.map(r=>`<tr><td class="merchant ex-full"><div class="merchant-name">${escH(r.name)}</div><div class="merchant-sub">${escH(r.id)}</div></td><td class="num amt" data-label="Balance">${fmtIDR(r.book)}</td>
       <td data-label="Non-zero since">${escH(monthLabel(r.since))}${r.atLeast?' <span class="badge">or earlier</span>':''}</td><td class="num" data-label="Age">${r.atLeast?'at least ':''}${r.age} month${r.age===1?'':'s'}</td></tr>`).join('');

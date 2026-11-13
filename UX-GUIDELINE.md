@@ -5,7 +5,8 @@ brand and home-screen revision) approved 2026-10-16; v1.2 (wealth tracker v2: Ho
 statement-corrected spending) 2026-11-03; v1.3 (simpler Chart of accounts and Month-end, §11.7,
 §11.10) 2026-11-06; v1.4 (Books copied from the owner's ERP: journals, periods, ERP chart,
 filter kit, compare, §11.10b–c) 2026-11-11; v1.5 (Ask Claude assistant on every page, §11.13)
-2026-11-12**
+2026-11-12; v1.6 (spending to journals, clearer chart merged with Accounts, grid journal editor,
+one-flow Month-end, §11.10d) 2026-11-13**
 
 This document is the design source of truth for ExpenseTrack on web and mobile. Every UI change
 should follow it; anything that needs to break a rule here should update this file first.
@@ -1296,6 +1297,106 @@ particular:
 - **Drafts from Accurate (n):** the list links to Journals, filtered to Status Draft · Kind From
   Accurate.
 - The old review list (Add · Take Accurate's version · Dismiss) is gone.
+
+### 11.10d Books v4.1 (2026-11-13)
+
+Where this section and §11.10b, §11.6 or §11.7 disagree, this section wins.
+
+**Chart of accounts: headers vs accounts.** Three visibly different row kinds:
+- **Class header** (1000 Assets … 9000 Income tax): a full-width band.
+  - Background `--surface-2`, with a 3px left rule in `--accent`.
+  - The label is semibold 13px uppercase with 0.04em tracking; the class total is semibold and
+    tabular.
+  - Height 44px.
+- **Group header** (1100, 1120 …): semibold 14px with the total.
+- **Postable account:**
+  - regular 14px, indented 20px per level;
+  - a 1px `--line` guide on the left of each nesting level;
+  - the code in `--ink-3` tabular.
+- **Folding:**
+  - Every header has a 16px chevron button (36px hit area, `aria-expanded`); folded, it shows
+    the header's total.
+  - The card header holds ghost **Collapse all** / **Expand all**. The fold state is a per-device
+    convenience in localStorage.
+  - Search and the filters always show their matches, unfolding as needed.
+- **Hidden accounts:** suspended (and archived) accounts are hidden. One check "Show hidden (n)"
+  brings them back, muted, with a Suspended or Archived badge.
+- **Merged from Wealth › Accounts** (that page is gone; links to it open the chart):
+  - **Filters:** a chip group All · Own & owe · Not declared.
+  - **Value:** a Book / Market switch when market values exist.
+  - **Declared:** on balance-sheet accounts, a column of 20px check boxes ("Declared in your tax
+    return").
+  - **Account detail:** tapping a row opens it as the right-hand panel on web (span-5) or a sheet
+    on phones. It shows the value, the change vs last month, the 12-month chart, month-end
+    balances, the declared tick, the next statement, and buttons **Open ledger** and **Edit**.
+- **Phones:** class bands stay full width; Declared and Type sit in the row's sub-line.
+
+**Spending → journal** (Daily spending list, Credit cards rows, Cash movements spend lines):
+- **Each row:** a ghost icon button `file-plus` labelled "To journal" (36px; a text button in the
+  row's detail sheet on phones).
+- **Converted rows:** a row already in the book shows a badge, `info` "Draft" or `good` "In book"
+  with the JV number on hover. The button is gone, and the row can't be selected.
+- **Bulk:**
+  - a **Select** toggle in the list's card header shows tick boxes;
+  - a sticky footer bar: "n selected · Rp total", ghost **Cancel**, primary **Make n draft
+    journals**;
+  - after it, a good toast "n drafts made · Review in Journals" with a link to Journals filtered
+    to Draft · Spending.
+- **Category → account sheet:** it appears once per unmapped category. It lists each category with
+  an account picker, the suggested 6xxx account preselected, and "Remembered for next time".
+  Transfer and E-wallet rows pick their target account (a bank or e-wallet asset) instead of an
+  expense.
+- **Skipped rows:** a row whose card or bank has no account in the book is skipped, with a warn
+  note "n skipped: no book account for <card>. Map it in Month-end › More › Statement accounts".
+
+**Journal editor: grid like Accurate Online** (supersedes the block form of §11.10 and §11.10b;
+footers and rules unchanged):
+- **Header row:**
+  - Date (date input);
+  - Number (read-only: "Given when posted", or the JV number);
+  - Description (full width on phones).
+- **Grid:** a `table.data.en-grid` with the columns # (muted) · Account · Memo · Debit · Credit
+  · ✕.
+  - The account cell is a combobox: type a code or name, ↑↓ to move, Enter to pick. Under it, in
+    `merchant-sub`, the picked account's name and kind in plain words ("Asset · goes up"). An
+    unknown account shows "Not in your book" in `--bad`.
+  - Debit and Credit are right-aligned tabular inputs with thousands separators. Typing in one
+    clears the other.
+  - The foreign-currency `globe` icon sits in the ✕ cell and opens an inline sub-row.
+- **Keys:**
+  - Tab moves cell to cell; Tab from the last cell of the last row adds a row.
+  - A blank last row is always offered and ignored when saving.
+  - Ctrl+S saves the draft; Ctrl+Enter posts.
+- **Footer row:**
+  - Total debit · Total credit · Difference (`Balanced` good / `Off by Rp x` bad);
+  - a ghost **Balance** button that puts the difference on the focused line, or the last line.
+- **Phones (< 768px):** each line is a compact card: account on the first row; memo; Debit |
+  Credit side by side.
+- **AI drafts:** the cards use the same grid when edited. "The entry as a journal" read view
+  stays.
+
+**Month-end: one flow** (supersedes §11.7's page layout; the figures and rules stay):
+- **Header:** the month picker, the status badge (Open · Entry posted · Closed) and ⋯ **More**
+  (Statement accounts mapping · Entry settings · Excel download/upload · Download for Accurate ·
+  Add account).
+- **Three numbered step cards** (accent circles 1 · 2 · 3, a `square-check` icon when done, the
+  current one open, done ones folded to one summary line):
+  1. **Check balances.**
+     - One row per account: Account · Book · Your figure (input, prefilled from the statement
+       with the landmark icon, or "same as last month") · Difference.
+     - Chips To fill · Differences · All.
+     - One primary **Fill from statements**.
+  2. **Post the differences.**
+     - The journal table (debit lines first), the inline counter-account question the first
+       time, and the total.
+     - Primary **Post** (or **Update posted entry**).
+     - When there is nothing to post: "No differences: nothing to post".
+  3. **Close the month.**
+     - The Periods checklist as `bk-check` rows, plus a reason box only when drafts exist.
+     - Primary **Close <month>**.
+     - Once closed: the good badge "Closed on <date>", ghost **Reopen in Periods**, and the next
+       month's secondary **Start <month>**.
+- **Old chat closes** stay read-only cards below.
 
 ### 11.10c Move to the ERP chart (2026-11-11)
 

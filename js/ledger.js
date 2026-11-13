@@ -23,11 +23,11 @@
 
   const SCHEMA='et-ledger/2',SCHEMA1='et-ledger/1',FILE='ledger.json',BACKUP_FILE='ledger-v1-backup.json',IDB_NAME='et-ledger',IDB_STORE='ledger';
   const KINDS=['asset','liability','equity','income','expense'];
-  const JKINDS=['manual','ai','month-end','income','opening','year-end','accurate'];
-  const USER_KINDS=['manual','ai','month-end','income','opening'];
-  const ORIGIN_KIND={app:'manual',manual:'manual',ai:'ai','month-end':'month-end',income:'income',accurate:'accurate',opening:'opening','year-end':'year-end'};
-  const KIND_ORIGIN={manual:'app',ai:'ai','month-end':'month-end',income:'income',accurate:'accurate',opening:'opening','year-end':'year-end'};
-  const KIND_TYPE={manual:'Manual',ai:'AI entry','month-end':'Month-end',income:'Income',opening:'Opening balances','year-end':'Year-end close',accurate:'From Accurate'};
+  const JKINDS=['manual','ai','month-end','income','opening','spending','year-end','accurate'];
+  const USER_KINDS=['manual','ai','month-end','income','opening','spending'];
+  const ORIGIN_KIND={app:'manual',manual:'manual',ai:'ai','month-end':'month-end',income:'income',accurate:'accurate',opening:'opening',spending:'spending','year-end':'year-end'};
+  const KIND_ORIGIN={manual:'app',ai:'ai','month-end':'month-end',income:'income',accurate:'accurate',opening:'opening',spending:'spending','year-end':'year-end'};
+  const KIND_TYPE={manual:'Manual',ai:'AI entry','month-end':'Month-end',income:'Income',opening:'Opening balances',spending:'Spending','year-end':'Year-end close',accurate:'From Accurate'};
   // The wealth snapshot's generic groups and account-type defaults (the PC snapshot builder). Only
   // used for an account the snapshot never classified (added later, in Accurate or in the app).
   const GROUPS_DEFAULT=[{id:'cash',label:'Cash & bank',side:'asset'},{id:'deposits',label:'Deposits & bonds',side:'asset'},
@@ -205,9 +205,10 @@
         active:app&&!lines?true:recent.some(m=>(c.balances[m]||{})[a.id]),type:a.type||''};
       if(app)o.pending=true;
       if(a.archivedAt)o.archived=true;
+      if(a.suspended)o.suspended=true;   // hidden from lists and pickers; still counted while it holds a balance
       accounts.push(o);
     }
-    accounts.sort((p,q)=>cmp(p.id,q.id));
+    accounts.sort((p,q)=>cmpCode(p.id,q.id));
     const sideOf=new Map(accounts.map(a=>[a.id,a.side]));
     const months=wm.map(m=>{const b={};for(const[k,v]of Object.entries(c.balances[m]||{})){const sd=sideOf.get(k);if(sd&&v)b[k]=sd==='asset'?v:-v;}return{month:m,balances:b};});
     const market={};
@@ -222,9 +223,9 @@
       if(!a||!isPostable(a)||!['equity','income','expense'].includes(a.kind))continue;
       const app=a.origin==='app';
       if(!a.plKind&&!c.touched.has(a.id)&&!(app&&!a.suspended&&!a.archivedAt))continue;
-      const o={id:a.id,name:a.name,kind:a.plKind||a.kind,type:a.type||''};if(app)o.pending=true;ledger.push(o);
+      const o={id:a.id,name:a.name,kind:a.plKind||a.kind,type:a.type||''};if(app)o.pending=true;if(a.suspended)o.suspended=true;if(a.archivedAt)o.archived=true;ledger.push(o);
     }
-    ledger.sort((p,q)=>cmp(p.id,q.id));
+    ledger.sort((p,q)=>cmpCode(p.id,q.id));
     const closes=(x.closes||[]).map(cl=>{const o=cp(cl);delete o.at;return o;}).sort((p,q)=>cmp(p.month,q.month));
     return{schema:'et-wealth/1',fromLedger:true,generatedAt:s.wealthGeneratedAt||x.seededAt,currency:x.currency||'IDR',
       source:{book:s.book||'',asOf:wm.length?wm[wm.length-1]:(s.wealthAsOf||''),exportedOn:s.exportedOn||''},
@@ -300,15 +301,18 @@
     return[from||'0000-01-01',to||'9999-12-31'];
   }
   const accOf=(x,code)=>x.accounts[code]||null;
-  function rowBase(x,code){const a=accOf(x,code);return a?{code,name:a.name,kind:a.kind,postable:isPostable(a),archived:!!a.archivedAt}:{code,name:code,kind:null,postable:true,archived:false,unknown:true};}
-  // Trial balance [from, to]: every postable, non-archived account (even at zero) plus any other
-  // account with posted lines up to `to`. opening = lines before from; closing = opening + dr − cr.
+  function rowBase(x,code){const a=accOf(x,code);if(!a)return{code,name:code,kind:null,postable:true,archived:false,unknown:true};
+    const o={code,name:a.name,kind:a.kind,postable:isPostable(a),archived:!!a.archivedAt};if(a.suspended)o.suspended=true;return o;}
+  // Trial balance [from, to]: every postable account that is not archived or suspended (even at
+  // zero) plus any other account with posted lines up to `to` (a suspended account with figures
+  // stays, flagged, so the totals tie). opening = lines before from; closing = opening + dr − cr.
   function tbOf(x,from,to){
     x=lx(x);const[F,T]=range(from,to),m=new Map();
     for(const l of postedLines(x)){if(l.date>T)break;let r=m.get(l.account);if(!r)m.set(l.account,r={opening:0,debit:0,credit:0});
       if(l.date<F)r.opening+=l.amount;else if(l.amount>0)r.debit+=l.amount;else r.credit-=l.amount;}
-    const codes=new Set(m.keys());for(const a of Object.values(x.accounts))if(a&&isPostable(a)&&!a.archivedAt)codes.add(a.id);
-    const rows=[...codes].sort(cmpCode).map(c=>{const r=m.get(c)||{opening:0,debit:0,credit:0};return{...rowBase(x,c),opening:r.opening,debit:r.debit,credit:r.credit,closing:r.opening+r.debit-r.credit};});
+    const codes=new Set(m.keys());for(const a of Object.values(x.accounts))if(a&&isPostable(a)&&!a.archivedAt&&!a.suspended)codes.add(a.id);
+    const rows=[...codes].sort(cmpCode).map(c=>{const r=m.get(c)||{opening:0,debit:0,credit:0};return{...rowBase(x,c),opening:r.opening,debit:r.debit,credit:r.credit,closing:r.opening+r.debit-r.credit};})
+      .filter(r=>!r.suspended||r.opening||r.debit||r.credit||r.closing);
     const totals=rows.reduce((t,r)=>({opening:t.opening+r.opening,debit:t.debit+r.debit,credit:t.credit+r.credit,closing:t.closing+r.closing}),{opening:0,debit:0,credit:0,closing:0});
     return{from:from||null,to:to||null,rows,totals,balanced:totals.debit===totals.credit,openingBalanced:totals.opening===0};
   }
@@ -337,7 +341,7 @@
       if(!a||(a.kind!=='income'&&a.kind!=='expense'))continue;s.set(l.account,(s.get(l.account)||0)+l.amount);}
     const income=[],expense=[];
     for(const c of[...s.keys()].sort(cmpCode)){const v=s.get(c);if(!v)continue;const a=accOf(x,c);
-      (a.kind==='income'?income:expense).push({code:c,name:a.name,amount:a.kind==='income'?-v:v});}
+      const row={code:c,name:a.name,amount:a.kind==='income'?-v:v};if(a.suspended)row.suspended=true;(a.kind==='income'?income:expense).push(row);}
     const totalIncome=income.reduce((t,r)=>t+r.amount,0),totalExpense=expense.reduce((t,r)=>t+r.amount,0);
     return{from:from||null,to:to||null,income,expense,totalIncome,totalExpense,net:totalIncome-totalExpense};
   }
@@ -352,7 +356,7 @@
       else bal.set(l.account,(bal.get(l.account)||0)+l.amount);}
     const assets=[],liabilities=[],equity=[];
     for(const c of[...bal.keys()].sort(cmpCode)){const v=bal.get(c);if(!v)continue;const b=rowBase(x,c),k=b.kind||'asset';
-      const row={code:c,name:b.name,amount:k==='asset'?v:-v};if(b.unknown)row.unknown=true;
+      const row={code:c,name:b.name,amount:k==='asset'?v:-v};if(b.unknown)row.unknown=true;if(b.suspended)row.suspended=true;
       (k==='asset'?assets:k==='liability'?liabilities:equity).push(row);}
     const sum=r=>r.reduce((t,q)=>t+q.amount,0);
     const unclosedPriorEarnings=prior?-prior:0,currentYearEarnings=cur?-cur:0;
@@ -511,7 +515,56 @@
     extras(y,v,o);y.number=takeNo(x,v.date.slice(0,4));x.vouchers[id]=y;
     audit(x,'journal',id,'post',{reason:o.why,after:jContent(y)});return id;
   }
-  function opPost(x,v,o){o=o||{};const kind=userKind(o.kind||o.origin);if(!kind)throw err('That kind of journal is made by the app itself');return postIn(x,v,kind,o);}
+  // Spending turned into a journal: the row (ref `spend:<id>`) or the statement line (a line's
+  // stmtLine) is in the book once at most. Draft and posted journals count; void and deleted ones
+  // don't (so a voided conversion can be made again). → the journal found, posted first.
+  // A statement line whose id changed in a newer cash file is the same line under its new id
+  // (cash.alias old → new, possibly chained), so the guards compare lines by their current id.
+  function lineIdOf(x,id){
+    const A=((x&&x.cash)||{}).alias||{};let k=String(id),n=0;
+    while(Object.prototype.hasOwnProperty.call(A,k)&&A[k]&&A[k]!==k&&n++<20)k=String(A[k]);
+    return cut(k,120);
+  }
+  function spendIndexOf(x){
+    const ref=new Map(),line=new Map(),put=(m,k,v)=>{const h=m.get(k);if(!h||(v.status==='posted'&&h.status!=='posted'))m.set(k,v);};
+    for(const v of Object.values(x.vouchers)){if(!v||(v.status!=='draft'&&v.status!=='posted'))continue;
+      if(v.ref)put(ref,String(v.ref),v);for(const l of v.lines||[])if(l&&l.stmtLine)put(line,lineIdOf(x,l.stmtLine),v);}
+    return{ref,line};
+  }
+  function spendIndex(x){if(x===L){const V=views();return V.spend||(V.spend=spendIndexOf(x));}return spendIndexOf(x);}
+  function findSpendingIn(x,ref,stmtLine){
+    const I=spendIndex(x),v=(ref&&I.ref.get(cut(ref,120)))||(stmtLine&&I.line.get(lineIdOf(x,stmtLine)))||null;
+    return v?{id:v.id,status:v.status,number:v.number||null}:null;
+  }
+  const isSpendJ=(kind,ref)=>kind==='spending'||/^spend:/.test(String(ref||''));
+  // Posting guard, whatever the order the journals were made in: a spending journal may not be
+  // posted when another posted journal already carries its row (ref) or one of its statement
+  // lines; any other journal may not be posted when a posted spending journal carries one of its
+  // statement lines. So a spending draft and an AI or manual entry for the same bank line can't
+  // both end up in the book.
+  function postClash(x,v,kind,selfId){
+    const sp=isSpendJ(kind,v&&v.ref),ref=v&&v.ref?cut(v.ref,120):'';
+    const mine=new Set();for(const l of(v&&Array.isArray(v.lines)?v.lines:[]))if(l&&l.stmtLine)mine.add(lineIdOf(x,l.stmtLine));
+    if(!sp&&!mine.size)return null;
+    for(const o of Object.values(x.vouchers)){
+      if(!o||o.status!=='posted'||o.id===selfId)continue;
+      const osp=isSpendJ(kindOfV(o),o.ref);if(!sp&&!osp)continue;
+      if(sp&&ref&&osp&&o.ref&&cut(o.ref,120)===ref)return o;
+      for(const l of o.lines||[])if(l&&l.stmtLine&&mine.has(lineIdOf(x,l.stmtLine)))return o;
+    }
+    return null;
+  }
+  function clashErr(o){return err(`This bank or card line is already in your book (${o.number||'a posted journal'}), so posting it again would count it twice`);}
+  function spendingDup(x,v,kind){
+    const ref=v&&v.ref?cut(v.ref,120):'';if(kind!=='spending'&&!/^spend:/.test(ref))return null;
+    if(ref){const h=findSpendingIn(x,ref,null);if(h)return h;}
+    for(const l of(v&&Array.isArray(v.lines)?v.lines:[]))if(l&&l.stmtLine){const h=findSpendingIn(x,null,l.stmtLine);if(h)return h;}
+    return null;
+  }
+  function opPost(x,v,o){o=o||{};const kind=userKind(o.kind||o.origin);if(!kind)throw err('That kind of journal is made by the app itself');
+    const d=spendingDup(x,v,kind);if(d)throw err(`This spending is already in your book (${d.number||'a draft journal'})`);
+    const c=postClash(x,v,kind,null);if(c)throw clashErr(c);
+    return postIn(x,v,kind,o);}
   function opSaveDraft(x,v,o){
     o=o||{};const e=draftErrors(v);if(e.length)throw err(e);const t=now();
     if(o.id){const cur=x.vouchers[o.id];if(!cur||cur.status==='deleted')throw err('No such journal');
@@ -520,6 +573,7 @@
       if(v.refNo!=null)cur.refNo=cut(v.refNo,40);extras(cur,v,o);cur.updatedAt=t;cur.at=t;cur.chartVer=stampOf(x);
       audit(x,'journal',o.id,'save',{reason:o.why,before:b,after:jContent(cur)});return o.id;}
     const kind=userKind(o.kind||o.origin);if(!kind)throw err('That kind of journal is made by the app itself');
+    const dup=spendingDup(x,v,kind);if(dup)return dup.id;   // already converted: no second draft
     const id=newIdIn(x,v.date),y={id,kind,status:'draft',number:null,refNo:cut(v.refNo!=null?v.refNo:v.number,40),type:cut(v.type,40),date:v.date,
       description:cut(v.description,500),lines:normLines(v.lines),createdAt:t,updatedAt:t,postedAt:null,at:t,history:[],chartVer:stampOf(x)};
     extras(y,v,o);x.vouchers[id]=y;audit(x,'journal',id,'save',{reason:o.why,after:jContent(y)});return id;
@@ -528,6 +582,7 @@
     o=o||{};const cur=x.vouchers[id];if(!cur||cur.status==='deleted')throw err('No such journal');
     if(cur.status!=='draft')throw err(`This journal is already ${cur.status}`);
     const errs=validateIn(x,cur,{});if(errs.length)throw err(errs);
+    const c=postClash(x,cur,kindOfV(cur),id);if(c)throw clashErr(c);
     const t=now(),b=jContent(cur);cur.status='posted';cur.number=takeNo(x,cur.date.slice(0,4));cur.postedAt=t;cur.updatedAt=t;cur.at=t;
     audit(x,'journal',id,'post',{reason:o.why,before:b,after:jContent(cur)});return id;
   }
@@ -551,6 +606,7 @@
     const om=String(cur.date).slice(0,7),os=periodState(x,om);if(os!=='open')throw err(`This journal is in ${mLabel(om)}, which is ${os}`);
     const next={date:v&&v.date!=null?v.date:cur.date,lines:v&&v.lines!=null?v.lines:cur.lines};
     const errs=validateIn(x,next,{});if(errs.length)throw err(errs);
+    const c=postClash(x,{ref:cur.ref,lines:next.lines},kindOfV(cur),id);if(c)throw clashErr(c);
     const t=now(),b=jContent(cur);cur.history=[...(cur.history||[]),{at:t,why:cut(why||'Edited',200),before:before(cur)}];
     cur.date=next.date;cur.lines=normLines(next.lines);
     if(v&&v.description!=null)cur.description=cut(v.description,500);if(v&&v.refNo!=null)cur.refNo=cut(v.refNo,40);
@@ -673,88 +729,171 @@
     for(const k of Object.keys(out))if(out[k]===k)delete out[k];return out;
   }
   const has=(re,...s)=>s.some(t=>re.test(String(t||'')));
+  // Generic words only (English and Indonesian): never a name, bank or brand from anyone's book.
+  const W_OTHER=/\b(other|others|misc|miscellaneous|sundry|lain|lainnya|lain-lain|lain2)\b/;
+  const W_FX=/\bfx\b|forex|foreign exchange|exchange (gain|loss|rate|difference)|\bkurs\b|\bvalas\b/;
+  const W_CCY=/\b(idr|usd|sgd|aud|cny|rmb|eur|jpy|hkd|myr|gbp|chf|thb|krw|nzd|cad)\b/;
+  const W_GL=/\bgain|\bloss|\blaba\b|\brugi\b/;
   // The standard leaf an account belongs under, from its type, Net worth group, currency and name.
-  function leafFor(a){
+  // basis: name (its name says so) · group (its Net worth group or its type says so) · fallback
+  // (nothing says where: the row needs a check).
+  function fixedLeaf(n){
+    const R=(leaf,reason)=>({leaf,reason,basis:'name'});
+    if(has(/investment property|properti investasi|disewakan/,n))return R('1331','Investment property');
+    if(has(/\bland\b|tanah|kavling/,n))return R('1211','Land');
+    if(has(/house|home|apartment|apartemen|rumah|building|gedung|bangunan|ruko|gudang|condo|villa|properti|property/,n))return R('1212','Building or home');
+    if(has(/\bcar\b|vehicle|motor|kendaraan|mobil/,n))return R('1213','Vehicle');
+    if(has(/furnit|equip|laptop|computer|komputer|perabot|peralatan|inventaris|mebel|elektronik|office/,n))return R('1214','Furniture or equipment');
+    return null;
+  }
+  function leafByName(a){
     const n=String(a.name||'').toLowerCase(),t=String(a.type||'').toLowerCase(),ccy=String(a.ccy||'IDR').toUpperCase(),g=a.group||TYPE_GROUP[a.type]||null;
-    const R=(leaf,reason,low)=>({leaf,reason,confidence:low?'low':'high'});
+    const R=(leaf,reason,basis)=>({leaf,reason,basis:basis||'name'});
+    const other=W_OTHER.test(n);
+    // Exchange results: an FX word, or "realised / unrealised gain or loss" on a currency (an
+    // accounting package's automatic revaluation accounts).
+    const fx=has(W_FX,n)||(/\b(realis|realiz|unrealis|unrealiz)/.test(n)&&W_GL.test(n)&&(ccy!=='IDR'||W_CCY.test(n)));
     if(a.kind==='asset'){
-      if(has(/accum|depreciat|penyusutan|amortis/,n,t))return has(/build|house|home|rumah|bangunan/,n)?R('1222','Accumulated depreciation of a building'):has(/car|vehicle|motor|kendaraan|mobil/,n)?R('1223','Accumulated depreciation of a vehicle'):has(/furnit|equip|perabot|peralatan|computer|laptop/,n)?R('1224','Accumulated depreciation of equipment'):R('1229','Accumulated depreciation',true);
-      if(g==='cash'||has(/cash|bank|kas\b/,t)){
-        if(has(/e-?wallet|ovo|gopay|go-pay|\bdana\b|shopeepay|linkaja|flazz|e-?money|brizzi|stored value/,n))return R('1113','E-wallet');
+      if(has(/accum|akumulasi|depreciat|penyusutan|amortis/,n,t))return has(/build|house|home|rumah|bangunan|gedung/,n)?R('1222','Accumulated depreciation of a building'):has(/\bcar\b|vehicle|motor|kendaraan|mobil/,n)?R('1223','Accumulated depreciation of a vehicle'):has(/furnit|equip|perabot|peralatan|inventaris|mebel|computer|komputer|laptop|office|kantor|elektronik/,n)?R('1224','Accumulated depreciation of equipment'):R('1229','Accumulated depreciation');
+      if(has(/\bemas\b|\bgold\b|logam mulia|precious metal/,n))return R('1399','Gold or precious metals');
+      if(g==='cash'||has(/cash|bank|\bkas\b/,t)){
+        if(has(/e-?wallet|ovo|gopay|go-pay|\bdana\b|shopeepay|linkaja|flazz|e-?money|brizzi|stored value|dompet digital/,n))return R('1113','E-wallet');
         if(has(/\bcash\b|tunai|\bkas\b|petty|on hand/,n)&&!has(/bank/,n))return ccy!=='IDR'?R('1112','Cash in a foreign currency'):R('1111','Cash on hand');
-        return ccy!=='IDR'?R('1131',`Bank account in ${ccy}`):R('1121','Bank account in rupiah');}
-      if(g==='deposits'){if(has(/bond|obligasi|\bsbn\b|\bori\d*|\bsr\d|\bst\d|sukuk|government|treasury/,n))return R('1313','Bonds and government securities');
-        if(has(/money.?market|pasar uang/,n))return R('1142','Money-market fund');return R('1141','Time deposit',!has(/deposit|deposito|\btd\b/,n));}
-      if(g==='stocks'){if(has(/fund|reksa|etf/,n))return R('1311','Mutual fund');if(has(/crypto|bitcoin|\bbtc\b|\beth\b|coin/,n))return R('1314','Crypto');
-        if(has(/bond|obligasi/,n))return R('1313','Bonds');return R('1312','Shares or a brokerage account',!has(/stock|share|saham|broker|sekuritas|securities|equity/,n));}
+        const b=has(/bank|rekening|tabungan|giro|account|saving|checking/,n)?'name':'group';
+        return ccy!=='IDR'?R('1131',`Bank account in ${ccy}`,b):R('1121','Bank account in rupiah',b);}
+      if(g==='deposits'){if(has(/bond|obligasi|\bsbn\b|\bori\d*|\bsr\d|\bst\d|\bfr\d|sukuk|government|treasury/,n))return R('1313','Bonds and government securities');
+        if(has(/money.?market|pasar uang|\brdpu\b/,n))return R('1142','Money-market fund');if(has(/reksa|mutual fund|\bfund\b/,n))return R('1311','Mutual fund');
+        return R('1141','Time deposit',has(/deposit|deposito|\btd\b|berjangka/,n)?'name':'group');}
+      if(g==='stocks'){if(has(/fund|reksa|etf/,n))return R('1311','Mutual fund');if(has(/crypto|kripto|bitcoin|\bbtc\b|\beth\b|coin/,n))return R('1314','Crypto');
+        if(has(/bond|obligasi/,n))return R('1313','Bonds');return R('1312','Shares or a brokerage account',has(/stock|share|saham|broker|sekuritas|securities|equity|invest/,n)?'name':'group');}
       if(g==='business')return R('1321','Business stake');
-      if(g==='property'||has(/fixed/,t)){if(has(/\bland\b|tanah|plot/,n))return R('1211','Land');if(has(/house|home|apartment|apartemen|rumah|building|condo|villa/,n))return R('1212','Building or home');
-        if(has(/\bcar\b|vehicle|motor|kendaraan|mobil/,n))return R('1213','Vehicle');if(has(/furnit|equip|laptop|computer|perabot|peralatan/,n))return R('1214','Furniture or equipment');return R('1219','Other fixed asset',true);}
-      if(g==='receivables'){if(has(/tax|pajak|pph|ppn/,n,t))return R('1171','Prepaid tax');if(has(/prepaid|dibayar di muka/,n))return R('1161','Prepaid expense');
-        if(has(/advance|uang muka|deposit|jaminan/,n))return R('1162','Advance or deposit paid');if(has(/loan|pinjam|lent|hutang ke|borrowed by/,n))return R('1151','Loan given');
-        if(has(/reimburs|claim|klaim/,n))return R('1152','Reimbursement or claim');return R('1159','Other receivable',true);}
-      if(g==='other_assets'){if(has(/prepaid/,n))return R('1161','Prepaid expense');if(has(/advance|deposit|uang muka/,n))return R('1162','Advance or deposit paid');return R('1499','Other asset',true);}
-      return R('1499','Other asset',true);
+      if(g==='property'||has(/fixed/,t)||has(/aktiva tetap|aset tetap|fixed asset/,n))return fixedLeaf(n)||R('1219','Other fixed asset','group');
+      if(has(/prepaid|dibayar di ?muka|bayar di ?muka/,n))return R('1161','Prepaid expense');
+      if(has(/\bppn\b|\bvat\b/,n))return R('1179','Other prepaid tax (VAT)');
+      if(has(/\btax(es)?\b|pajak|\bpph\b/,n))return R('1171','Prepaid tax');
+      // Investments named as such but without a Net worth group.
+      if(has(/deposito|time deposit|berjangka/,n))return R('1141','Time deposit');
+      if(has(/money.?market|pasar uang/,n))return R('1142','Money-market fund');
+      if(has(/reksa|mutual fund/,n))return R('1311','Mutual fund');
+      if(has(/obligasi|\bbonds?\b|\bsbn\b|\bori\d*\b|\bsr\d+|sukuk/,n))return R('1313','Bonds and government securities');
+      if(has(/saham|\bshares?\b|equities|broker|sekuritas/,n))return R('1312','Shares or a brokerage account');
+      if(has(/crypto|kripto|bitcoin/,n))return R('1314','Crypto');
+      if(has(/advance|uang muka|\bdp\b|down payment|jaminan|\bdeposit\b|titipan/,n))return R('1162','Advance or deposit paid');
+      if(has(/\bloan|pinjam|\blent\b|borrowed by|hutang ke/,n))return R('1151','Loan given');
+      if(has(/reimburs|claim|klaim/,n))return R('1152','Reimbursement or claim');
+      if(has(/piutang|receivable|tagihan/,n))return R('1159','Receivable');
+      if(has(/cadangan|reserve|dana darurat|emergency|sinking/,n))return R('1159','A reserve set aside');
+      if(has(/persediaan|inventory|barang|perlengkapan|supplies|stock of goods/,n))return R('1499','Inventory or supplies');
+      const fa=fixedLeaf(n);if(fa)return fa;
+      if(has(/\bbank\b|rekening|tabungan|\bgiro\b/,n))return ccy!=='IDR'?R('1131',`Bank account in ${ccy}`):R('1121','Bank account in rupiah');
+      if(g==='receivables'||has(/receivable/,t))return R('1159','Other receivable',other?'name':'group');
+      if(g==='other_assets')return R('1499','Other asset',other?'name':'group');
+      return R('1499','Other asset',other?'name':'fallback');
     }
     if(a.kind==='liability'){
       if(g==='cards'||has(/credit card|kartu kredit|\bcc\b/,n))return R('2111','Credit card');
+      if(has(/uang muka|advance|\bdp\b|down payment|titipan|deposit|unearned|diterima di ?muka/,n))return R('2191','Deposit or advance received');
+      if(has(/\btax(es)?\b|pajak|\bppn\b|\bpph\b|\bvat\b/,n))return R('2132','Tax payable');
+      if(has(/accru|yang masih harus|belum ditagih|unbilled/,n))return R('2131','Accrued expense');
+      if(has(/payable|hutang dagang|utang dagang|hutang usaha|utang usaha/,n))return R('2199','Payable');
+      if(has(/cadangan|reserve|provision|provisi/,n))return R('2199','A reserve or provision');
       const long=has(/long/,t)||has(/jangka panjang|long[- ]term/,n);
-      if(g==='loans'||has(/loan|pinjam|kpr|mortgage|leasing|paylater|pay later|cicilan|instal/,n)){
-        if(has(/mortgage|\bkpr\b|home loan|house/,n))return R('2211','Mortgage');if(has(/car loan|vehicle|motor|kendaraan|leasing/,n))return R('2212','Vehicle loan');
+      if(g==='loans'||has(/\bloan|pinjam|hutang|utang|\bkpr\b|mortgage|leasing|paylater|pay later|cicilan|instal|kredit/,n)){
+        if(has(/mortgage|\bkpr\b|home loan|house|rumah/,n))return R('2211','Mortgage');if(has(/car loan|vehicle|motor|kendaraan|mobil|leasing/,n))return R('2212','Vehicle loan');
         if(has(/paylater|pay later|cicilan|instal|bnpl/,n))return R('2123','Pay-later or instalments');
-        if(long)return R('2219','Long-term loan');if(has(/family|friend|keluarga|teman|person/,n))return R('2122','Loan from family or friends');return R('2121','Short-term loan');}
-      if(has(/tax|pajak/,n))return R('2132','Tax payable');if(has(/accru|yang masih harus/,n))return R('2131','Accrued expense');
-      if(has(/deposit|advance|uang muka|titipan/,n))return R('2191','Deposit or advance received');return R('2199','Other payable',true);
+        if(long)return R('2219','Long-term loan');if(has(/family|friend|keluarga|teman|person/,n))return R('2122','Loan from family or friends');
+        return R('2121','Short-term loan',has(/\bloan|pinjam|hutang|utang|kredit/,n)?'name':'group');}
+      return R('2199','Other payable',other?'name':has(/payable|liabilit/,t)?'group':'fallback');
     }
     if(a.kind==='equity'){if(has(/retained|laba ditahan|saldo laba/,n))return R('3201','Retained earnings');
-      if(has(/opening|saldo awal|capital|modal/,n))return R('3101','Opening balance equity');if(has(/revalu/,n))return R('3301','Revaluation reserve');return R('3309','Other equity',true);}
+      if(has(/opening|saldo awal|capital|modal/,n))return R('3101','Opening balance equity');if(has(/revalu/,n))return R('3301','Revaluation reserve');
+      if(has(/hibah|grant|gift|hadiah|warisan|inherit/,n))return R('3109','Gift or grant into capital');
+      if(has(/dividen|deviden|dividend|prive|drawing|penarikan/,n))return R('3309','Dividends or drawings');
+      return R('3309','Other equity',other?'name':'fallback');}
     if(a.kind==='income'){
-      if(has(/salary|gaji|wage|upah|payroll/,n))return R('4101','Salary');if(has(/bonus|\bthr\b|allowance|tunjangan|incentive/,n))return R('4102','Bonus or allowance');
-      if(has(/\brent|sewa/,n))return R('4301','Rental income');if(has(/interest|bunga|jasa giro/,n))return R('7101','Interest income');if(has(/dividen/,n))return R('7102','Dividend income');
-      if(has(/\bfx\b|forex|exchange|kurs/,n))return has(/unreal/,n)?R('7202','Unrealised FX gains'):R('7201','FX gains');
-      if(has(/gain|capital|investment|return|keuntungan|revalu|market/,n))return has(/unreal|revalu|market/,n)?R('7302','Unrealised investment gains'):R('7301','Investment gains');
-      if(has(/business|usaha|profit|sales|penjualan|bagi hasil|share/,n))return R('4201','Business income');if(has(/\bfee|commission|komisi|honor/,n))return R('4202','Fees or commissions');
-      if(has(/gift|hadiah|hibah|angpao/,n))return R('4901','Gifts received');return R('4909','Other income',true);
+      const nonOp=has(/other income|non.?operat/,t);
+      if(has(/salary|gaji|wage|upah|payroll/,n))return R('4101','Salary');if(has(/bonus|\bthr\b|allowance|tunjangan|incentive|insentif/,n))return R('4102','Bonus or allowance');
+      if(has(/\brent|sewa/,n))return R('4301','Rental income');if(has(/interest|bunga|jasa giro/,n))return R('7101','Interest income');if(has(/dividen|deviden|dividend/,n))return R('7102','Dividend income');
+      if(fx)return has(/unreal/,n)?R('7202','Unrealised FX gains'):R('7201','FX gains');
+      if(has(/gain|capital|investment|investasi|return|keuntungan|revalu|market/,n))return has(/unreal|revalu|market/,n)?R('7302','Unrealised investment gains'):R('7301','Investment gains');
+      if(has(/business|usaha|profit|sales|penjualan|bagi hasil|share|retur|potongan|discount|diskon|omzet/,n))return R('4201','Business income');if(has(/\bfee|commission|komisi|honor|\bjasa\b/,n))return R('4202','Fees or commissions');
+      if(has(/gift|hadiah|hibah|angpao/,n))return R('4901','Gifts received');
+      return nonOp?R('7909','Other non-operating income',other?'name':'group'):R('4909','Other income',other?'name':'fallback');
     }
     // expense
-    if(has(/deprec|penyusutan/,n))return R('6801','Depreciation');if(has(/interest|bunga/,n)&&!has(/tax|pajak/,n))return R('8101','Interest paid');
-    if(has(/bank fee|bank charge|admin|biaya bank|card fee|annual fee|\bfees?\b.*bank|bank.*\bfees?\b/,n))return R('8102','Bank or card fees');
-    if(has(/\bfx\b|forex|exchange|kurs/,n))return has(/unreal/,n)?R('8202','Unrealised FX losses'):R('8201','FX losses');
-    if(has(/tax|pajak|pph/,n))return has(/interest|final|deposit|dividen|bunga/,n)?R('9102','Final tax on interest and investments'):has(/withh|potong/,n)?R('9103','Tax withheld'):R('9101','Income tax');
+    const nonOp=has(/other expense|other income|non.?operat/,t);
+    if(has(/\bcogs\b|cost of (goods|sales)|harga pokok|\bhpp\b/,n,t))return R('5000','Cost of sales');
+    if(has(/deprec|penyusutan|amortis/,n))return R('6801','Depreciation');
+    if(has(/dispos|pelepasan|penjualan aset|sale of (fixed )?assets?/,n))return R('8909','Gain or loss on selling a fixed asset');
+    if(fx)return has(/unreal/,n)?R('8202','Unrealised FX losses'):R('8201','FX losses');
+    if(has(/interest|bunga/,n)&&!has(/\btax(es)?\b|pajak/,n))return R('8101','Interest paid');
+    if(has(/bank fee|bank charge|admin|biaya bank|card fee|annual fee|iuran tahunan|\bfees?\b.*bank|bank.*\bfees?\b/,n))return R('8102','Bank or card fees');
+    if(has(/fuel|bensin|\bbbm\b|petrol|gasoline/,n))return R('6202','Fuel');
+    if(has(/\btoll|\btol\b|parking|parkir/,n))return R('6203','Tolls and parking');
+    if(has(/stnk|\bkir\b|pajak kendaraan|vehicle tax|road tax|\bpkb\b|bengkel|kendaraan|\bmobil\b|\bmotor\b|\bcar\b|vehicle/,n))return R('6204','Vehicle upkeep and tax');
+    if(has(/\btax(es)?\b|pajak|\bpph\b|\bppn\b/,n))return has(/interest|final|deposit|dividen|bunga/,n)?R('9102','Final tax on interest and investments'):has(/withh|potong/,n)?R('9103','Tax withheld'):R('9101','Income tax');
     if(has(/investment loss|capital loss|\bloss\b|rugi/,n))return R('8301','Investment losses');
-    const E=[[/food|dining|restaurant|makan|cafe|coffee/,'6101','Food and dining'],[/grocer|supermarket/,'6102','Groceries'],[/household|rumah tangga|cleaning|laundry|maid|pembantu/,'6103','Household'],
-      [/fuel|bensin|\bbbm\b|petrol/,'6202','Fuel'],[/\btoll|\btol\b|parking|parkir/,'6203','Tolls and parking'],[/vehicle|stnk|bengkel|car maint|car service/,'6204','Vehicle upkeep'],
-      [/transport|taxi|ride|grab|gojek|train|\bbus\b|commut/,'6201','Transport'],[/\brent\b|sewa/,'6301','Rent'],[/electric|listrik|\bpln\b|water|pdam|utilit/,'6302','Utilities'],
-      [/telecom|phone|internet|pulsa|wifi|mobile/,'6303','Telecom'],[/repair|maintenance|renovat|perbaikan/,'6304','Home maintenance'],
-      [/tech|subscription|langganan|software|cloud|streaming/,'6402','Tech and subscriptions'],[/shopping|cloth|fashion|belanja/,'6401','Shopping'],
-      [/personal care|salon|barber|cosmetic|beauty/,'6403','Personal care'],[/health|medical|doctor|hospital|clinic|pharma|obat|dental|kesehatan/,'6501','Health'],
-      [/insurance|asuransi|premi/,'6502','Insurance'],[/entertain|movie|cinema|hiburan|concert/,'6601','Entertainment'],[/sport|gym|fitness|olahraga|golf/,'6602','Sports'],
-      [/travel|holiday|vacation|hotel|flight|airline|liburan/,'6603','Travel'],[/foreign|luar negeri|overseas/,'6604','Foreign spending'],
-      [/educat|school|sekolah|course|tuition|kursus/,'6701','Education'],[/family|keluarga|parents|orang tua|\bchild|\banak/,'6702','Family support'],
-      [/relig|donat|zakat|charity|church|mosque|temple|perpuluhan|sedekah|infaq|tithe/,'6703','Religion and donations'],[/gift|hadiah|kado/,'6704','Gifts given'],
-      [/ad hoc|adhoc|one-off|one off/,'6901','One-off spending']];
+    if(has(/iklan|advertis|promosi|promotion|pemasaran|marketing|komisi|commission/,n))return R('8909','Marketing or commission costs');
+    const E=[[/food|dining|restaurant|makan|minum|cafe|coffee|catering|konsumsi/,'6101','Food and dining'],[/grocer|supermarket|sembako/,'6102','Groceries'],
+      [/health|medical|doctor|dokter|hospital|rumah sakit|clinic|klinik|pharma|apotek|obat|dental|kesehatan/,'6501','Health'],
+      [/insurance|asuransi|premi|bpjs/,'6502','Insurance'],
+      [/salary|gaji|wage|upah|lembur|overtime|\bthr\b|honor|pesangon|severance|kompensasi|payroll|tunjangan|allowance|bonus|pembantu|maid|driver|sopir|supir/,'6103','Household staff and services'],
+      [/household|rumah tangga|cleaning|laundry|perlengkapan|supplies|alat tulis|\batk\b|stationery/,'6103','Household supplies and services'],
+      [/transport|taxi|taksi|ride|ojek|grab|gojek|train|kereta|\bbus\b|commut/,'6201','Transport'],[/\brent\b|sewa/,'6301','Rent'],
+      [/electric|listrik|\bpln\b|water|\bpam\b|pdam|air bersih|air minum|utilit/,'6302','Utilities'],
+      [/telecom|telekom|telepon|telephone|phone|internet|pulsa|wifi|mobile|komunikasi/,'6303','Telecom'],
+      [/repair|maintenance|renovat|perbaikan|pemeliharaan|perawatan|servis/,'6304','Home maintenance'],
+      [/tech|subscription|langganan|software|cloud|streaming|koran|majalah|newspaper|magazine/,'6402','Tech and subscriptions'],[/shopping|cloth|fashion|belanja|pakaian/,'6401','Shopping'],
+      [/personal care|salon|barber|cosmetic|kosmetik|beauty|kecantikan/,'6403','Personal care'],
+      [/entertain|movie|cinema|bioskop|hiburan|concert|rekreasi/,'6601','Entertainment'],[/sport|gym|fitness|olahraga|golf|tennis|tenis/,'6602','Sports'],
+      [/travel|holiday|vacation|hotel|flight|airline|pesawat|liburan|perjalanan|wisata|\btrip\b/,'6603','Travel'],[/foreign|luar negeri|overseas/,'6604','Foreign spending'],
+      [/educat|school|sekolah|course|tuition|kursus|pendidikan/,'6701','Education'],[/family|keluarga|parents|orang tua|\bchild|\banak/,'6702','Family support'],
+      [/relig|donat|zakat|charity|church|gereja|mosque|masjid|temple|perpuluhan|persepuluhan|sedekah|infaq|infak|tithe|sumbangan|persembahan|\bamal\b|derma|kolekte/,'6703','Religion and donations'],
+      [/gift|hadiah|kado|angpao/,'6704','Gifts given'],[/ad hoc|adhoc|one-off|one off/,'6901','One-off spending'],
+      [/ekspedisi|kurir|courier|\bpos\b|postage|shipping|pengiriman|materai|meterai|stamp duty/,'6909','Postage, couriers and stamp duty']];
     for(const[re,leaf,why]of E)if(re.test(n))return R(leaf,why);
-    return R('6909','Other living expense',true);
+    return nonOp?R('8909','Other non-operating expense',other?'name':'group'):R('6909','Other living expense',other?'name':'fallback');
+  }
+  // → {leaf, reason, confidence: high|low, basis}. An account with no entries is never unsure: nothing
+  // moves with it, so it goes where its type puts it (basis 'type').
+  function leafFor(a,o){
+    const r=leafByName(a);let basis=r.basis,reason=r.reason;
+    if(basis==='fallback'&&o&&o.lines===false){basis='type';reason+=' (no entries yet, so nothing moves)';}
+    return{leaf:r.leaf,reason,confidence:basis==='fallback'?'low':'high',basis};
   }
   function stdIndex(std){return new Map((std||[]).map(s=>[s.code,s]));}
-  function isStdCode(S,code,kind){
-    const s=S.get(code);if(s)return s.type===kind;const m=/^(\d{4})\.\d{2}$/.exec(code);const p=m&&S.get(m[1]);return!!(p&&p.postable&&p.type===kind);
+  // Standard headers with nothing under them (Cost of sales): they take .nn accounts directly.
+  function leafableOf(std){const p=new Set((std||[]).map(s=>s.parent).filter(Boolean));return new Set((std||[]).filter(s=>!s.postable&&!p.has(s.code)).map(s=>s.code));}
+  // An ERP code: a postable standard code, or .nn under one (or under a header with nothing under
+  // it), of the same type. A standard header's own code is not one for a postable account.
+  function isStdCode(S,code,kind,leafable){
+    const s=S.get(code);if(s)return s.type===kind&&!!s.postable;
+    const m=/^(\d{4})\.\d{2}$/.exec(code),p=m&&S.get(m[1]);return!!(p&&p.type===kind&&(p.postable||(leafable&&leafable.has(p.code))));
   }
   function ancestors(S,code){const out=[];let s=S.get(code);while(s&&s.parent){out.push(s.parent);s=S.get(s.parent);}return out;}
-  // → [{old, new, name, kind, reason, confidence}] for every account. Postable accounts (and any with
-  // lines) go to .nn children of their standard leaf (nn from 01 in old-code order); headers go to
-  // the nearest standard header that holds every account under them.
+  // → [{old, new, name, kind, reason, confidence, basis, leaf?, header?}] for every account.
+  // - An account on an ERP code keeps it unless its name clearly says another leaf.
+  // - Every other postable account (and any with lines) goes to the .nn child of its leaf, nn from 01
+  //   in old-code order, skipping every old code of the chart (a new code never repeats an old one).
+  // - A kept account sitting on a leaf's own code moves to .nn when other accounts join that leaf.
+  // - Headers go to the nearest standard header that holds every account under them.
   function recodeProposal(x,std){
-    const S=stdIndex(std),used=usedCodes(x),accs=Object.values(x.accounts).filter(Boolean).sort((p,q)=>cmpCode(p.id,q.id));
-    const out=new Map(),byLeaf=new Map(),taken=new Set();
-    for(const a of accs)if(isStdCode(S,a.id,a.kind)&&(isPostable(a)||used.has(a.id))){
-      const f=leafFor(a),base=a.id.split('.')[0],same=f.leaf===base;
-      out.set(a.id,{old:a.id,new:a.id,name:a.name,kind:a.kind,reason:same?'Already an ERP code':`Keeps its code, which is an ERP code; by its name it would go under ${f.leaf}`,confidence:same?'high':'low'});taken.add(a.id);}
-    for(const a of accs){if(out.has(a.id)||!(isPostable(a)||used.has(a.id)))continue;
-      const f=leafFor(a);(byLeaf.get(f.leaf)||byLeaf.set(f.leaf,[]).get(f.leaf)).push({a,f});}
-    for(const[leaf,list]of byLeaf){let nn=1;
-      for(const{a,f}of list){let c;do{c=`${leaf}.${p2(nn++)}`;}while(taken.has(c));taken.add(c);
-        out.set(a.id,{old:a.id,new:c,name:a.name,kind:a.kind,reason:f.reason,confidence:f.confidence,leaf});}}
+    const S=stdIndex(std),LF=leafableOf(std),used=usedCodes(x),accs=Object.values(x.accounts).filter(Boolean).sort((p,q)=>cmpCode(p.id,q.id));
+    const out=new Map(),byLeaf=new Map(),taken=new Set(accs.map(a=>a.id)),exact=[];
+    const add=(leaf,a,f)=>(byLeaf.get(leaf)||byLeaf.set(leaf,[]).get(leaf)).push({a,f});
+    for(const a of accs){if(!(isPostable(a)||used.has(a.id)))continue;
+      const f=leafFor(a,{lines:used.has(a.id)}),base=a.id.split('.')[0];
+      // A template account on its own code (origin standard) is the ERP chart itself: it always stays.
+      if(isStdCode(S,a.id,a.kind,LF)&&(f.leaf===base||f.basis!=='name'||(a.origin==='standard'&&S.has(a.id)))){
+        out.set(a.id,{old:a.id,new:a.id,name:a.name,kind:a.kind,reason:f.leaf===base?'Already an ERP code':'Keeps its ERP code (its name points nowhere else)',confidence:'high',basis:'code',leaf:base});
+        if(!a.id.includes('.'))exact.push({a,f});continue;}
+      add(f.leaf,a,f);}
+    // A kept leaf code can't also be the header of .nn accounts.
+    const parents=new Set([...byLeaf.keys(),...[...out.values()].filter(r=>r.new.includes('.')).map(r=>r.new.split('.')[0])]);
+    for(const{a,f}of exact)if(parents.has(a.id)){out.delete(a.id);add(a.id,a,{...f,leaf:a.id,reason:'Its ERP leaf takes other accounts, so it moves under it',confidence:'high',basis:'code'});}
+    for(const[leaf,list]of byLeaf){let nn=1;list.sort((p,q)=>cmpCode(p.a.id,q.a.id));
+      for(const{a,f}of list){let c;do{c=`${leaf}.${p2(nn++)}`;}while(taken.has(c)&&c!==a.id);taken.add(c);
+        out.set(a.id,{old:a.id,new:c,name:a.name,kind:a.kind,reason:f.reason,confidence:f.confidence,basis:f.basis,leaf});}}
     // Headers: the deepest standard header above every account under them.
     const kids=new Map();for(const a of accs)if(a.parent)(kids.get(a.parent)||kids.set(a.parent,[]).get(a.parent)).push(a.id);
     const below=id=>{const r=[],st=[...(kids.get(id)||[])];while(st.length){const k=st.pop();if(out.has(k))r.push(out.get(k).new);for(const q of kids.get(k)||[])st.push(q);}return r;};
@@ -763,7 +902,7 @@
       if(ts.length){const chain=c=>{const m=/^(\d{4})\.\d{2}$/.exec(c),base=m?m[1]:c;return[...(m?[base]:[]),...ancestors(S,base)].filter(h=>S.has(h)&&!S.get(h).postable);};
         const sets=ts.map(chain);pick=(sets[0]||[]).find(h=>sets.every(s=>s.includes(h)))||null;}
       const nw=pick&&S.get(pick).type===a.kind?pick:CLASS[a.kind]||'1000';
-      out.set(a.id,{old:a.id,new:nw,name:a.name,kind:a.kind,reason:ts.length?'Header: the standard header above its accounts':'Header with no accounts under it',confidence:'high',header:true});}
+      out.set(a.id,{old:a.id,new:nw,name:a.name,kind:a.kind,reason:ts.length?'Header: the standard header above its accounts':'Header with no accounts under it',confidence:'high',basis:'header',header:true});}
     return accs.map(a=>out.get(a.id));
   }
   // Applies an old → new map (unlisted accounts keep their code) on a copy of x; nothing changes
@@ -1292,7 +1431,10 @@
   /* ── Public API (contract docs/v4-books.md) ── */
   function ledgerValidate(v,o){const x=live();if(!x)return['Your book is not set up yet'];if(MIG_BLOCK)return['Your book is read-only'];return validateIn(x,v,o);}
   function ledgerPost(v,o){return run('post',x=>opPost(x,v,o));}
-  function ledgerSaveDraft(v,o){return run('draft',x=>opSaveDraft(x,v,o));}
+  function ledgerSaveDraft(v,o){
+    const x=live();if(x&&!MIG_BLOCK&&!(o&&o.id)&&!draftErrors(v).length){const k=userKind(o&&(o.kind||o.origin));const d=k&&spendingDup(x,v,k);if(d)return d.id;}
+    return run('draft',x=>opSaveDraft(x,v,o));}
+  function ledgerFindSpending(ref,stmtLine){const x=live();return x&&(ref||stmtLine)?findSpendingIn(x,ref||null,stmtLine||null):null;}
   function ledgerPostDraft(id,o){return run('post',x=>opPostDraft(x,id,o));}
   function ledgerPostDrafts(ids,o){
     return run('post',x=>{const list=ids==null?Object.values(x.vouchers).filter(v=>v&&v.status==='draft'&&(!o||!o.kind||kindOfV(v)===o.kind)).sort((p,q)=>cmp(p.date,q.date)||cmp(p.id,q.id)).map(v=>v.id):[].concat(ids);
@@ -1522,7 +1664,7 @@
     addAccount:opAddAccount,editAccount:opEditAccount,archiveAccount:opArchiveAccount,setRetainedEarnings:opSetRetained,
     close:opClose,reopen:opReopen,lock:opLock,unlock:opUnlock};
   Object.assign(window,{LEDGER:()=>live(),ledgerStatus:()=>BLOCKED||MIG_BLOCK?'error':live()?'ready':STATUS,ledgerBlocked:()=>BLOCKED||(MIG_BLOCK?'Your book could not be moved to the new format, so it is read-only':null),
-    ledgerFindByRef:findByRef,ensureLedger,ledgerSeeded:()=>!!live(),ledgerView,
+    ledgerFindByRef:findByRef,ledgerFindSpending,ensureLedger,ledgerSeeded:()=>!!live(),ledgerView,
     ledgerValidate,ledgerWarnings:warningsOf,ledgerPost,ledgerSaveDraft,ledgerPostDraft,ledgerPostDrafts,ledgerDeleteDraft,ledgerCopy,ledgerEdit,ledgerVoid,ledgerJournal,
     ledgerAddAccount,ledgerEditAccount,ledgerArchiveAccount,ledgerSetRetainedEarnings,ledgerSettings,
     ledgerPeriods,ledgerPeriodState,ledgerCloseChecklist,ledgerClosePeriod,ledgerReopenPeriod,ledgerLockPeriod,ledgerUnlockPeriod,
@@ -1534,7 +1676,7 @@
     ledgerUi:ui,
     // Pure helpers on any ledger object (x null = the live book for the reports).
     ledgerLib:{tb:tbOf,gl:glOf,pl:plOf,bs:bsOf,validate:validateIn,warnings:warningsOf,periodState,firstMonth:firstMonthOf,periods:periodsOf,checklist:checklistIn,yearEndPlan,
-      migrate:migrate1,migrationDiffs,toV2,recodeProposal,recode:recodeIn,codeMap:codeMapOf,resolveCode:resolveIn,leafFor,ops,
+      migrate:migrate1,migrationDiffs,toV2,recodeProposal,recode:recodeIn,codeMap:codeMapOf,resolveCode:resolveIn,leafFor,findSpending:findSpendingIn,cmpCode,ops,
       healDuplicatePosts,renumberCollisions,applyRecodes,seedFrom,gateDiffs,mergeLedgers,mergeBooks,mergeCash,fillWealth,coreOf,wViewOf,booksViewOf,cashViewOf,journalsViewOf,
       sigOf,contentSig,emptyLedger,SCHEMA}});
 })();

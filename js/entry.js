@@ -2,7 +2,8 @@
    drafted by Claude from a sentence), drafts (Save draft · Post · Delete draft), posted journals
    (Copy · Void · Edit with history), and the owner's Anthropic API key (Settings › AI).
    Contract: docs/v4-books.md §2, §3, §8 (the book) and docs/v3-ledger.md §7–§8 (the AI request);
-   UX-GUIDELINE.md §11.10 and §11.10b. Loaded after js/books.js. No personal data in this file: the
+   UX-GUIDELINE.md §11.10, §11.10b and §11.10d (the grid editor, like Accurate Online's journal form).
+   Loaded after js/books.js. No personal data in this file: the
    repo is public. Nothing posts or saves in a closed or locked month (the book refuses it); the
    editor says so and links to Books › Periods.
 
@@ -33,7 +34,7 @@
   const KINDS=['asset','liability','equity','income','expense'];
   const KIND_LABEL={asset:'Asset',liability:'Liability',equity:'Equity',income:'Income',expense:'Expense'};
   // Journal kinds (v4) as badges; the v3 origin names map onto them.
-  const KIND_BADGE={manual:['Manual',''],ai:['AI','accent'],'month-end':['Month-end',''],income:['Income',''],opening:['Opening',''],'year-end':['Year-end','info'],accurate:['From Accurate','']};
+  const KIND_BADGE={manual:['Manual',''],ai:['AI','accent'],'month-end':['Month-end',''],income:['Income',''],opening:['Opening',''],'year-end':['Year-end','info'],accurate:['From Accurate',''],spending:['Spending','']};
   const v3Name=k=>k==='manual'?'app':k;   // the v3 origin name of a kind (data-origin, kept for older readers)
 
   registerIcon('sparkles','<path d="M9.94 14.06 4 20"/><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M20 3v4"/><path d="M22 5h-4"/>');
@@ -54,15 +55,44 @@
     .en-note{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:18px;padding:10px 12px;border-radius:var(--radius-sm);margin:0 0 12px;background:var(--info-soft);color:var(--text-1)}
     .en-note.warn{background:var(--warn-soft)}.en-note.bad{background:var(--bad-soft)}.en-note.good{background:var(--good-soft)}
     .en-note svg.i{flex-shrink:0;margin-top:1px}
-    .en-lines{margin-top:12px}
-    .en-line{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:start;padding:10px 0;border-top:1px solid var(--border)}
-    .en-line .en-memo{grid-column:1/-1}
-    .en-line .en-fx{grid-column:1/-1;display:grid;grid-template-columns:90px minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:start}
-    .en-line .en-btns{display:flex;gap:2px;padding-top:22px}
-    .en-accname{font-size:12px;line-height:16px;color:var(--text-3);overflow-wrap:anywhere}
+    @media (min-width:768px){#enSheet.sheet.wide{max-width:960px}}
+    .en-hdr{display:grid;grid-template-columns:170px 190px minmax(0,1fr);gap:12px;margin:0 0 12px}
+    .en-hdr .full{grid-column:1/-1}
+    .en-ro{display:flex;align-items:center;background:transparent;border-style:dashed;color:var(--text-3);font-variant-numeric:tabular-nums;cursor:default;overflow:hidden;white-space:nowrap}
+    .en-ro.set{color:var(--text-1);font-weight:600}
+    .en-gridwrap{margin:0 0 4px}
+    table.data.en-grid{table-layout:fixed}
+    table.data.en-grid col.en-c-n{width:36px}table.data.en-grid col.en-c-memo{width:28%}table.data.en-grid col.en-c-amt{width:142px}table.data.en-grid col.en-c-act{width:80px}
+    table.data.en-grid th{padding:8px 6px}
+    table.data.en-grid td{padding:6px;height:auto;vertical-align:top}
+    table.data.en-grid tbody tr:hover{background:transparent}
+    table.data.en-grid td.en-n{color:var(--text-3);font-size:12px;line-height:16px;padding-top:17px;text-align:center;font-variant-numeric:tabular-nums}
+    table.data.en-grid .input{height:38px}
+    .en-amt{text-align:right;font-variant-numeric:tabular-nums}
+    .en-accwrap{position:relative}
+    .en-accname{font-size:12px;line-height:16px;color:var(--text-3);overflow-wrap:anywhere;margin-top:4px}
+    .en-accname:empty{display:none}
     .en-accname.bad{color:var(--bad)}
-    .en-tot{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--border-strong);font-size:14px}
-    .en-tot b{font-variant-numeric:tabular-nums}
+    table.data.en-grid td.en-btns{white-space:nowrap;text-align:right;padding-top:10px}
+    .en-btns .icon-btn[aria-pressed="true"]{color:var(--accent-text);background:var(--accent-soft)}
+    table.data.en-grid tr.en-fxrow td{border-top:0;padding-top:0}
+    .en-fx{display:grid;grid-template-columns:90px repeat(2,minmax(0,1fr)) minmax(0,.8fr);gap:8px;align-items:end;padding:8px 10px 10px;border:1px dashed var(--border-strong);border-radius:var(--radius-sm)}
+    .en-fxhint{align-self:center;padding-top:18px;font-variant-numeric:tabular-nums}
+    table.data.en-grid tfoot td{height:auto;padding:10px 6px;border-top:1px solid var(--border-strong);vertical-align:middle;font-variant-numeric:tabular-nums}
+    table.data.en-grid tfoot td.num b{font-weight:600}
+    .en-totl{display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap;font-weight:600}
+    .en-totl .en-grow{flex:1}
+    .en-ml{display:none}
+    .en-keys{margin:6px 0 0}
+    .en-lb{position:absolute;left:0;top:calc(100% + 4px);z-index:30;width:max(100%,360px);max-width:min(480px,80vw);max-height:264px;overflow-y:auto;
+      background:var(--surface-3);border:1px solid var(--border-strong);border-radius:var(--radius-sm);box-shadow:var(--shadow-pop);padding:4px}
+    .en-opt{display:flex;gap:8px;align-items:baseline;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:14px;line-height:20px;color:var(--text-1)}
+    .en-opt:hover{background:var(--surface-2)}
+    .en-opt[aria-selected="true"]{background:var(--accent-soft)}
+    .en-opt .bk-code{flex-shrink:0;margin-right:0}
+    .en-opt .en-oname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .en-opt .en-okind{font-size:12px;color:var(--text-3);flex-shrink:0}
+    .en-lb-empty{padding:8px 10px;font-size:13px;line-height:18px;color:var(--bad)}
     .en-checks{display:flex;flex-direction:column;gap:4px;margin:8px 0 4px}
     .en-sec{margin-top:16px}
     .en-sec h3{margin:0 0 8px}
@@ -88,7 +118,6 @@
     .en-batch{font-size:13px;color:var(--text-2);margin-top:10px}
     .en-when{font-size:13px;line-height:18px;color:var(--text-2);margin:-4px 0 8px;overflow-wrap:anywhere}
     .en-jr{margin:4px 0 0}
-    .en-jr-h{margin:16px 0 4px}
     .en-jr table.data{width:100%}
     .en-jr table.data td.bk-acc{min-width:0}
     .en-jr tr.cr td.bk-acc{padding-left:40px}
@@ -106,10 +135,30 @@
     .en-note .bk-link{font-size:13px;padding:0 2px;vertical-align:0}
     @media (max-width:767px){
       .en-jr tr.cr td.bk-acc{padding-left:24px}
-      .en-line{grid-template-columns:1fr 1fr}
-      .en-line .en-acc{grid-column:1/-1}
-      .en-line .en-btns{grid-column:1/-1;padding-top:0;justify-content:flex-end}
-      .en-line .en-fx{grid-template-columns:80px 1fr 1fr}
+      .en-hdr{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+      .en-hdr .en-h-desc{grid-column:1/-1}
+      /* Phones: each line is a compact card (account · memo · Debit | Credit), the tools top right. */
+      table.data.en-grid,table.data.en-grid tbody,table.data.en-grid tfoot{display:block;width:100%}
+      table.data.en-grid colgroup,table.data.en-grid thead{display:none}
+      table.data.en-grid tr.en-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"acc acc" "memo memo" "dr cr";
+        gap:8px;padding:10px 12px;margin:0 0 8px;border:1px solid var(--border);border-radius:var(--radius-sm)}
+      table.data.en-grid tr.en-line td{display:block;padding:0;height:auto;border:0;min-width:0}
+      table.data.en-grid tr.en-line td.en-n{display:none}
+      table.data.en-grid td.en-acc{grid-area:acc}table.data.en-grid td.en-memo-c{grid-area:memo}table.data.en-grid td.en-dr{grid-area:dr}table.data.en-grid td.en-cr{grid-area:cr}
+      table.data.en-grid tr.en-line td.en-btns{position:absolute;top:10px;right:12px;display:flex;gap:2px;padding:0}
+      table.data.en-grid td.en-acc .en-accwrap{margin-right:80px}
+      .en-lb{width:calc(100% + 80px);max-width:none}
+      .en-ml{display:block;font-size:12px;line-height:16px;font-weight:500;color:var(--text-2);margin:0 0 4px}
+      table.data.en-grid .input{height:48px}
+      table.data.en-grid tr.en-fxrow{display:block;margin:-4px 0 8px}
+      table.data.en-grid tr.en-fxrow td{display:block;padding:0;border:0;height:auto}
+      table.data.en-grid tr.en-fxrow td.en-n{display:none}
+      .en-fx{grid-template-columns:80px minmax(0,1fr) minmax(0,1fr)}
+      .en-fxhint{grid-column:1/-1;padding-top:0}
+      table.data.en-grid tfoot tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;padding:12px 0 4px;border-top:1px solid var(--border-strong)}
+      table.data.en-grid tfoot td{display:block;padding:0;border:0;height:auto;text-align:left}
+      table.data.en-grid tfoot td.en-totl-c{grid-column:1/-1}
+      table.data.en-grid tfoot td.en-n,table.data.en-grid tfoot td.en-pad{display:none}
       .en-na{grid-template-columns:1fr 1fr}
       .en-na .en-na-name{grid-column:1/-1}
     }`;
@@ -392,9 +441,46 @@
   const blankEntry=(date)=>({date:date||todayISO(),description:'',lines:[blankLine(),blankLine()],include:true,dup:[]});
   function accounts(){const x=L();return x?x.accounts:{};}
   function accOf(code){return accounts()[code]||null;}
-  function postable(){
-    return Object.values(accounts()).filter(a=>a&&!isHeader(a)&&!a.suspended&&!isArchived(a)).sort((p,q)=>String(p.id).localeCompare(String(q.id),undefined,{numeric:true}));
+  // Codes sort by their numbers, part by part: 1100.09 · 1100.10 · 1100.9 never lands after 1100.10.
+  function codeCmp(p,q){
+    const a=String(p).split('.'),b=String(q).split('.');
+    for(let n=0;n<Math.max(a.length,b.length);n++){
+      if(a[n]==null)return-1;if(b[n]==null)return 1;
+      const x=/^\d+$/.test(a[n])?Number(a[n]):NaN,y=/^\d+$/.test(b[n])?Number(b[n]):NaN;
+      if(!isNaN(x)&&!isNaN(y)&&x!==y)return x-y;
+      const c=a[n].localeCompare(b[n]);if(c)return c;
+    }
+    return 0;
   }
+  // Accounts that take entries: never a header, a suspended or an archived account (UX §11.10d).
+  function postable(){
+    return Object.values(accounts()).filter(a=>a&&!isHeader(a)&&!a.suspended&&!isArchived(a)).sort((p,q)=>codeCmp(p.id,q.id));
+  }
+  // What the account cell holds → an account code: the code itself, "code · name", or a unique exact
+  // name. Anything else stays as typed (the checks then say it is not in the book).
+  function resolveAcc(t){
+    t=String(t==null?'':t).trim();if(!t)return'';
+    const all=accounts();if(all[t])return t;
+    const m=/^(\S+?)(?:\s*·\s*|\s+)\S/.exec(t);if(m&&all[m[1]])return m[1];
+    const low=t.toLowerCase(),hits=postable().filter(a=>String(a.name||'').trim().toLowerCase()===low);
+    return hits.length===1?String(hits[0].id):t;
+  }
+  // Accounts for the picker, best first: code starts with what was typed, then the name, then a word
+  // of the name, then anywhere; several words must all appear. Empty text lists them all by code.
+  function accMatches(text){
+    const list=postable(),q=String(text||'').trim().toLowerCase();
+    if(!q)return list.slice(0,80);
+    const toks=q.split(/\s+/),out=[];
+    for(const a of list){
+      const c=String(a.id).toLowerCase(),n=String(a.name||'').toLowerCase(),hay=c+' '+n;
+      const s=c.startsWith(q)?0:n.startsWith(q)?1:n.split(/[\s•·&\-\/(),.]+/).some(w=>w&&w.startsWith(q))?2:hay.includes(q)?3:toks.every(t=>hay.includes(t))?4:-1;
+      if(s>=0)out.push([s,a]);
+    }
+    return out.sort((x,y)=>x[0]-y[0]||codeCmp(x[1].id,y[1].id)).slice(0,80).map(x=>x[1]);
+  }
+  // A line with nothing in it: the grid always offers one at the end and saving ignores it.
+  const isBlank=l=>!l.account&&!l.debit&&!l.credit&&!String(l.memo||'').trim()&&!l.fxOn;
+  function ensureBlank(E){if(!E.lines.length||!isBlank(E.lines[E.lines.length-1])){E.lines.push(blankLine());return true;}return false;}
   function lineFrom(l){
     const a=Math.round(l.amount||0),f=l.fx||null;
     return{account:String(l.account||''),debit:a>0?a:0,credit:a<0?-a:0,memo:l.memo||l.description||'',fxOn:!!f,ccy:f?f.ccy:'',famt:f?String(f.amount):'',rate:f?String(f.rate):'',stmtLine:l.stmtLine||null};
@@ -423,7 +509,7 @@
     return{entries,newAccounts:na};
   }
   function voucherOf(E){
-    return{date:E.date,description:E.description,lines:E.lines.filter(l=>l.account||l.debit||l.credit).map(l=>{
+    return{date:E.date,description:E.description,...(E.ref?{ref:E.ref}:{}),lines:E.lines.filter(l=>l.account||l.debit||l.credit).map(l=>{
       const o={account:l.account,amount:Math.round((l.debit||0)-(l.credit||0)),memo:l.memo||''};
       if(l.fxOn){o.fx={ccy:String(l.ccy||'').toUpperCase(),amount:Math.abs(num(l.famt)||0),rate:num(l.rate)||0};}
       if(l.stmtLine)o.stmtLine=l.stmtLine;
@@ -466,7 +552,7 @@
   function sheetTitle(){return D.mode==='edit'?'Edit journal':D.mode==='draft'?'Draft journal':D.mode==='view'||D.mode==='locked'?'Journal':'New journal';}
   const readOnly=()=>D&&(D.mode==='view'||D.mode==='locked');
   function askHTML(){
-    if(D.mode!=='new')return'';
+    if(D.mode!=='new'||D.prefilled)return'';
     if(!hasKey())return`<div class="en-note" id="enNoKey">${ic('info','s16')}<span>Claude can draft entries from a sentence once you add your own Anthropic API key in <button class="bk-link" data-en="settings">Settings › AI</button>. For now, fill this one in by hand.</span></div>`;
     return`<div class="en-ask"><label class="label" for="enText">Tell me what happened</label>
       <textarea class="input" id="enText" rows="2" placeholder="e.g. the money my friend owed me came into my bank account, then I moved it to my ••5678 account">${escH(D.prompt||'')}</textarea>
@@ -477,25 +563,46 @@
     if(!D.note)return'';
     return`<div class="en-note ${D.note.tone||''}" id="enNote" role="status">${ic(D.note.tone==='warn'||D.note.tone==='bad'?'triangle-alert':'info','s16')}<span>${escH(D.note.text)}</span></div>`;
   }
-  function accLabel(a){return`${a.name}${isHeader(a)?' · parent account':''}${isArchived(a)?' · archived':''}${a.ccy&&a.ccy!=='IDR'?' · '+a.ccy:''}`;}
+  // Under the account cell: the account's name and, in plain words, its kind and what this line does
+  // to it ("Asset · goes up"); "Not in your book" (bad) for an unknown code.
+  function accSub(l){
+    if(!l.account)return{t:'',bad:false};
+    const a=accOf(l.account),pend=D.newAccounts.find(n=>n.id===l.account&&!n.added);
+    if(a){
+      const side=(l.debit||0)>0?true:(l.credit||0)>0?false:null;
+      const what=isHeader(a)?'parent account, pick one under it':isArchived(a)?'archived':!KIND_LABEL[a.kind]?'':side==null?KIND_LABEL[a.kind]:effectOf(a,side);
+      return{t:[a.name||a.id,what,a.ccy&&a.ccy!=='IDR'?a.ccy:''].filter(Boolean).join(' · '),bad:isHeader(a)||isArchived(a)};
+    }
+    if(pend)return{t:'New account (confirm below)',bad:false};
+    return{t:'Not in your book',bad:true};
+  }
+  // One grid row (UX §11.10d): # · Account (combobox) · Memo · Debit · Credit · globe ✕; the
+  // foreign-currency fields as an inline sub-row under it.
   function lineHTML(E,k,l,i){
-    const p=pre(k),a=accOf(l.account),pend=D.newAccounts.find(n=>n.id===l.account&&!n.added);
-    const nm=!l.account?'':a?escH(accLabel(a)):pend?'New account (confirm below)':'Not in your book';
-    const bad=l.account&&(!a||isHeader(a)||isArchived(a))&&!pend;
-    const src=srcNote(l.stmtLine);
-    return`<div class="en-line" data-i="${i}">
-      <div class="field en-acc"><label class="label" for="en${p}Acc${i}">Account</label><input class="input" id="en${p}Acc${i}" data-f="account" list="enAccList" autocomplete="off" spellcheck="false" placeholder="Code or name" value="${escH(l.account)}">
-        <div class="en-accname${bad?' bad':''}" id="en${p}AccName${i}">${nm}</div></div>
-      <div class="field"><label class="label" for="en${p}Dr${i}">Debit</label><div class="input-affix"><span class="affix">Rp</span><input class="input" id="en${p}Dr${i}" data-f="debit" inputmode="numeric" autocomplete="off" value="${l.debit?fmtNum(l.debit):''}"></div></div>
-      <div class="field"><label class="label" for="en${p}Cr${i}">Credit</label><div class="input-affix"><span class="affix">Rp</span><input class="input" id="en${p}Cr${i}" data-f="credit" inputmode="numeric" autocomplete="off" value="${l.credit?fmtNum(l.credit):''}"></div></div>
-      <div class="en-btns"><button class="icon-btn sm" data-en="fx" data-k="${k}" data-i="${i}" aria-pressed="${l.fxOn}" aria-label="Foreign currency on line ${i+1}" title="Foreign currency">${ic('globe','s16')}</button>
-        <button class="icon-btn sm" data-en="del" data-k="${k}" data-i="${i}" aria-label="Remove line ${i+1}" title="Remove line" ${E.lines.length<=2?'disabled':''}>${ic('x','s16')}</button></div>
-      <div class="field en-memo"><label class="label" for="en${p}Memo${i}">Memo</label><input class="input" id="en${p}Memo${i}" data-f="memo" autocomplete="off" value="${escH(l.memo)}">
-        ${src?`<div class="help en-src" id="en${p}Src${i}" data-stmt="${escH(l.stmtLine)}">${ic('landmark','s16')}<span>${escH(src)}</span></div>`:''}</div>
-      ${l.fxOn?`<div class="en-fx"><div class="field"><label class="label" for="en${p}Ccy${i}">Currency</label><input class="input" id="en${p}Ccy${i}" data-f="ccy" maxlength="3" autocomplete="off" placeholder="USD" value="${escH(l.ccy)}"></div>
-        <div class="field"><label class="label" for="en${p}Fa${i}">Foreign amount</label><input class="input" id="en${p}Fa${i}" data-f="famt" type="number" step="any" min="0" value="${escH(l.famt)}"></div>
-        <div class="field"><label class="label" for="en${p}Rate${i}">Rate (Rp per unit)</label><input class="input" id="en${p}Rate${i}" data-f="rate" type="number" step="any" min="0" value="${escH(l.rate)}"><span class="help" id="en${p}FxHint${i}">${fxHint(l)}</span></div></div>`:''}
-    </div>`;
+    const p=pre(k),s=accSub(l),src=srcNote(l.stmtLine),n=i+1;
+    const noDel=E.lines.length<=2||(i===E.lines.length-1&&isBlank(l));
+    const amt=(f,lab)=>`<td class="en-${f==='debit'?'dr':'cr'}"><span class="en-ml" aria-hidden="true">${lab}</span><input class="input en-amt" id="en${p}${f==='debit'?'Dr':'Cr'}${i}" data-f="${f}" inputmode="numeric" autocomplete="off" aria-label="Line ${n} ${lab.toLowerCase()}" value="${l[f]?fmtNum(l[f]):''}"></td>`;
+    return`<tr class="en-line" data-i="${i}">
+      <td class="en-n" aria-hidden="true">${n}</td>
+      <td class="en-acc"><div class="en-accwrap"><input class="input" id="en${p}Acc${i}" data-f="account" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-label="Line ${n} account" autocomplete="off" spellcheck="false" placeholder="Code or name" value="${escH(l.account)}"></div>
+        <div class="en-accname${s.bad?' bad':''}" id="en${p}AccName${i}">${escH(s.t)}</div></td>
+      <td class="en-memo-c"><input class="input" id="en${p}Memo${i}" data-f="memo" autocomplete="off" aria-label="Line ${n} memo" placeholder="Memo" value="${escH(l.memo)}">
+        ${src?`<div class="help en-src" id="en${p}Src${i}" data-stmt="${escH(l.stmtLine)}">${ic('landmark','s16')}<span>${escH(src)}</span></div>`:''}</td>
+      ${amt('debit','Debit')}${amt('credit','Credit')}
+      <td class="en-btns"><button class="icon-btn sm" data-en="fx" data-k="${k}" data-i="${i}" aria-pressed="${l.fxOn}" aria-label="Foreign currency on line ${n}" title="Foreign currency">${ic('globe','s16')}</button><button class="icon-btn sm" data-en="del" data-k="${k}" data-i="${i}" aria-label="Remove line ${n}" title="Remove line"${noDel?' disabled':''}>${ic('x','s16')}</button></td>
+    </tr>${l.fxOn?`<tr class="en-fxrow" data-i="${i}"><td class="en-n"></td><td colspan="5"><div class="en-fx" id="en${p}Fx${i}">
+      <div class="field"><label class="label" for="en${p}Ccy${i}">Currency</label><input class="input" id="en${p}Ccy${i}" data-f="ccy" maxlength="3" autocomplete="off" placeholder="USD" value="${escH(l.ccy)}"></div>
+      <div class="field"><label class="label" for="en${p}Fa${i}">Foreign amount</label><input class="input en-amt" id="en${p}Fa${i}" data-f="famt" type="number" step="any" min="0" value="${escH(l.famt)}"></div>
+      <div class="field"><label class="label" for="en${p}Rate${i}">Rate (Rp per unit)</label><input class="input en-amt" id="en${p}Rate${i}" data-f="rate" type="number" step="any" min="0" value="${escH(l.rate)}"></div>
+      <span class="help en-fxhint" id="en${p}FxHint${i}">${fxHint(l)}</span></div></td></tr>`:''}`;
+  }
+  // The grid's footer: Total · Difference badge · Balance, then Total debit and Total credit under
+  // their columns (labelled on phones).
+  function totHTML(k){
+    const p=pre(k);
+    return`<tfoot><tr class="en-totrow"><td class="en-n"></td><td colspan="2" class="en-totl-c"><div class="en-totl"><span class="hide-sm">Total</span><span class="faint" style="font-weight:400">Difference</span><span id="en${p}DiffHost"></span><span class="en-grow"></span>
+        <button class="btn btn-ghost btn-sm" data-en="balance" data-k="${k}" id="en${p}Bal" title="Puts the difference on the line you were on, or the last line" disabled>${ic('scale','s16')}Balance</button></div></td>
+      <td class="num en-dr"><span class="en-ml">Total debit</span><b id="en${p}DrTot" data-raw="0">${rp(0)}</b></td><td class="num en-cr"><span class="en-ml">Total credit</span><b id="en${p}CrTot" data-raw="0">${rp(0)}</b></td><td class="en-pad"></td></tr></tfoot>`;
   }
   // "from Test savings ••1111 statement 3 Nov" under a line whose amount came from a statement line.
   function srcNote(id){
@@ -565,17 +672,20 @@
       <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><button class="btn btn-secondary btn-sm" data-en="redraft" id="enRedraft">${ic('sparkles','s16')}Answer &amp; redraft</button>
         <span class="help">Sends your answers and the draft as it is now back to Claude; entries already posted stay as they are.</span></div></div>`;
   }
+  // The editor (UX §11.10d): header row Date · Number · Description, then the grid. A blank last row
+  // is always offered; saving ignores it.
   function entryFieldsHTML(E,k){
-    const p=pre(k);
-    return`<div class="form-grid">
+    const p=pre(k),no=D.mode==='edit'&&D.number?D.number:'';ensureBlank(E);
+    return`<div class="en-hdr">
         <div class="field"><label class="label" for="en${p}Date">Date</label><input class="input" id="en${p}Date" data-e="date" type="date" value="${escH(E.date)}"></div>
-        <div class="field"><label class="label" for="en${p}Desc">Description</label><input class="input" id="en${p}Desc" data-e="desc" autocomplete="off" value="${escH(E.description)}"></div>
+        <div class="field"><span class="label" id="en${p}NoL">Number</span><div class="input en-ro${no?' set':''}" id="en${p}No" role="textbox" aria-readonly="true" aria-labelledby="en${p}NoL">${escH(no||'Given when posted')}</div></div>
+        <div class="field en-h-desc"><label class="label" for="en${p}Desc">Description</label><input class="input" id="en${p}Desc" data-e="desc" autocomplete="off" value="${escH(E.description)}"></div>
         ${D.mode==='edit'?`<div class="field full"><label class="label" for="enWhy">Why the change</label><input class="input" id="enWhy" data-e="why" autocomplete="off" placeholder="e.g. wrong account" value="${escH(E.why||'')}"></div>`:''}
       </div>
-      <div class="en-lines" id="en${p}Lines">${E.lines.map((l,i)=>lineHTML(E,k,l,i)).join('')}</div>
-      <div><button class="btn btn-ghost btn-sm" data-en="addline" data-k="${k}">${ic('plus','s16')}Add line</button></div>
-      <div class="en-tot" id="en${p}Tot"></div>
-      <h3 class="label en-jr-h">The journal this makes</h3><div id="en${p}JrPrev">${journalHTML(E,k,false)}</div>
+      <div class="en-gridwrap"><table class="data en-grid" id="en${p}Grid"><colgroup><col class="en-c-n"><col><col class="en-c-memo"><col class="en-c-amt"><col class="en-c-amt"><col class="en-c-act"></colgroup>
+        <thead><tr><th scope="col" style="text-align:center">#</th><th scope="col">Account</th><th scope="col">Memo</th><th scope="col" class="num">Debit</th><th scope="col" class="num">Credit</th><th scope="col"><span class="sr-only">Line tools</span></th></tr></thead>
+        <tbody id="en${p}Lines">${E.lines.map((l,i)=>lineHTML(E,k,l,i)).join('')}</tbody>${totHTML(k)}</table></div>
+      <p class="help en-keys hide-sm">Tab moves to the next cell; Tab on the last line adds one. Type a code or name, ↑↓ and Enter pick the account.${D.ai?'':' Ctrl+S saves the draft, Ctrl+Enter posts.'}</p>
       <div id="en${p}Warn"></div><div id="en${p}Lock"></div>
       <div class="en-checks" id="en${p}Checks" role="status" aria-live="polite"></div>`;
   }
@@ -622,12 +732,12 @@
       ?`<div class="en-note warn" id="enAccWarn">${ic('triangle-alert','s16')}<span>This journal came from Accurate. Once you change it here your book differs from Accurate from now on; a later Accurate export notes it but never overwrites it.</span></div>`:'';
     const head=D.mode==='draft'?`<div class="en-head" id="enHead"><span class="en-no draft">(draft)</span><span class="badge info">Draft</span>${originBadge({kind:D.kind})}${D.refNo?`<span class="faint">Accurate ${escH(D.refNo)}</span>`:''}</div>`
       :D.mode==='edit'?`<div class="en-head" id="enHead"><span class="en-no">${escH(D.number||'')}</span><span class="badge good">Posted</span>${originBadge({kind:D.kind})}</div>`:'';
-    const list=`<datalist id="enAccList">${postable().map(a=>`<option value="${escH(a.id)}">${escH(a.id)} · ${escH(a.name)}${a.ccy&&a.ccy!=='IDR'?' · '+escH(a.ccy):''}</option>`).join('')}</datalist>`;
-    if(!D.ai)return`${head}${warn}<div class="en-entry" data-k="0">${entryFieldsHTML(D.entries[0],0)}</div>${naHTML()}${list}`;
+    const head2=head||(D.prefilled&&D.kind&&D.kind!=='manual'?`<div class="en-head" id="enHead">${originBadge({kind:D.kind})}</div>`:'');
+    if(!D.ai)return`${head2}${warn}<div class="en-entry" data-k="0">${entryFieldsHTML(D.entries[0],0)}</div>${naHTML()}`;
     const cards=D.entries.length?`<div class="en-cards" id="enCards">${D.entries.map(cardHTML).join('')}</div>`
       :`<div class="en-empty" id="enNoEntries"><p class="muted" style="margin:0 0 8px">${D.posted&&D.posted.length?'Nothing left to post from this prompt.':'No entries drafted yet: Claude needs your answers first.'}</p>
         <button class="btn btn-ghost btn-sm" data-en="manual" id="enManual">${ic('pencil','s16')}Fill one in by hand instead</button></div>`;
-    return`${postedHTML()}${cards}${naHTML()}${aqHTML()}${list}`;
+    return`${postedHTML()}${cards}${naHTML()}${aqHTML()}`;
   }
   function footHTML(){
     if(D.ai)return`<button class="btn btn-ghost" data-en="cancel">Cancel</button><button class="btn btn-secondary" data-en="saveall" id="enSaveAll" disabled>${ic('save','s16')}Save all as drafts (${remaining().length})</button><button class="btn btn-primary" data-en="postall" id="enPostAll" disabled>${ic('check','s16')}Post all (${remaining().length})</button>`;
@@ -652,11 +762,11 @@
   function bodyHTML(){return`<div id="enRoot">${askHTML()}<div id="enNoteHost">${noteHTML()}</div><div id="enForm">${formHTML()}</div><div id="enConfirmHost">${confirmHTML()}</div></div>`;}
   function rerender(focusSel){
     if(!SH)return;const host=SH.sheet.querySelector('.sheet-body');if(!host)return;
-    host.innerHTML=bodyHTML();renderFoot();updateChecks();
+    CB=null;host.innerHTML=bodyHTML();renderFoot();updateChecks();
     if(focusSel){const f=host.querySelector(focusSel);if(f)try{f.focus();}catch(_){}}
   }
   function renderFoot(){const f=SH&&SH.sheet.querySelector('.sheet-foot');if(f)f.innerHTML=footHTML();const c=SH&&SH.sheet.querySelector('#enConfirmHost');if(c)c.innerHTML=confirmHTML();}
-  function renderForm(){const f=SH&&SH.sheet.querySelector('#enForm');if(f){f.innerHTML=formHTML();renderFoot();updateChecks();}}
+  function renderForm(){const f=SH&&SH.sheet.querySelector('#enForm');if(f){CB=null;f.innerHTML=formHTML();renderFoot();updateChecks();}}
   function setNote(text,tone){D.note=text?{text,tone}:null;const h=SH&&SH.sheet.querySelector('#enNoteHost');if(h)h.innerHTML=noteHTML();}
   function sync(){
     if(!SH)return;const q=s=>SH.sheet.querySelector(s);
@@ -666,10 +776,10 @@
     SH.sheet.querySelectorAll('.en-entry').forEach(el=>{const E=D.entries[+el.dataset.k];if(!E)return;
       el.querySelectorAll('[data-e]').forEach(inp=>{const f=inp.dataset.e;
         if(f==='date')E.date=inp.value;else if(f==='desc')E.description=inp.value;else if(f==='why')E.why=inp.value;else if(f==='inc')E.include=!!inp.checked;});
-      el.querySelectorAll('.en-line').forEach(le=>{const l=E.lines[+le.dataset.i];if(!l)return;
+      el.querySelectorAll('tr.en-line,tr.en-fxrow').forEach(le=>{const l=E.lines[+le.dataset.i];if(!l)return;
         le.querySelectorAll('[data-f]').forEach(inp=>{const f=inp.dataset.f;
           if(f==='debit'||f==='credit')l[f]=parseRp(inp.value);
-          else if(f==='account')l.account=String(inp.value||'').split(/[\s·]/)[0].trim();
+          else if(f==='account')l.account=resolveAcc(inp.value);
           else if(f==='ccy')l.ccy=String(inp.value||'').toUpperCase();
           else l[f]=inp.value;});});});
     SH.sheet.querySelectorAll('.en-na').forEach(el=>{const a=D.newAccounts[+el.dataset.j];if(!a||a.added)return;
@@ -684,15 +794,16 @@
     let allOk=true,allDraft=true;
     D.entries.forEach((E,k)=>{
       const p=pre(k);
-      E.lines.forEach((l,i)=>{const el=q(`#en${p}AccName${i}`);if(el){const a=accOf(l.account),pend=D.newAccounts.find(n=>n.id===l.account&&!n.added);
-          el.textContent=!l.account?'':a?accLabel(a):pend?'New account (confirm below)':'Not in your book';
-          el.classList.toggle('bad',!!l.account&&(!a||isHeader(a)||isArchived(a))&&!pend);}
-        const h=q(`#en${p}FxHint${i}`);if(h)h.textContent=fxHint(l);});
-      const jp=q(`#en${p}JrPrev`);if(jp)jp.innerHTML=journalHTML(E,k,false);
+      E.lines.forEach((l,i)=>{const el=q(`#en${p}AccName${i}`);if(el){const s=accSub(l);if(el.textContent!==s.t)el.textContent=s.t;el.classList.toggle('bad',s.bad);}
+        const h=q(`#en${p}FxHint${i}`);if(h)h.textContent=fxHint(l);
+        const x=q(`#en${p}Lines tr.en-line[data-i="${i}"] [data-en="del"]`);if(x)x.disabled=E.lines.length<=2||(i===E.lines.length-1&&isBlank(l));});
+      // The grid's footer: Total debit · Total credit · Difference, and Balance while they differ.
       const dr=E.lines.reduce((s,l)=>s+(l.debit||0),0),cr=E.lines.reduce((s,l)=>s+(l.credit||0),0);
-      const tot=q(`#en${p}Tot`);
-      if(tot)tot.innerHTML=`<span>Debits <b id="en${p}DrTot" data-raw="${dr}">${rp(dr)}</b></span><span>Credits <b id="en${p}CrTot" data-raw="${cr}">${rp(cr)}</b></span>
-        ${dr===cr&&dr>0?'<span class="badge good">Balanced</span>':`<span class="badge bad" id="en${p}Diff" data-raw="${dr-cr}">Off by ${rpSigned(Math.abs(dr-cr))}</span>`}`;
+      const dt=q(`#en${p}DrTot`),ct=q(`#en${p}CrTot`),dh=q(`#en${p}DiffHost`),bb=q(`#en${p}Bal`);
+      if(dt){dt.dataset.raw=String(dr);dt.innerHTML=rp(dr);}if(ct){ct.dataset.raw=String(cr);ct.innerHTML=rp(cr);}
+      if(dh)dh.innerHTML=dr===cr&&dr>0?'<span class="badge good">Balanced</span>':!dr&&!cr?'<span class="badge">No amounts yet</span>'
+        :`<span class="badge bad" id="en${p}Diff" data-raw="${dr-cr}">Off by ${rpSigned(Math.abs(dr-cr))}</span>`;
+      if(bb)bb.disabled=dr===cr||!!D.busy;
       const errs=errorsOf(E),ch=q(`#en${p}Checks`),lock=lockOf(errs),rest=errs.filter(m=>m!==lock);E.ok=!errs.length;
       E.draftOk=!draftErrorsOf(E).length;
       if(E.include&&errs.length)allOk=false;
@@ -721,20 +832,109 @@
   }
   // What the editor holds now, to tell a saved draft from unsaved changes.
   const sigOfE=()=>D&&D.entries[0]?JSON.stringify([D.entries[0].date,D.entries[0].description,voucherOf(D.entries[0]).lines]):'';
+  /* ── The account combobox (one open list at a time): type a code or name, ↑↓ to move, Enter to
+     pick; Tab picks the highlighted account when the text is not a code yet; Escape closes it. ── */
+  let CB=null;
+  function cbOpen(inp){
+    if(!inp||!document.contains(inp))return;
+    const items=accMatches(inp.value);let lb=CB&&CB.input===inp?CB.lb:null;
+    if(!lb){cbClose();lb=document.createElement('div');lb.className='en-lb';lb.id=inp.id+'Lb';lb.setAttribute('role','listbox');lb.setAttribute('aria-label','Accounts');
+      lb.addEventListener('mousedown',e=>e.preventDefault());
+      lb.addEventListener('click',e=>{const o=e.target.closest('[role="option"]');if(o&&CB)cbPick(+o.dataset.n,true);});
+      inp.parentElement.appendChild(lb);}
+    const ex=items.findIndex(a=>String(a.id)===String(inp.value).trim());
+    CB={input:inp,lb,items,idx:ex>=0?ex:items.length?0:-1};
+    lb.innerHTML=items.length?items.map((a,n)=>`<div class="en-opt" role="option" id="${lb.id}O${n}" data-n="${n}" data-code="${escH(a.id)}" aria-selected="false"><span class="bk-code">${escH(a.id)}</span><span class="en-oname">${escH(a.name||a.id)}</span><span class="en-okind">${escH(KIND_LABEL[a.kind]||'')}${a.ccy&&a.ccy!=='IDR'?' · '+escH(a.ccy):''}</span></div>`).join('')
+      :'<div class="en-lb-empty">No account matches: not in your book</div>';
+    inp.setAttribute('aria-expanded','true');inp.setAttribute('aria-controls',lb.id);cbMark();
+  }
+  function cbMark(){
+    if(!CB)return;const{input,lb,idx}=CB;
+    lb.querySelectorAll('[role="option"]').forEach(o=>o.setAttribute('aria-selected',String(+o.dataset.n===idx)));
+    const o=idx>=0?lb.querySelector(`[data-n="${idx}"]`):null;
+    if(o){input.setAttribute('aria-activedescendant',o.id);try{o.scrollIntoView({block:'nearest'});}catch(_){}}else input.removeAttribute('aria-activedescendant');
+  }
+  function cbClose(){
+    if(!CB)return;const{input,lb}=CB;CB=null;try{lb.remove();}catch(_){}
+    if(input){input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');input.removeAttribute('aria-controls');}
+  }
+  function cbPick(n,focusMemo){
+    if(!CB)return;const a=CB.items[n],inp=CB.input;if(!a){cbClose();return;}
+    inp.value=String(a.id);cbClose();sync();blankDom(inp);updateChecks();
+    if(focusMemo){const m=inp.closest('tr').querySelector('[data-f="memo"]');if(m)try{m.focus();}catch(_){}}
+  }
+  // Where a grid input sits: the entry k, its line i.
+  function cellOf(el){
+    const tr=el&&el.closest&&el.closest('tr.en-line,tr.en-fxrow'),en=tr&&tr.closest('.en-entry');
+    return tr&&en&&D?{k:+en.dataset.k,i:+tr.dataset.i,E:D.entries[+en.dataset.k]}:null;
+  }
+  // Keeps one blank row at the end of the grid without redrawing it (the caret stays put).
+  function blankDom(el){
+    const c=cellOf(el);if(!c||!c.E||journalMode(c.E))return;
+    if(ensureBlank(c.E)){const tb=SH&&SH.sheet.querySelector(`#en${pre(c.k)}Lines`),i=c.E.lines.length-1;if(tb)tb.insertAdjacentHTML('beforeend',lineHTML(c.E,c.k,c.E.lines[i],i));}
+  }
+  // Debit and Credit show thousands separators while typing; the caret keeps its place among the digits.
+  function fmtAmt(inp){
+    const v=inp.value,pos=inp.selectionStart==null?v.length:inp.selectionStart,right=v.slice(pos).replace(/\D/g,'').length;
+    const n=parseRp(v),out=n?fmtNum(n):'';if(out===v)return;
+    inp.value=out;let c=out.length,seen=0;while(c>0&&seen<right){c--;if(/\d/.test(out[c]))seen++;}
+    try{if(document.activeElement===inp)inp.setSelectionRange(c,c);}catch(_){}
+  }
+  // Balance: puts the difference on the line last worked on, else the last line with an account.
+  function balanceEntry(k){
+    const E=D.entries[k];if(!E)return;
+    const diff=E.lines.reduce((s,l)=>s+(l.debit||0)-(l.credit||0),0);if(!diff)return;
+    let i=D.focus&&D.focus.k===k&&E.lines[D.focus.i]?D.focus.i:-1;
+    if(i<0)for(let n=E.lines.length-1;n>=0;n--)if(E.lines[n].account){i=n;break;}
+    if(i<0)i=0;
+    const l=E.lines[i],net=(l.debit||0)-(l.credit||0)-diff,p=pre(k),q=s=>SH.sheet.querySelector(s);
+    l.debit=net>0?net:0;l.credit=net<0?-net:0;
+    const di=q(`#en${p}Dr${i}`),ci=q(`#en${p}Cr${i}`);if(di)di.value=l.debit?fmtNum(l.debit):'';if(ci)ci.value=l.credit?fmtNum(l.credit):'';
+    blankDom(di||ci);updateChecks();const f=l.debit?di:ci;if(f)try{f.focus();}catch(_){}
+  }
   function openForm(d){
-    D=d;D.confirm=D.confirm||null;
-    SH=openSheet({title:sheetTitle(),body:bodyHTML(),foot:footHTML(),wide:true,focus:readOnly()?'.sheet-foot .btn':D.mode!=='new'?'#enDate':hasKey()?'#enText':'#enDate',onClose:()=>{SH=null;D=null;}});
+    D=d;D.confirm=D.confirm||null;D.focus=null;CB=null;
+    SH=openSheet({title:sheetTitle(),body:bodyHTML(),foot:footHTML(),wide:true,focus:readOnly()?'.sheet-foot .btn':D.mode!=='new'||D.prefilled?'#enDate':hasKey()?'#enText':'#enDate',onClose:()=>{SH=null;D=null;CB=null;}});
     SH.sheet.id='enSheet';SH.sheet.dataset.mode=D.mode;
     D.savedSig=D.mode==='draft'?sigOfE():null;
-    SH.sheet.addEventListener('input',e=>{if(e.target&&e.target.closest('[data-f],[data-na],[data-e],[data-qa],#enText,#enMore')){sync();updateChecks();}});
+    SH.sheet.addEventListener('input',e=>{
+      const t=e.target;if(!t||!t.closest('[data-f],[data-na],[data-e],[data-qa],#enText,#enMore'))return;
+      const f=t.dataset&&t.dataset.f;
+      // Typing in Debit clears Credit on that line, and the other way round.
+      if(f==='debit'||f==='credit'){fmtAmt(t);if(parseRp(t.value)){const o=t.closest('tr').querySelector(`[data-f="${f==='debit'?'credit':'debit'}"]`);if(o&&o.value)o.value='';}}
+      sync();if(f)blankDom(t);updateChecks();
+      if(f==='account')cbOpen(t);
+    });
     SH.sheet.addEventListener('change',e=>{if(e.target&&e.target.closest('[data-na],[data-e]')){sync();updateChecks();}});
     SH.sheet.addEventListener('click',e=>{const b=e.target.closest('[data-en]');if(!b||b.disabled)return;e.preventDefault();act(b);});
-    // Ctrl+S saves the draft, Ctrl+Enter posts (UX §11.10b).
+    SH.sheet.addEventListener('focusin',e=>{const c=cellOf(e.target);if(c)D.focus={k:c.k,i:c.i};});
+    SH.sheet.addEventListener('focusout',e=>{if(CB&&e.target===CB.input)cbClose();});
     SH.sheet.addEventListener('keydown',e=>{
-      if(!(e.ctrlKey||e.metaKey)||!D||D.ai||readOnly())return;
+      if(!D)return;const t=e.target,f=t&&t.dataset?t.dataset.f:null,mod=e.ctrlKey||e.metaKey||e.altKey;
+      // The account combobox.
+      if(f==='account'&&!mod){
+        const open=!!CB&&CB.input===t;
+        if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();
+          if(!open)cbOpen(t);else if(CB.items.length){CB.idx=(CB.idx+(e.key==='ArrowDown'?1:-1)+CB.items.length)%CB.items.length;cbMark();}return;}
+        if(e.key==='Enter'&&open){e.preventDefault();e.stopPropagation();if(CB.idx>=0)cbPick(CB.idx,true);else cbClose();return;}
+        if(e.key==='Escape'&&open){e.preventDefault();e.stopPropagation();cbClose();return;}
+        if(e.key==='Tab'&&open){if(!e.shiftKey&&!accOf(String(t.value).trim())&&CB.idx>=0)cbPick(CB.idx,false);else cbClose();}
+      }
+      // Tab from a line's last cell (Credit, or Rate when it has a currency) goes to the next line's
+      // account; on the last line it adds a line first.
+      if(e.key==='Tab'&&!e.shiftKey&&!mod&&(f==='credit'||f==='rate')){
+        const c=cellOf(t);if(!c||!c.E)return;const l=c.E.lines[c.i];
+        if(f==='credit'&&l&&l.fxOn)return;
+        const p=pre(c.k);let next=c.i+1;
+        if(next>=c.E.lines.length){if(!l||isBlank(l))return;blankDom(t);next=c.E.lines.length-1;updateChecks();}
+        const n=SH.sheet.querySelector(`#en${p}Acc${next}`);if(n){e.preventDefault();e.stopPropagation();n.focus();}
+        return;
+      }
+      // Ctrl+S saves the draft, Ctrl+Enter posts (UX §11.10b).
+      if(!(e.ctrlKey||e.metaKey)||D.ai||readOnly())return;
       const k=String(e.key||'').toLowerCase(),q=s=>SH&&SH.sheet.querySelector(s);
-      if(k==='s'){e.preventDefault();e.stopPropagation();sync();updateChecks();const b=q('#enSaveDraft');if(b&&!b.disabled)act(b);}
-      else if(k==='enter'){e.preventDefault();e.stopPropagation();sync();updateChecks();const b=q('#enPostGo')||q('#enPost');if(b&&!b.disabled)act(b);}
+      if(k==='s'){e.preventDefault();e.stopPropagation();cbClose();sync();updateChecks();const b=q('#enSaveDraft');if(b&&!b.disabled)act(b);}
+      else if(k==='enter'){e.preventDefault();e.stopPropagation();cbClose();sync();updateChecks();const b=q('#enPostGo')||q('#enPost');if(b&&!b.disabled)act(b);}
     });
     updateChecks();
     if(D.confirm){const c=SH.sheet.querySelector('#enConfirmHost');if(c)c.innerHTML=confirmHTML();if(D.confirm==='post'&&SH.sheet.querySelector('#enPost').disabled)D.confirm=null,c.innerHTML='';}
@@ -748,9 +948,11 @@
       // Cancel: a draft saved as it is closes without asking; unsaved changes ask first.
       case'cancel':SH.close(readOnly()||(D.mode==='draft'&&sigOfE()===D.savedSig));return;
       case'settings':SH.close(true);goSettings();return;
-      case'addline':if(E){E.lines.push(blankLine());renderForm();const f=SH.sheet.querySelector(`#en${pre(k)}Acc${E.lines.length-1}`);if(f)f.focus();}return;
-      case'del':if(E&&E.lines.length>2){E.lines.splice(i,1);renderForm();}return;
-      case'fx':{const l=E&&E.lines[i];if(!l)return;l.fxOn=!l.fxOn;if(l.fxOn&&!l.ccy){const ac=accOf(l.account);if(ac&&ac.ccy&&ac.ccy!=='IDR')l.ccy=ac.ccy;}renderForm();return;}
+      case'addline':if(E){ensureBlank(E);renderForm();const f=SH.sheet.querySelector(`#en${pre(k)}Acc${E.lines.length-1}`);if(f)f.focus();}return;
+      case'del':if(E&&E.lines.length>2){E.lines.splice(i,1);D.focus=null;renderForm();const f=SH.sheet.querySelector(`#en${pre(k)}Acc${Math.min(i,E.lines.length-1)}`);if(f)try{f.focus();}catch(_){}}return;
+      case'balance':return balanceEntry(k);
+      case'fx':{const l=E&&E.lines[i];if(!l)return;l.fxOn=!l.fxOn;if(l.fxOn&&!l.ccy){const ac=accOf(l.account);if(ac&&ac.ccy&&ac.ccy!=='IDR')l.ccy=ac.ccy;}renderForm();
+        const f=SH.sheet.querySelector(l.fxOn?`#en${pre(k)}${l.ccy?'Fa':'Ccy'}${i}`:`#en${pre(k)}Cr${i}`);if(f)try{f.focus();}catch(_){}return;}
       case'naadd':return addNew(j);
       case'nadel':D.newAccounts.splice(j,1);renderForm();return;
       case'ask':return ask(b,false);
@@ -882,7 +1084,7 @@
         ledgerPostDraft(id,{why:'Posted from the editor'});
         SH.close(true);toast(`Posted as ${numberOf(id)}${noteBackdate(v)}`);openVoucherKey(id);
       }else{
-        const id=ledgerPost(v,{kind:'manual',why:'Entered by hand'});
+        const kd=D.kind||'manual',id=ledgerPost(v,{kind:kd,why:kd==='manual'?'Entered by hand':'Posted from the editor'});
         SH.close(true);toast(`Posted as ${numberOf(id)}${noteBackdate(v)}`);openVoucherKey(id);
       }
     }catch(e){D.confirm=null;renderFoot();const m=((e&&e.errors)||[String(e&&e.message||e)]).join(' · ');setNote(m,isLockMsg(m)?'warn':'bad');updateChecks();}
@@ -892,7 +1094,7 @@
     const E=D.entries[0],errs=draftErrorsOf(E);if(errs.length){updateChecks();return;}
     try{
       const v=voucherOf(E),first=D.mode!=='draft';
-      const id=ledgerSaveDraft(v,first?{kind:'manual',why:'Saved as a draft'}:{id:D.id,why:'Changed in the editor'});
+      const id=ledgerSaveDraft(v,first?{kind:D.kind||'manual',why:'Saved as a draft'}:{id:D.id,why:'Changed in the editor'});
       D.mode='draft';D.id=id;D.kind=D.kind||'manual';D.savedSig=sigOfE();D.confirm=null;
       SH.sheet.dataset.mode='draft';const t=SH.sheet.querySelector('.sheet-title');if(t)t.textContent=sheetTitle();
       if(first){const f=SH.sheet.querySelector('#enForm');if(f)f.innerHTML=formHTML();}
@@ -966,6 +1168,23 @@
     if(!canPost()){toast('Set up your book first (Settings › Your book)');return null;}
     aiEnsure();o=o||{};
     return openForm({mode:'new',kind:'manual',ai:false,entries:[blankEntry(o.date)],newAccounts:[],assumptions:[],questions:[],answers:[],more:'',prompt:'',fromAI:false,note:null,posted:[],convo:null,batch:null});
+  }
+  // A new journal with its date, description and lines filled in, not saved yet (the owner checks it,
+  // then saves a draft or posts). v: {date, description, lines:[{account, amount (debit +) or
+  // debit/credit, memo, fx, stmtLine}], kind?, ref?}. The kind (e.g. 'spending') and ref go with it.
+  function openPrefilled(v){
+    if(!canPost()){toast('Set up your book first (Settings › Your book)');return null;}
+    v=v&&typeof v==='object'?v:{};
+    const lines=(Array.isArray(v.lines)?v.lines:[]).filter(l=>l&&typeof l==='object').map(l=>{
+      if(!('debit' in l)&&!('credit' in l))return lineFrom(l);
+      const f=l.fx||null,dr=Math.max(0,Math.round(+l.debit||0)),cr=Math.max(0,Math.round(+l.credit||0));
+      return{...blankLine(),account:String(l.account||''),debit:dr,credit:dr?0:cr,memo:String(l.memo||l.description||''),fxOn:!!f,
+        ccy:f?String(f.ccy||'').toUpperCase():'',famt:f?String(f.amount):'',rate:f?String(f.rate):'',stmtLine:l.stmtLine||null};});
+    while(lines.length<2)lines.push(blankLine());
+    const date=/^\d{4}-\d{2}-\d{2}$/.test(String(v.date||''))?String(v.date):todayISO();
+    const kind=typeof v.kind==='string'&&v.kind?v.kind:'manual';
+    return openForm({mode:'new',kind,prefilled:true,ai:false,entries:[{date,description:String(v.description||''),lines,include:true,dup:[],...(v.ref?{ref:String(v.ref)}:{})}],
+      newAccounts:[],assumptions:[],questions:[],answers:[],more:'',prompt:'',fromAI:false,note:null,posted:[],convo:null,batch:null});
   }
   function ledgerVoucher(id){const x=L();const v=x&&x.vouchers[id]||null;return v&&v.status!=='deleted'?v:null;}
   function keyOf(v){return kindOf(v)==='accurate'?(v.srcKey||v.id):v.id;}
@@ -1043,7 +1262,7 @@
       if(b.status==='posted'&&after(k).status==='void')return'Voided';
       return/Accurate/.test(e.why||'')?'Accurate’s version taken':'Changed';};
     const h=all.map((e,k)=>({e,label:kind(k)})).reverse();
-    const k=kindOf(v),created=k==='accurate'?'Imported from Accurate':k==='ai'?(v.status==='draft'?'Drafted by Claude, saved as a draft':'Drafted by Claude, posted by you'):k==='manual'?(v.status==='draft'?'Saved as a draft':'Entered by hand')
+    const k=kindOf(v),created=k==='accurate'?'Imported from Accurate':k==='ai'?(v.status==='draft'?'Drafted by Claude, saved as a draft':'Drafted by Claude, posted by you'):k==='manual'?(v.status==='draft'?'Saved as a draft':'Entered by hand'):k==='spending'?(v.status==='draft'?'Made from a spending row, saved as a draft':'Made from a spending row')
       :k==='year-end'?'Made by the year-end close':`Posted from ${KIND_BADGE[k]?KIND_BADGE[k][0]:k}`;
     return`<div class="en-sec" id="enHist"><h3 class="label">${ic('history','s16')} History</h3><ol class="en-hist">
       ${h.map(({e,label})=>{const b=e.before||{},dr=(b.lines||[]).reduce((s,l)=>s+(l.amount>0?l.amount:0),0);
@@ -1167,5 +1386,5 @@
   };
   window.etAI=AI;
   window.aiSettingsHTML=aiSettingsHTML;
-  window.etEntry={open:openNew,openDraft,openJournal,copy:copyJournal,edit:openEdit,void:openVoid,canPost,originBadge,kindOf,voucherTools,voucherByKey,voidList,newEntryBtn,batchBadge};
+  window.etEntry={open:openNew,openPrefilled,openDraft,openJournal,copy:copyJournal,edit:openEdit,void:openVoid,canPost,originBadge,kindOf,voucherTools,voucherByKey,voidList,newEntryBtn,batchBadge};
 })();

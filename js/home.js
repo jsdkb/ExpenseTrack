@@ -20,13 +20,16 @@
      statement money out. Internal moves and investments are never income or spending (the cash
      groups from cashType/cashMeta decide). Marked provisional.
 
-   Reads (core globals): W, wAccounts, wMonths, wValue, hasMarket, wGroup, NW_VIEW, nwViewSeg,
+   Reads (core globals): W, wAccounts, wAccountsAll (suspended included, for totals), wMonths, wValue, hasMarket, wGroup, NW_VIEW, nwViewSeg,
    BOOKS, booksStatus, CM, cashTotals, cashMonths, cashAcc, cashMeta, incList, incLinks, STATE,
    SYNC, CHARTS, runHooks. Optional from other modules: window.openLedger(code, from, to),
    window.openJournals({from, to, kind}) and hook 'homeComingUp'.
    No personal data in this file: the repo is public. */
 (function(){
   'use strict';
+  // Every account for totals (a suspended one still holding a balance counts), the visible ones for lists.
+  const allAccs=()=>typeof wAccountsAll==='function'?wAccountsAll():wAccounts();
+  const SUSP=a=>a&&a.suspended?' <span class="badge susp-badge">Suspended</span>':'';
   const STALE_BOOK=40,STALE_STMT=35,STALE_GMAIL=7,AHEAD=14;
   let SEL=null,OPEN=null,LAST=null;
 
@@ -55,7 +58,7 @@
     for(const a of accs){const v=src[a.id]||0;if(a.side==='asset')assets+=v;else liab+=v;}return{assets,liab,net:assets-liab};}
   function buildPoints(){
     const w=W();if(!w||!Array.isArray(w.months)||!w.months.length)return[];
-    const accs=wAccounts(),pts=[];
+    const accs=allAccs(),pts=[];
     wMonths().forEach((m,i)=>{const book={},market={};for(const a of accs){book[a.id]=wValue(a,i,'book');market[a.id]=wValue(a,i,'market');}
       pts.push({month:m.month,kind:'book',mi:i,mk:hasMarket(i),book,market,carried:[]});});
     const store=STATE.monthEnd||{},end=lastFinished();
@@ -332,10 +335,10 @@
     </section>`;
   }
   function accRowsHTML(list){
-    return`<div class="list">${list.map(({a,v})=>`<button class="list-item" onclick="etHome.acc('${esc(a.id)}')"><span class="li-body"><span class="li-title" style="display:block">${escH(a.name)}</span><span class="li-sub" style="display:block">${escH(wGroup(a.group).label)}</span></span><span class="amt" style="font-weight:600;white-space:nowrap">${fmtIDRShort(v)}</span></button>`).join('')}</div>`;
+    return`<div class="list">${list.map(({a,v})=>`<button class="list-item" onclick="etHome.acc('${esc(a.id)}')"><span class="li-body${a.suspended?' muted':''}"><span class="li-title" style="display:block">${escH(a.name)}${SUSP(a)}</span><span class="li-sub" style="display:block">${escH(wGroup(a.group).label)}</span></span><span class="amt" style="font-weight:600;white-space:nowrap">${fmtIDRShort(v)}</span></button>`).join('')}</div>`;
   }
   function liquidityHTML(M){
-    const p=M.pts[M.L],vals=p[viewName()],accs=wAccounts();
+    const p=M.pts[M.L],vals=p[viewName()],accs=allAccs();
     const list=accs.filter(a=>a.side==='asset'&&(a.group==='cash'||a.group==='deposits')).map(a=>({a,v:vals[a.id]||0})).filter(x=>Math.abs(x.v)>=1).sort((x,y)=>y.v-x.v);
     const sum=g=>list.filter(x=>x.a.group===g).reduce((s,x)=>s+x.v,0),cash=sum('cash'),dep=sum('deposits'),liquid=cash+dep;
     const avg=avgExpense(M.pts),run=avg&&avg.v>0?liquid/avg.v:null;
@@ -344,7 +347,7 @@
       <div class="h-big">${money(liquid)}</div>
       <div class="summary-line" style="margin-top:4px">${run!=null?`<b class="amt h-runway">${run.toLocaleString('en-GB',{maximumFractionDigits:1})} months</b> of spending <span class="vs">at ${money(avg.v,true)} a month (${avg.n}-month average, ${avg.src==='book'?'book':'statements'})</span>`:'<span class="vs">Runway needs a month of expenses from the book or statements</span>'}</div>
       <dl class="facts" style="margin-top:12px"><div><dt class="eyebrow">${escH(wGroup('cash').label)}</dt><dd class="amt">${fmtIDRShort(cash)}</dd></div><div><dt class="eyebrow">${escH(wGroup('deposits').label)}</dt><dd class="amt">${fmtIDRShort(dep)}</dd></div></dl>
-      ${list.length?accRowsHTML(list.slice(0,5))+(list.length>5?`<p class="help">${list.length-5} more on Accounts</p>`:''):`<p class="help" style="margin-top:8px">No cash or deposit accounts in the snapshot.</p>`}
+      ${list.length?accRowsHTML(list.slice(0,5))+(list.length>5?`<p class="help">${list.length-5} more in the Chart of accounts</p>`:''):`<p class="help" style="margin-top:8px">No cash or deposit accounts in the snapshot.</p>`}
     </section>`;
   }
   function dueHTML(raw){
@@ -360,7 +363,7 @@
   }
   function debtsHTML(M,raw){
     const p=M.pts[M.L],vals=p.book;
-    const list=wAccounts().filter(a=>a.side!=='asset'&&(a.group==='cards'||a.group==='loans')).map(a=>({a,v:vals[a.id]||0})).filter(x=>Math.abs(x.v)>=1).sort((x,y)=>y.v-x.v);
+    const list=allAccs().filter(a=>a.side!=='asset'&&(a.group==='cards'||a.group==='loans')).map(a=>({a,v:vals[a.id]||0})).filter(x=>Math.abs(x.v)>=1).sort((x,y)=>y.v-x.v);
     const total=list.reduce((s,x)=>s+x.v,0),sum=g=>list.filter(x=>x.a.group===g).reduce((s,x)=>s+x.v,0);
     return`<section class="card span-4" id="homeDebts" aria-label="Debts">
       ${cardHead('credit-card','Debts',`Cards and loans · ${escH(monthLabel(p.month,true))}${p.kind==='prov'?' · provisional':''}`)}

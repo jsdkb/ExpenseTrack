@@ -69,8 +69,24 @@ device can't bring it back; never shown, never counted).
   balance, view or report. They have no number.
 - Void keeps the journal, its number and its history; it is left out of everything.
 
-**Kind** `manual | ai | month-end | income | opening | year-end | accurate`. The API still accepts the
-v3 `origin` names (`app` → `manual`). `year-end` and `accurate` are made by the engine only.
+**Kind** `manual | ai | month-end | income | opening | spending | year-end | accurate`. The API still
+accepts the v3 `origin` names (`app` → `manual`). `year-end` and `accurate` are made by the engine only.
+
+**Spending (v4.1).** A spending row turned into a journal is kind `spending` (badge label "Spending",
+`BOOKS()` type `Spending`), validated and posted like `manual`. It carries `ref: 'spend:<row id>'` and,
+on the line matched to a bank or card statement, `stmtLine`. No double counting: `ledgerSaveDraft`
+of a new draft (kind `spending`, or any `ref` starting `spend:`) saves nothing and **returns the
+existing journal's id** when a draft or posted journal already has the same `ref`, or any of its
+lines already carries one of the new lines' `stmtLine`; `ledgerPost` of such a journal throws
+`This spending is already in your book (…)`. Void and deleted journals don't count, so a voided
+conversion can be made again. Other kinds are never blocked by a `stmtLine` when saved.
+**Posting guard (any order):** `ledgerPost`, `ledgerPostDraft` and `ledgerEdit` refuse with
+`This bank or card line is already in your book (…), so posting it again would count it twice` when
+the journal is a spending one and another **posted** journal already carries its `spend:` ref or one
+of its `stmtLine`s, or when the journal is of another kind and a posted spending journal carries one
+of its `stmtLine`s. Two non-spending journals on one line are not blocked (as before). Statement
+line ids are compared through `cash.alias` (a line renamed by a newer cash file is the same line).
+`ledgerFindSpending(ref, stmtLine)` → `{id, status, number}` of that journal (posted first) or null.
 
 **Numbering** `JV/YYYY/00001`, per calendar year of the journal date, taken when it is posted (post or
 post-draft). A failed post takes none. Numbers are never reused (`numbering[year]` = the last number
@@ -161,6 +177,13 @@ Rules (ERP):
   accounts can't take lines (pickers should hide `archived` and `suspended` ones);
 - no account is ever created automatically from an unknown code (not by views, not by imports).
 
+**Suspended (v4.1 ruling).** A suspended account is hidden from every list and picker (the chart
+unless "Show hidden (n)", the Journals and Ledger filters, the entry form, Net worth and the other
+Wealth pages). It still counts while it holds figures: the trial balance leaves out a suspended
+account only when all of its figures in the range are 0, and every report row of a suspended account
+carries `suspended: true` (TB, GL, P&L, BS rows) so the page shows a muted Suspended badge and the
+totals still tie. `W()` account and ledger rows carry `suspended: true` too.
+
 `ledgerAddAccount(acc)` creates only (an existing code is refused; use `ledgerEditAccount` to change
 one). `acc = {id|code, name, kind, parent?, postable? (default true), group?, ccy?, investment?,
 accType?, suspended?, order?}`. `ledgerSetRetainedEarnings(code)`: a postable, non-archived equity
@@ -200,7 +223,8 @@ exists. Cached per change (same object until the book changes).
 - **`W()`** (`et-wealth/1`): as v3. Accounts = postable asset/liability accounts that carry lines, or
   that the wealth snapshot classified (`origin: accurate` with side and group), or that the owner
   added (`origin: app`, not suspended/archived); a template account without lines is left out.
-  `archived: true` on archived ones. `pnl` per month from `activity` (year-end left out). `ledger`,
+  `archived: true` on archived ones, `suspended: true` on suspended ones (v4.1; on `ledger` rows too);
+  sorted by code, numeric-aware (1121.9 before 1121.10). `pnl` per month from `activity` (year-end left out). `ledger`,
   `market`, `closes`, `groups` as v3.
 - **`CM()`** (`et-cash/1`): unchanged.
 - **`ledgerView('journals')`**: every journal but deleted drafts, sorted by date, number, id: `{id, key,
@@ -218,7 +242,7 @@ Raw amounts are debit − credit; the statements flip the sign by kind. Lines so
 
 | Call | Returns |
 |---|---|
-| `tb(x, from, to)` | `{from, to, rows: [{code, name, kind, postable, archived, unknown?, opening, debit, credit, closing}], totals: {opening, debit, credit, closing}, balanced, openingBalanced}` — every postable non-archived account (even at zero) plus any account with posted lines up to `to`; sorted by code (numeric-aware) |
+| `tb(x, from, to)` | `{from, to, rows: [{code, name, kind, postable, archived, unknown?, opening, debit, credit, closing}], totals: {opening, debit, credit, closing}, balanced, openingBalanced}` — every postable account that is not archived or suspended (even at zero) plus any account with posted lines up to `to` (a suspended one only while it has a non-zero figure; rows flagged `suspended`); sorted by code (numeric-aware) |
 | `gl(x, code \| null, from, to)` | `{from, to, accounts: [{code, name, kind, …, opening, rows: [{date, id, number, kind, description (the journal's), memo, debit, credit, running}], debit, credit, closing}]}` — all accounts: those with no opening and no lines left out; one code: always that account |
 | `pl(x, from, to)` | `{from, to, income: [{code, name, amount}], expense: [...], totalIncome, totalExpense, net}` — year-end journals left out; income = −(dr − cr), expense = dr − cr; zero accounts left out |
 | `bs(x, asOf)` | `{asOf, fyStart, assets, liabilities, equity: [{code, name, amount, unknown?}], unclosedPriorEarnings, currentYearEarnings, totalAssets, totalLiabilities, totalEquity, totalLE, balanced}` — cumulative to asOf incl. year-end journals; assets +(dr − cr), liabilities/equity −(dr − cr); zero rows left out (a contra account shows negative); the two earnings lines split at 1 Jan of asOf's year; a negative line is a loss (the UI relabels it) |
@@ -239,8 +263,8 @@ A code on a line that is not in the chart (only possible in migrated data) shows
 | `ledgerSeeded()` | true once the book exists (views on) |
 | `ledgerView(kind)` | 'wealth' \| 'books' \| 'cash' \| 'journals' |
 | `ledgerValidate(v, opts?)` / `ledgerWarnings(v)` | §2 |
-| `ledgerPost(v, {kind\|origin, why})` | creates and posts at once → id. `v = {date, description, refNo?, type?, prompt?, ref?, batch?, lines}`. kinds manual (default) \| ai \| month-end \| income \| opening |
-| `ledgerSaveDraft(v, {id?, kind?, why?})` | new draft, or (with `id`) changes a draft → id. Needs a valid date, ≥ 2 lines, whole-rupiah amounts, one side per line; may be unbalanced |
+| `ledgerPost(v, {kind\|origin, why})` | creates and posts at once → id. `v = {date, description, refNo?, type?, prompt?, ref?, batch?, lines}`. kinds manual (default) \| ai \| month-end \| income \| opening \| spending |
+| `ledgerSaveDraft(v, {id?, kind?, why?})` | new draft, or (with `id`) changes a draft → id. Needs a valid date, ≥ 2 lines, whole-rupiah amounts, one side per line; may be unbalanced. A spending draft already in the book returns that journal's id and saves nothing (§2) |
 | `ledgerPostDraft(id, {why?})` | posting rules, then number → id |
 | `ledgerPostDrafts(ids \| null, {kind?})` | posts each (null = every draft, optionally of one kind) → `{posted: [ids], failed: [{id, errors}]}` |
 | `ledgerDeleteDraft(id, why?)` / `ledgerCopy(id)` | drafts only / new draft from any journal → id |
@@ -257,11 +281,12 @@ A code on a line that is not in the chart (only possible in migrated data) shows
 | `ledgerAccurateDrafts()` | the journals view filtered to Accurate drafts |
 | `ledgerMigration()` | `{status: none \| migrated \| seeded \| blocked, count?, diffs?, at, backupAt?}` |
 | `ledgerFindByRef(ref, kind)` | the posted journal of an income receipt id / `month-end:YYYY-MM` |
+| `ledgerFindSpending(ref, stmtLine)` | v4.1: `{id, status, number}` of the draft or posted journal with that `ref` (`spend:<row id>`), else the one with a line carrying that `stmtLine`; posted wins; null when none (§2) |
 | `ledgerOnImport(kind, data, from, quiet)` / `ledgerImport(kind, data)` | §9 |
 | `ledgerExport()`, `ledgerMergeIn(obj, from)` (a /1 backup is migrated first), `ledgerFlush()`, `ledgerCounts()` (`{vouchers (= posted), posted, drafts, void, accurateDrafts, accounts, lines, statements, audit, lastImport}`), `ledgerInAccurate(code)`, `resetLedger()`, `ledgerCashIdRemap`, `ledgerRemapCashRefs`, `ledgerSettingsHTML()` | as v3 |
 | `ledgerSeed()` / `ledgerGate()` | **legacy**, tests and real-data checks only: builds a /1 book from the imported files with the v3 tie gate, then migrates it. Nothing calls it automatically any more |
 | `ledgerPending`, `ledgerAcceptPending`, `ledgerFlags`, `ledgerTakeAccurate`, `ledgerDismissFlag`, `ledgerAfterBooksLoad` | retired stubs ([] / 0 / false / no-op) |
-| `ledgerLib` | pure helpers: `tb gl pl bs validate warnings periodState firstMonth periods checklist yearEndPlan migrate migrationDiffs toV2 recodeProposal recode codeMap resolveCode leafFor ops healDuplicatePosts renumberCollisions applyRecodes seedFrom gateDiffs mergeLedgers mergeBooks mergeCash fillWealth coreOf wViewOf booksViewOf cashViewOf journalsViewOf sigOf contentSig emptyLedger SCHEMA`. `ledgerLib.ops` = the mutating operations on any ledger object (post, saveDraft, postDraft, deleteDraft, copy, edit, void, addAccount, editAccount, archiveAccount, setRetainedEarnings, close, reopen, lock, unlock), for tests and what-if checks |
+| `ledgerLib` | pure helpers: `tb gl pl bs validate warnings periodState firstMonth periods checklist yearEndPlan migrate migrationDiffs toV2 recodeProposal recode codeMap resolveCode leafFor findSpending cmpCode ops healDuplicatePosts renumberCollisions applyRecodes seedFrom gateDiffs mergeLedgers mergeBooks mergeCash fillWealth coreOf wViewOf booksViewOf cashViewOf journalsViewOf sigOf contentSig emptyLedger SCHEMA`. `ledgerLib.ops` = the mutating operations on any ledger object (post, saveDraft, postDraft, deleteDraft, copy, edit, void, addAccount, editAccount, archiveAccount, setRetainedEarnings, close, reopen, lock, unlock), for tests and what-if checks |
 
 Hook: `runHooks('ledgerChanged', why)` after every change; why ∈ start, seed, post, draft, delete,
 edit, void, account, settings, period, recode, import, merge, sync. The current page re-renders.
@@ -323,15 +348,41 @@ is uploaded as `ledger-v1-backup.json`; an existing backup is never overwritten 
 
 ## 12. Re-code to the ERP chart
 
-`ledgerRecodeProposal()` → `[{old, new, name, kind, reason, confidence: high|low, leaf?, header?}]`,
-one row per account:
-- an account already on an ERP code (a template code, or `.nn` under a postable template code, same
-  kind) keeps it; `low` when its name points to another leaf;
-- every other postable account (or any account with lines) goes to the `.nn` child of the standard
-  leaf chosen from its kind, Net worth group, currency and name (`ledgerLib.leafFor`), nn = 01, 02…
-  in old-code order. `low` when only a fallback leaf matched (other receivables, other expense…);
-- a header goes to the deepest standard header above all the accounts under it (no accounts under
-  it: the class header). Several old headers can land on one standard header (headers have no lines).
+`ledgerRecodeProposal()` → `[{old, new, name, kind, reason, confidence: high|low, basis, leaf?, header?}]`,
+one row per account. v4.1 makes it sure for every account of the owner's real chart (checked on this
+PC, counts only: 0 low rows, gate 0 differences, a second proposal moves nothing):
+- **Code pattern** (basis `code`). An account on an ERP code — a *postable* template code, or `.nn`
+  under one (or under a template header with nothing under it, e.g. 5000 Cost of sales), of the same
+  type — keeps it unless its name clearly points to another leaf. A template header's own code is
+  never kept by a postable account. A template account on its own code always stays. A kept leaf code
+  moves to `.nn` under itself when other accounts join that leaf, so no account that takes entries
+  ever has accounts under it.
+- **Keywords** (basis `name`; `ledgerLib.leafFor(acc, {lines})`; generic English and Indonesian words
+  only, never a name from anyone's book): bank/rekening/tabungan/giro, kas/cash, e-wallet; deposito/
+  time deposit, pasar uang/money market, reksa dana/mutual fund, saham/shares/broker, obligasi/bond/
+  SBN/ORI/SR/sukuk, crypto, emas/gold; tanah/land, rumah/gedung/building, kendaraan/mobil/motor,
+  peralatan/inventaris; akumulasi penyusutan; dibayar di muka/prepaid, uang muka/advance, piutang/
+  receivable, pinjaman/loan given, cadangan/reserve, persediaan/perlengkapan; kartu kredit/credit
+  card, hutang/utang/pinjaman/loan, KPR/mortgage, cicilan/paylater, hutang usaha/payable, belum
+  ditagih/accrued, PPh/PPN/pajak/tax; modal/capital/saldo awal, laba ditahan/retained, hibah/grant,
+  dividen/prive; gaji/salary, bonus/THR/tunjangan, sewa/rent, bunga/interest/jasa giro, dividen,
+  realised/unrealised gain or loss on a currency → FX, investasi/capital gain, penjualan/sales,
+  komisi/fees; and the living-expense words of the standard chart (makan, listrik, PAM,
+  telekomunikasi, STNK, asuransi, kesehatan, sumbangan, perjalanan, iklan/pemasaran, ekspedisi/
+  materai, gaji karyawan…). Words match whole ("taxi" is not tax). "Lain-lain / lainnya / other" is a
+  sure "other" leaf; Accurate's "Other Income/Expense" type sends an unnamed account to 7909 / 8909.
+- **Group and type** (basis `group`). The Net worth group (cash, deposits, stocks, business, property,
+  receivables, other assets) or the account type (fixed asset, receivable…) places an account its
+  name doesn't.
+- **No entries** (basis `type`). An account without any line (draft or posted) is never unsure:
+  nothing moves with it, so it goes where its type puts it.
+- Only an account that has entries and that nothing places stays `low` (basis `fallback`, "Check").
+- Every account that moves goes to the `.nn` child of its leaf, nn = 01, 02… in old-code order,
+  **skipping every old code of the chart**, so a new code never repeats another account's old code
+  (headers may still land on a template header code that was an old header's code; headers have no
+  lines).
+- A header goes to the deepest standard header above all the accounts under it (no accounts under
+  it: the class header). Several old headers can land on one standard header.
 
 `ledgerRecode(map, {why?})` applies `{old: new}` (unlisted accounts keep their code), on a copy:
 - the whole standard chart is added; an old account taking a template code replaces that template
@@ -364,6 +415,10 @@ Per entry, the newer `at` wins, union of keys (v3), plus:
 - a journal posted offline into a month another device closed stays (the close is not re-run).
 
 ## 14. Deviations
+
+Known gap (v4.1): the spending posting guard (§2) runs on each device. If two devices, both
+offline, each post a different journal for the same statement line, the merge keeps both; nothing
+flags it yet (rare; Month-end then shows the double count as a difference).
 
 From the ERP:
 - **Edit and Void stay** (owner's ruling), with history, refused in closed/locked months; no reversal

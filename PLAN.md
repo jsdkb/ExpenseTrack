@@ -59,16 +59,24 @@ Six gaps flagged before continuing: hourly re-login friction, the "unverified ap
     - Shrink hero number/padding sizes slightly at narrow widths.
     - Let header buttons (Refresh / Import / Sign out) wrap cleanly under the title instead of overflowing.
 
-12. **[DONE, 2026-11-12, not pushed] Books v4 — copy the owner's ERP books**
+12. **[DONE, LIVE 2026-11-12] Books v4 — copy the owner's ERP books**
     Journals are the only source of the ledger (drafts, numbering, periods with close/lock, year-end close into Retained earnings, account rules, audit trail), the ERP's chart structure with a re-code, the ERP report layouts and filter kit, and a Compare with column. Contract: `docs/v4-books.md`; design: `UX-GUIDELINE.md` §11.10b–c.
 
-13. **[IN PROGRESS, 2026-11-12] Ask Claude — the assistant across the app**
+13. **[DONE, LIVE 2026-11-13] Ask Claude — the assistant across the app**
     One assistant on every page (button, Ctrl+K). It can navigate, make small edits (categories of
     listed transactions, notes, budgets, goals, month-end balances, cash types, ticks) and draft
     new entries (journals, income, manual transactions, card paid-through). Everything goes into one
     change set with all it affects; one approval applies it, with Undo all. It cannot delete, change
     rules, the chart, periods, imports or Settings. Contract: `docs/v5-assistant.md`; design:
     `UX-GUIDELINE.md` §11.13.
+
+14. **[DONE, 2026-11-13, not pushed] Books v4.1 — spending to journals, clearer chart, easier entry**
+    Any spending row (Daily spending, Credit cards, Cash movements) becomes a draft journal, one
+    at a time or in bulk, never twice for the same row or statement line. The Chart of accounts
+    gets header bands, folding on every header, and absorbs Wealth › Accounts. Suspended accounts
+    are hidden everywhere except reports while they hold a balance. The re-code proposal is sure
+    for every account. The journal editor is one grid like Accurate Online, and Month-end is one
+    three-step flow ending in the period close. Design: `UX-GUIDELINE.md` 1.6 §11.10d, §11.7.
 
 ## Reference
 

@@ -373,7 +373,7 @@
     .tx-act.del { background: var(--bad); }
     .tx-main { position: relative; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 16px; background: var(--surface-1);
       transition: transform var(--dur-base) var(--ease-out); touch-action: pan-y; cursor: pointer; }
-    .tx-row.selected .tx-main { background: var(--accent-soft); }
+    .tx-row.selected .tx-main { background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface-1); }
     .tx-body { flex: 1; min-width: 0; }
     .tx-title { font-size: 15px; line-height: 22px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tx-sub { font-size: 13px; line-height: 18px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -413,6 +413,34 @@
     .bulkbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
       padding: 10px 16px; background: var(--accent-soft); border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 500; color: var(--accent-text); }
     .bulkbar .grow { flex: 1; }
+    /* Month-end one flow (UX §11.10d) */
+    .me-step .card-head-l { align-items: flex-start; }
+    .me-num { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+      background: var(--accent); color: #fff; font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .me-step.done .me-num { background: var(--good-soft); color: var(--good); }
+    .me-step.folded { padding-bottom: 0; }
+    .me-step.folded > .card-head { margin-bottom: 0; padding-bottom: var(--card-pad); }
+    .me-step .card-tools { flex-wrap: wrap; justify-content: flex-end; }
+    .susp-badge { margin-left: 4px; }
+    .me-sm-head { align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .me-sm-head #meMoreSm { margin-left: auto; }
+    /* Spending → journal (UX §11.10d) */
+    .badge.info { background: var(--info-soft); color: var(--info); }
+    .sp-foot { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 16px;
+      background: var(--surface-1); border-top: 1px solid var(--border); box-shadow: 0 -4px 12px rgba(0,0,0,0.08); font-size: 14px; }
+    .sp-foot .grow { flex: 1 1 200px; min-width: 0; }
+    /* clip (not hidden) keeps the rounded corners without making the card a scroll box, so the bars stick to the viewport */
+    #txCard, #ccTxCard, #cmTxCard { overflow: clip; }
+    .sp-skip { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--warn); }
+    .sp-skip svg.i { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; }
+    .sp-btn { width: 36px; height: 36px; }
+    .select-mode .sp-done .tx-check { visibility: hidden; }
+    .cm-line { display: flex; align-items: center; }
+    .cm-line > .cm-row { flex: 1 1 auto; min-width: 0; }
+    .cm-line.selected > .cm-row { background: var(--accent-soft); }
+    .cm-sp, .cm-pick { flex-shrink: 0; display: flex; align-items: center; padding: 0 8px; }
+    .cm-pick input { width: 20px; height: 20px; }
+    @media (max-width: 767px) { .sp-foot { bottom: calc(var(--bottombar-h) + env(safe-area-inset-bottom)); } }
 
     /* ── Ranked bars & progress — §9.1, §8.10 ─────────────────────── */
     .rank-list { display: flex; flex-direction: column; gap: 4px; }
@@ -976,6 +1004,7 @@
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
   <symbol id="i-square-check" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-file-plus" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/><path d="M12 18v-6"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
   <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
@@ -1206,6 +1235,8 @@ function defaultState(){
     lastBackupAt: null, backupRemindAfter: null,
     // v2 (docs/v2-interfaces.md §3). The books themselves live in their own appData file, books.json.
     booksMeta: null, stmtFix: {}, cardMap: {}, budgets: {}, goals: [],
+    // v4.1 (UX §11.10d): spending category → book account, {category: {account, at}}.
+    catAccounts: {},
     // v5 (docs/v5-assistant.md §6): applied Ask Claude change sets, newest 200 (summaries only).
     aiLog: []
   };
@@ -1273,7 +1304,7 @@ function newerById(remote, local){
 /* ── v4 re-code (docs/v4-books.md §12, §15): after the book moves to the ERP chart, every STATE field
    that stores an account code is remapped once. Fields: monthEnd[M].pos and .market (keys),
    monthEndCfg.stmtMap / .counter (values) and .diffAccount, newAccounts (keys, id, near), income
-   (account, incomeAccount), declared (keys) and goals[].accounts. STATE.codeRemap.done lists each
+   (account, incomeAccount), declared (keys), goals[].accounts and catAccounts (values). STATE.codeRemap.done lists each
    re-code applied ({id, at, map}: the codes that re-code changed), so nothing is remapped twice and a
    stale copy from another device is brought onto the new codes before it is merged. ── */
 function codeRemapApply(s, map){
@@ -1297,6 +1328,7 @@ function codeRemapApply(s, map){
     if (x.account) x.account = val(x.account); if (x.incomeAccount) x.incomeAccount = val(x.incomeAccount); }
   if (s.declared) s.declared = rekey(s.declared);
   for (const g of (Array.isArray(s.goals) ? s.goals : [])) if (g && Array.isArray(g.accounts)) g.accounts = g.accounts.map(val);
+  for (const v of Object.values(s.catAccounts || {})) if (v && typeof v === 'object' && v.account) v.account = val(v.account);
   return n;
 }
 const codeRemapSig = map => Object.keys(map || {}).sort().map(k => k + '>' + map[k]).join('|');
@@ -1429,6 +1461,7 @@ function mergeStates(remote, local){
   for (const k of new Set([...Object.keys(remote.stmtFix||{}), ...Object.keys(local.stmtFix||{})]))
     merged.stmtFix[k] = newerByKey((remote.stmtFix||{})[k], (local.stmtFix||{})[k]);
   merged.cardMap = newerByKey(remote.cardMap, local.cardMap);
+  merged.catAccounts = newerByKey(remote.catAccounts, local.catAccounts);
   merged.budgets = newerByKey(remote.budgets, local.budgets);
   merged.goals = newerById(remote.goals, local.goals);
   { const r = remote.booksMeta, l = local.booksMeta;
@@ -2356,7 +2389,7 @@ const SECTIONS=[
 // once a snapshot exists.
 function wealthSections(){
   const s=[{key:'networth',label:'Net worth',icon:'trending-up',order:10},{key:'cash',label:'Cash movements',icon:'arrow-left-right',order:20}];
-  if(W()){s.push({key:'income',label:'Income',icon:'chart-column',order:30},{key:'accounts',label:'Accounts',icon:'landmark',order:40});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check',order:50});}
+  if(W()){s.push({key:'income',label:'Income',icon:'chart-column',order:30});if(typeof renderClose==='function')s.push({key:'close',label:'Month-end',icon:'calendar-check',order:50});}
   return s;
 }
 // One menu group: the built-in pages plus registered ones, by order (a stable sort keeps ties in place).
@@ -2373,10 +2406,14 @@ function bottomSections(){const all=NAV_GROUPS.flatMap(([g])=>navGroup(g));retur
 // The landing page: Home when js/home.js registered it, else Daily spending.
 function defaultTab(){return pageByKey('home')?'home':'overview';}
 function moreSections(){const b=bottomSections().map(s=>s.key);return NAV_GROUPS.flatMap(([g])=>navGroup(g)).filter(s=>!b.includes(s.key));}
-const TAB_TITLES={overview:'Daily spending',spending:'Spending',cards:'Credit cards',networth:'Net worth',cash:'Cash movements',accounts:'Accounts',income:'Income',close:'Month-end',settings:'Settings',more:'More'};
+const TAB_TITLES={overview:'Daily spending',spending:'Spending',cards:'Credit cards',networth:'Net worth',cash:'Cash movements',income:'Income',close:'Month-end',settings:'Settings',more:'More'};
+// Wealth › Accounts is merged into Books › Chart of accounts (v4.1, UX §11.10d): every old link to
+// it (Net worth, Home, the SPT pack, Ask Claude) lands on the chart, with ACC_SEL kept for it.
+function tabAlias(t){return t==='accounts'?(pageByKey('coa')?'coa':'networth'):t;}
 function setTab(t){
-  if(t===ACTIVE_TAB){window.scrollTo({top:0,behavior:'smooth'});return;}
-  ACTIVE_TAB=t;SELECT_MODE=false;SELECTED.clear();TX_LIMIT=50;
+  t=tabAlias(t);
+  if(t===ACTIVE_TAB){if(t==='coa'&&ACC_SEL){renderAll();return;}window.scrollTo({top:0,behavior:'smooth'});return;}
+  ACTIVE_TAB=t;SELECT_MODE=false;SELECTED.clear();TX_LIMIT=50;SP_PICK.on=null;SP_PICK.keys.clear();
   renderAll();window.scrollTo(0,0);
 }
 function buildNav(){
@@ -2862,13 +2899,14 @@ function openTxSheet(id){
       <button class="list-item" data-a="cat">${ic('tag')}<span class="li-body"><span class="li-title">Change category</span></span>${ic('chevron-right','s16')}</button>
       <button class="list-item" data-a="split">${ic('split')}<span class="li-body"><span class="li-title">${sp?'Edit split':'Split with others'}</span></span>${ic('chevron-right','s16')}</button>
       <button class="list-item" data-a="edit">${ic('pencil')}<span class="li-body"><span class="li-title">Edit merchant or amount</span></span>${ic('chevron-right','s16')}</button>
+      ${spTxState(t).can?`<button class="list-item" data-a="journal">${ic('file-plus')}<span class="li-body"><span class="li-title">To journal</span></span>${ic('chevron-right','s16')}</button>`:''}
       <button class="list-item" data-a="del" style="color:var(--bad)">${ic('trash-2')}<span class="li-body"><span class="li-title">Delete transaction</span></span></button>
     </div>`});
   s.sheet.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.a;s.close(true);
     setTimeout(()=>{
       if(a==='note')openNoteSheet(id);else if(a==='cat')openCategoryPicker(null,[id],t.category);
-      else if(a==='split')openSplitModal(id);else if(a==='edit')openEditModal(id);else if(a==='del')deleteTransaction(id);
+      else if(a==='split')openSplitModal(id);else if(a==='edit')openEditModal(id);else if(a==='journal')spOne('tx',id);else if(a==='del')deleteTransaction(id);
     },60);
   });
 }
@@ -3012,8 +3050,9 @@ function txRowsHTML(list){
     if(sp)sub.push(`Split ${sp.people} ways · ${sp.paidCount} paid · was <span class="amt">${fmtIDR(sp.originalAmount)}</span>`);
     if(!txOk(t))sub.push('<span class="badge bad">Failed</span>');
     sub.push(...runHooks('txnBadges',t));
+    const spj=spTxState(t);
     return`<tr${sel?' class="selected"':''}>
-      ${SELECT_MODE?`<td class="sel-col"><input type="checkbox" ${sel?'checked':''} onchange="toggleSelect('${sid}')" aria-label="Select ${escH(t.merchantClean||'')}"></td>`:''}
+      ${SELECT_MODE?`<td class="sel-col">${spj.done?'':`<input type="checkbox" ${sel?'checked':''} onchange="toggleSelect('${sid}')" aria-label="Select ${escH(t.merchantClean||'')}">`}</td>`:''}
       <td class="date">${fmtDay(txDateOf(t))}</td>
       <td class="merchant"><div class="merchant-name">${escH(t.merchantClean||t.merchantRaw||'—')}</div>
         ${sub.length?`<div class="merchant-sub">${sub.join(' · ')}</div>`:''}
@@ -3022,6 +3061,7 @@ function txRowsHTML(list){
       <td><span class="badge">${escH(bankLabel(t))}</span></td>
       <td class="amount num">${txAmountHTML(t)}</td>
       <td><div class="row-actions">
+        ${spj.can?spBtnHTML(`spOne('tx','${sid}')`,t.merchantClean||t.merchantRaw):''}
         <button class="icon-btn sm" onclick="openSplitModal('${sid}')" aria-label="Split ${escH(t.merchantClean||'')}" title="Split"${sp?' aria-pressed="true"':''}>${ic('split','s16')}</button>
         <button class="icon-btn sm" onclick="openEditModal('${sid}')" aria-label="Edit ${escH(t.merchantClean||'')}" title="Edit">${ic('pencil','s16')}</button>
         <button class="icon-btn sm danger" onclick="deleteTransaction('${sid}')" aria-label="Delete ${escH(t.merchantClean||'')}" title="Delete">${ic('trash-2','s16')}</button>
@@ -3034,8 +3074,8 @@ function txListHTML(list){
   for(const t of list){
     const k=dayKey(txDateOf(t));
     if(k!==lastKey){html+=`<div class="tx-day"><span>${fmtDayHeader(k)}</span><span class="amt">−${fmtIDR(dayTotals[k])}</span></div>`;lastKey=k;}
-    const sid=escH(t.id||''),sel=SELECTED.has(t.id);
-    html+=`<div class="tx-row${sel?' selected':''}" data-id="${sid}">
+    const sid=escH(t.id||''),sel=SELECTED.has(t.id),spDone=spTxState(t).done;
+    html+=`<div class="tx-row${sel?' selected':''}${spDone?' sp-done':''}" data-id="${sid}">
       <div class="tx-actions" aria-hidden="true">
         <div class="tx-actions-l"><button class="tx-act note" data-action="note" data-id="${sid}" tabindex="-1">${ic('pencil')}Note</button></div>
         <div class="tx-actions-r">
@@ -3062,31 +3102,225 @@ function renderTxBody(){
   const cnt=$('txCount');if(cnt)cnt.textContent=`${all.length} transaction${all.length===1?'':'s'} · ${periodLabel()}${TX_SEARCH?' · matching search':''}`;
   if(!all.length){body.innerHTML=TX_SEARCH?emptyHTML('search',`No transactions match “${TX_SEARCH}”`,'Clear search',"setTxSearch('')")
     :emptyHTML('inbox','No transactions in this period',ACTIVE_RANGE!=='all'?'Show all time':null,"setRange('all')");return;}
+  const spFoot=SELECT_MODE&&spOwn();
   body.innerHTML=`${SELECT_MODE?`<div class="bulkbar" role="toolbar" aria-label="Bulk actions"><span class="grow" aria-live="polite">${SELECTED.size} selected</span>
       <button class="btn btn-secondary btn-sm" onclick="selectAllVisible()">Select all ${Math.min(all.length,TX_LIMIT)}</button>
-      <button class="btn btn-primary btn-sm" id="bulkCatBtn" onclick="bulkCategory(this)"${SELECTED.size?'':' disabled'}>${ic('tag','s16')}Set category</button>
-      <button class="btn btn-ghost btn-sm" onclick="toggleSelectMode()">Cancel</button></div>`:''}
+      <button class="btn ${spFoot?'btn-secondary':'btn-primary'} btn-sm" id="bulkCatBtn" onclick="bulkCategory(this)"${SELECTED.size?'':' disabled'}>${ic('tag','s16')}Set category</button>
+      ${spFoot?'':`<button class="btn btn-ghost btn-sm" onclick="toggleSelectMode()">Cancel</button>`}</div>`:''}
     <div class="table-wrap"><table class="data tx-table">
       <thead><tr>${SELECT_MODE?'<th class="sel-col" scope="col"><span class="sr-only">Select</span></th>':''}<th scope="col">Date</th><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Bank</th><th scope="col" class="num">Amount</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>${txRowsHTML(list)}</tbody></table></div>
     <div class="tx-list${SELECT_MODE?' select-mode':''}">${txListHTML(list)}</div>
-    ${all.length>TX_LIMIT?`<div class="table-foot"><button class="btn btn-ghost" onclick="TX_LIMIT+=50;renderTxBody()">Show more · ${all.length-TX_LIMIT} left</button></div>`:''}`;
+    ${all.length>TX_LIMIT?`<div class="table-foot"><button class="btn btn-ghost" onclick="TX_LIMIT+=50;renderTxBody()">Show more · ${all.length-TX_LIMIT} left</button></div>`:''}
+    ${spFoot?spFootHTML([...SELECTED].map(id=>spRowOf(spTxById(id))),'toggleSelectMode()','spBulkTx()'):''}`;
 }
 function setTxSearch(v){TX_SEARCH=v;TX_LIMIT=50;const i=$('txSearch');if(i&&i.value!==v)i.value=v;renderTxBody();}
 function toggleSelectMode(){SELECT_MODE=!SELECT_MODE;SELECTED.clear();const b=$('selModeBtn');if(b)b.setAttribute('aria-pressed',String(SELECT_MODE));renderTxBody();}
-function toggleSelect(id){SELECTED.has(id)?SELECTED.delete(id):SELECTED.add(id);renderTxBody();}
-function selectAllVisible(){getFiltered().filter(t=>searchMatch(t,TX_SEARCH)).slice(0,TX_LIMIT).forEach(t=>SELECTED.add(t.id));renderTxBody();}
+// A row already turned into a journal can't be selected (UX §11.10d).
+function toggleSelect(id){if(!SELECTED.has(id)&&spTxState(spTxById(id)).done)return;SELECTED.has(id)?SELECTED.delete(id):SELECTED.add(id);renderTxBody();}
+function selectAllVisible(){getFiltered().filter(t=>searchMatch(t,TX_SEARCH)).slice(0,TX_LIMIT).forEach(t=>{if(!spTxState(t).done)SELECTED.add(t.id);});renderTxBody();}
 function bulkCategory(btn){if(!SELECTED.size)return;openCategoryPicker(isMobile()?null:btn,[...SELECTED],null);}
 function transactionsCard(){
   return`<section class="card flush span-12" id="txCard" aria-labelledby="txTitle">
     <div class="card-head" style="flex-wrap:wrap"><div class="card-head-l">${ic('receipt')}<div><h2 class="card-title" id="txTitle">Transactions</h2><div class="card-desc" id="txCount"></div></div></div>
       <div class="card-tools" style="flex:1 1 260px">
         <div class="input-affix" style="flex:1;max-width:280px;min-width:160px"><span class="affix">${ic('search','s16')}</span><input class="input" id="txSearch" type="search" placeholder="Search merchant or note" value="${escH(TX_SEARCH)}" oninput="setTxSearch(this.value)" aria-label="Search transactions" style="height:36px"></div>
-        <button class="icon-btn" id="selModeBtn" onclick="toggleSelectMode()" aria-pressed="${SELECT_MODE}" aria-label="Select several to categorise" title="Select several">${ic('square-check')}</button>
+        <button class="icon-btn" id="selModeBtn" onclick="toggleSelectMode()" aria-pressed="${SELECT_MODE}" aria-label="${spOwn()?'Select several to categorise or make draft journals':'Select several to categorise'}" title="Select several">${ic('square-check')}</button>
       </div></div>
     <div id="txBody"></div>
   </section>`;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   SPENDING → JOURNAL (UX §11.10d; docs/v4-books.md, journal kind 'spending'). Any spending row —
+   Daily spending, Credit cards, a Cash movements spend line — becomes a DRAFT journal in the app's
+   own book: Dr the expense account of the row's category (or, for Transfer and E-wallet, the target
+   asset account), Cr the card's or bank's account in the book (card or bank → its statement
+   (ETStatements.linkFor) → its book account (meMapOf)). The amount is the row's rupiah amount: the
+   statement amount once matched, the owner's share of a split. Category → account links are the
+   owner's own data (STATE.catAccounts {category:{account, at}}, Drive only); this code names no
+   account. A row (ref 'spend:<row id>', 'spend:cash:<line id>') or a statement line (stmtLine) is
+   never converted twice: the book refuses it, and the page shows a badge instead of the button.
+   ══════════════════════════════════════════════════════════════════ */
+const SP_TARGET=['Transfer','E-wallet'];   // not expenses: these pick the asset account the money went to
+const SP_CASH_TYPES={spend:null,ewallet:'E-wallet','transfer-out':'Transfer'};
+// Generic words per category (English and Indonesian) to suggest the closest expense account by name.
+const SP_WORDS={'Food & Dining':['food','dining','makan','restoran','restaurant','meal','konsumsi'],'Groceries':['grocer','belanja','supermarket','dapur','household','rumah tangga'],
+  'Transport':['transport','taxi','taksi','ojek','parkir','parking','toll'],'Shopping':['shopping','belanja','pakaian','clothing'],'Tech & Subscriptions':['subscription','langganan','software','tech','digital'],
+  'Travel':['travel','perjalanan','hotel','tiket','ticket','liburan','holiday'],'Fuel':['fuel','bensin','bbm','petrol','gasoline','kendaraan','vehicle'],'Telecom':['telecom','telepon','phone','pulsa','internet','komunikasi'],
+  'Entertainment':['entertainment','hiburan','leisure','rekreasi'],'Sports':['sport','olahraga','gym','fitness'],'Religion':['donasi','donation','zakat','sedekah','charity','ibadah','persembahan','sosial'],
+  'Foreign':['foreign','luar negeri','overseas'],'Ad Hoc':['lain','other','misc'],'Others':['lain','other','misc','umum','general'],
+  'E-wallet':['e-wallet','ewallet','wallet','dompet','gopay','ovo','dana','shopeepay','e-money','emoney'],'Transfer':[]};
+let SP_IDX=null;
+const SP_PICK={on:null,keys:new Set()};   // Select on Credit cards ('cards') and Cash movements ('cash')
+registerHook('beforeRender',()=>{SP_IDX=null;});
+function spOwn(){return meOwn()&&typeof ledgerSaveDraft==='function';}
+function spIso(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function spBook(){const b=meOwn()?BOOKS():null;return b&&Array.isArray(b.accounts)?b.accounts:[];}
+function spPostable(){return spBook().filter(a=>a.postable&&!a.suspended&&!a.archived);}
+function spAcc(code){return code?spPostable().find(a=>a.id===code)||null:null;}
+function spCatAcc(cat){const m=(STATE.catAccounts||{})[cat];return m&&!m.deleted&&m.account&&spAcc(m.account)?m.account:'';}
+function spSetCatAcc(cat,code){const s=STATE.catAccounts||(STATE.catAccounts={});s[cat]={account:code,at:new Date().toISOString()};}
+// The book's journal for a row or statement line (ledgerFindSpending; docs/v4-books.md): a draft or
+// posted journal of any kind (an AI journal on the same statement line counts too). A voided
+// conversion doesn't, so it can be made again. The scan below only stands in for an older engine.
+function spIndex(){
+  if(SP_IDX)return SP_IDX;
+  const x=typeof LEDGER==='function'?LEDGER():null,ref=new Map(),line=new Map();
+  for(const v of Object.values((x&&x.vouchers)||{})){
+    if(!v||(v.status!=='draft'&&v.status!=='posted'))continue;const s={id:v.id,status:v.status,number:v.number||null};
+    if(v.ref&&!ref.has(v.ref))ref.set(v.ref,s);
+    for(const l of v.lines||[])if(l&&l.stmtLine&&!line.has(l.stmtLine))line.set(l.stmtLine,s);
+  }
+  return SP_IDX={ref,line};
+}
+function spFind(ref,stmtLine){
+  if(!meOwn())return null;
+  if(typeof ledgerFindSpending==='function'){try{return ledgerFindSpending(ref,stmtLine||null)||null;}catch(_){return null;}}
+  const i=spIndex();return(ref&&i.ref.get(ref))||(stmtLine&&i.line.get(stmtLine))||null;
+}
+function spTxById(id){return ALL_TRANSACTIONS_RAW.find(x=>x.id===id)||ALL_TRANSACTIONS.find(x=>x.id===id)||null;}
+// The card's or bank's book account for an email row: its matched statement, else the statement the
+// bank's alerts are linked to, then that statement's book account.
+function spTxCredit(t){
+  const c=CM();if(!c||!t)return'';
+  let sa=t.stmt&&t.stmt.account||null;
+  if(!sa&&window.ETStatements&&typeof ETStatements.linkFor==='function')sa=ETStatements.linkFor(t.bank,c.accounts,STATE.cardMap||{}).link;
+  return sa?(meMapOf(cashAcc(sa))||''):'';
+}
+// A spending row as the journal needs it, or null for a row that isn't spending.
+function spRowOf(t){
+  if(!t||!t.id||!(t.amount>0)||t.type==='billing')return null;
+  const d=txDateOf(t);if(isNaN(d.getTime()))return null;
+  const s=t.stmt&&t.stmt.line&&['match','off','added'].includes(t.stmt.kind)?t.stmt.line:null;
+  return{key:'tx:'+t.id,ref:'spend:'+t.id,stmtLine:s,date:spIso(d),amount:Math.round(t.amount),desc:String(t.merchantClean||t.merchantRaw||'Spending'),
+    memo:String(t.note||''),category:t.category||'Others',source:bankLabel(t),credit:spTxCredit(t)};
+}
+function spCashRowOf(l){
+  if(!l||(l.currency||'IDR')!=='IDR'||!(l.amount<0))return null;
+  const ty=cashType(l);if(!Object.prototype.hasOwnProperty.call(SP_CASH_TYPES,ty))return null;
+  return{key:'cash:'+l.id,ref:'spend:cash:'+l.id,stmtLine:l.id,date:l.date,amount:Math.round(-l.amount),
+    desc:String(l.counterparty||l.desc||'Spending').replace(/\s+/g,' ').trim(),memo:'',category:SP_CASH_TYPES[ty]||categorize(l.counterparty||l.desc),
+    source:cashAcc(l.account).label||l.account,credit:meMapOf(cashAcc(l.account))||''};
+}
+function spRowByKey(k){return k.startsWith('cash:')?spCashRowOf(cashTx(k.slice(5))):spRowOf(spTxById(k.slice(3)));}
+function spBadgeHTML(f){
+  if(!f)return'';
+  if(f.status==='draft')return`<span class="badge info sp-badge" style="margin-left:4px" title="A draft journal in your book">Draft</span>`;
+  return`<span class="badge good sp-badge" style="margin-left:4px" title="${escH(f.number||'In your book')}">In book</span>`;
+}
+// {row, done (its journal), can (show To journal), badge}
+function spState(r){const f=r?spFind(r.ref,r.stmtLine):null;return{row:r,done:f,can:!!r&&!f&&spOwn(),badge:spBadgeHTML(f)};}
+function spTxState(t){return spOwn()?spState(spRowOf(t)):{row:null,done:null,can:false,badge:''};}
+function spCashState(l){return spOwn()?spState(spCashRowOf(l)):{row:null,done:null,can:false,badge:''};}
+registerHook('txnBadges',t=>{const s=spTxState(t);return s.badge||null;});
+function spBtnHTML(call,name){return`<button class="icon-btn sm sp-btn" onclick="${call}" aria-label="To journal: ${escH(name||'')}" title="To journal">${ic('file-plus','s16')}</button>`;}
+function spVoucher(r,debit){
+  const ls=[{account:debit,amount:r.amount,memo:r.memo},{account:r.credit,amount:-r.amount,memo:r.memo}];
+  if(r.stmtLine)ls[1].stmtLine=r.stmtLine;
+  return{date:r.date,description:r.desc.slice(0,200),kind:'spending',ref:r.ref,lines:ls};
+}
+function spSuggest(cat){
+  const target=SP_TARGET.includes(cat),list=spPostable().filter(a=>target?a.kind==='asset':a.kind==='expense');
+  const six=list.filter(a=>/^6/.test(a.id)),pool=!target&&six.length?six:list;
+  const words=[...(SP_WORDS[cat]||[]),...String(cat).toLowerCase().split(/[^a-z]+/).filter(w=>w.length>3)];
+  let best='',bs=0;
+  for(const a of pool){const n=String(a.name||'').toLowerCase(),s=words.reduce((k,w)=>k+(n.includes(w)?w.length:0),0);if(s>bs){bs=s;best=a.id;}}
+  if(!best&&!target){const o=pool.find(a=>/lain|other|misc|umum/i.test(a.name||''));best=o?o.id:(pool[0]||{}).id||'';}
+  return best;
+}
+// Why rows can't become journals: no book account for their card or bank (named in the note).
+function spSkipNote(sk){
+  if(!sk.length)return'';const src=[...new Set(sk.map(r=>r.source))];
+  return`${sk.length} skipped: no book account for ${src.join(', ')}. Map it in Month-end › More › Statement accounts`;
+}
+function spSplit(rows){
+  const out={go:[],skip:[],done:[]};
+  for(const r of rows){if(!r)continue;if(spFind(r.ref,r.stmtLine))out.done.push(r);else if(!spAcc(r.credit))out.skip.push(r);else out.go.push(r);}
+  return out;
+}
+function spFootHTML(rows,cancel,make){
+  const s=spSplit(rows),total=[...s.go,...s.skip].reduce((n,r)=>n+r.amount,0),n=rows.filter(Boolean).length,g=s.go.length;
+  return`<div class="sp-foot" role="toolbar" aria-label="Make draft journals">
+    <span class="grow" aria-live="polite"><b>${n} selected</b> · <span class="amt">${fmtIDR(total)}</span>${s.skip.length?`<span class="sp-skip">${ic('triangle-alert','s16')}${escH(spSkipNote(s.skip))}</span>`:''}</span>
+    <button class="btn btn-ghost btn-sm" onclick="${cancel}">Cancel</button>
+    <button class="btn btn-primary btn-sm" id="spMake" onclick="${make}"${g?'':' disabled'}>${ic('file-plus','s16')}Make ${g} draft journal${g===1?'':'s'}</button></div>`;
+}
+function spPickOn(page){return spOwn()&&SP_PICK.on===page;}
+function spPickBtnHTML(page){
+  if(!spOwn())return'';const on=SP_PICK.on===page;
+  return`<button class="btn btn-ghost btn-sm sp-select" onclick="spPickMode('${page}')" aria-pressed="${on}" title="Select several to make draft journals">${ic('square-check','s16')}${on?'Done':'Select'}</button>`;
+}
+function spPickRender(){if(SP_PICK.on==='cash'&&typeof renderCashTx==='function'&&$('cmTxCard'))renderCashTx();else renderAll();}
+function spPickMode(page){SP_PICK.on=SP_PICK.on===page?null:page;SP_PICK.keys.clear();spPickRender();}
+function spPickToggle(k){if(SP_PICK.keys.has(k))SP_PICK.keys.delete(k);else{const r=spRowByKey(k);if(!r||spFind(r.ref,r.stmtLine))return;SP_PICK.keys.add(k);}spPickRender();}
+function spPickFootHTML(){return spFootHTML([...SP_PICK.keys].map(spRowByKey),`spPickMode('${SP_PICK.on}')`,'spBulkPick()');}
+function spBulkTx(){spConvert([...SELECTED].map(id=>spRowOf(spTxById(id))),{after:()=>{SELECT_MODE=false;SELECTED.clear();}});}
+function spBulkPick(){spConvert([...SP_PICK.keys].map(spRowByKey),{after:()=>{SP_PICK.on=null;SP_PICK.keys.clear();}});}
+function spOne(kind,id){
+  const r=kind==='cash'?spCashRowOf(cashTx(id)):spRowOf(spTxById(id));
+  if(!r){toast('This row isn’t spending, so it can’t become a journal');return;}
+  spConvert([r],{single:true});
+}
+// The entry point for one row or many: skip what can't go, ask for unmapped categories once, then make the drafts.
+function spConvert(rows,o){
+  o=o||{};
+  if(!spOwn()){toast('Set up your book first in Settings › Your book');return;}
+  const s=spSplit(rows);
+  if(o.single&&s.done.length){const f=spFind(s.done[0].ref,s.done[0].stmtLine);toast(`Already in your book${f&&f.number?` as ${f.number}`:' as a draft'}`);return;}
+  if(!s.go.length){if(s.skip.length)spSkipToast(s.skip);else toast('Nothing to turn into a journal');return;}
+  const need=[...new Set(s.go.map(r=>r.category))].filter(c=>!spCatAcc(c));
+  const go=()=>spMake(s.go,s.skip,o);
+  if(need.length)spCatSheet(need,s.go,go,o);else go();
+}
+function spSkipToast(sk){toast(spSkipNote(sk),{action:'Statement accounts',duration:9000,onAction:()=>{setTab('close');setTimeout(()=>{if(typeof meMapSheet==='function')meMapSheet();},80);}});}
+function spCatSheet(cats,rows,then,o){
+  const accs=spPostable(),exp=accs.filter(a=>a.kind==='expense'),ast=accs.filter(a=>a.kind==='asset');
+  const opt=(list,sel)=>`<option value="">Choose…</option>`+list.map(a=>`<option value="${escH(a.id)}"${a.id===sel?' selected':''}>${escH(a.id)} · ${escH(a.name)}</option>`).join('');
+  const body=`<p class="help" style="margin-bottom:8px">Which account in your book does each category go to? Remembered for next time.</p>
+    <div id="spCats">${cats.map((c,i)=>{const t=SP_TARGET.includes(c),rs=rows.filter(r=>r.category===c),sum=rs.reduce((n,r)=>n+r.amount,0);
+      return`<div class="setting-row" data-cat="${escH(c)}"><div style="display:flex;gap:10px;align-items:center;min-width:0">${catSquare(c,true)}<div style="min-width:0"><div class="li-title">${escH(c)}</div>
+        <div class="li-sub">${rs.length} row${rs.length===1?'':'s'} · <span class="amt">${fmtIDR(sum)}</span>${t?' · not an expense: pick the account the money went to':''}</div></div></div>
+        <select class="input me-select" id="spCat${i}" aria-label="Account for ${escH(c)}">${opt(t?ast:exp,spSuggest(c))}</select></div>`;}).join('')}</div>
+    <div class="help err" id="spCatErr" hidden>${ic('triangle-alert','s16')}Choose an account for every category.</div>`;
+  const n=rows.length;
+  const s=openSheet({title:'Category accounts',body,confirmDiscard:false,
+    foot:`<button class="btn btn-ghost" data-sp="cancel">Cancel</button><button class="btn btn-primary" data-sp="go">${o&&o.single?'Save and open the journal':`Save and make ${n} draft${n===1?'':'s'}`}</button>`});
+  s.sheet.querySelector('[data-sp="cancel"]').onclick=()=>s.close(true);
+  s.sheet.querySelector('[data-sp="go"]').onclick=()=>{
+    const pick=cats.map((c,i)=>[c,s.sheet.querySelector('#spCat'+i).value]);
+    if(pick.some(([,v])=>!v)){s.sheet.querySelector('#spCatErr').hidden=false;return;}
+    for(const[c,v]of pick)spSetCatAcc(c,v);
+    scheduleDriveSave();s.close(true);then();
+  };
+}
+async function spMake(rows,skipped,o){
+  o=o||{};await ownBookPull();SP_IDX=null;
+  const todo=rows.filter(r=>!spFind(r.ref,r.stmtLine)),made=[],failed=[];
+  // One row: open it in the journal editor to check before saving (the editor's prefilled form when
+  // it has one, else a saved draft opened there).
+  if(o.single&&todo.length===1){
+    const v=spVoucher(todo[0],spCatAcc(todo[0].category));
+    if(window.etEntry&&typeof etEntry.openPrefilled==='function'){try{etEntry.openPrefilled(v);return;}catch(e){console.error('openPrefilled failed',e);}}
+    try{const id=ledgerSaveDraft(v,{kind:'spending',why:'From spending'});SP_IDX=null;renderAll();
+      if(window.etEntry&&typeof etEntry.openDraft==='function')etEntry.openDraft(id);
+      toast('Draft journal made',{action:'Review in Journals',onAction:spReview});}
+    catch(e){bookErrToast(e,'Couldn’t make the journal');}
+    return;
+  }
+  for(const r of todo){
+    if(spFind(r.ref,r.stmtLine))continue;
+    try{made.push(ledgerSaveDraft(spVoucher(r,spCatAcc(r.category)),{kind:'spending',why:'From spending'}));SP_IDX=null;}
+    catch(e){failed.push({r,e});}
+  }
+  if(o.after)o.after();
+  renderAll();
+  if(made.length)toast(`${made.length} draft${made.length===1?'':'s'} made`,{action:'Review in Journals',onAction:spReview,duration:8000});
+  if(failed.length)bookErrToast(failed[0].e,`${failed.length} couldn’t be made`);
+  if(skipped.length)spSkipToast(skipped);
+  return made;
+}
+function spReview(){if(typeof openJournals==='function')openJournals({status:'draft',jkind:'spending'});else setTab('journals');}
 function recurringRows(cands,limit){
   return cands.slice(0,limit||cands.length).map(c=>`<div class="list-item">
     ${catSquare(c.category,true)}
@@ -3434,15 +3668,17 @@ function renderCardsCurrent(sel){
     kpiCard({icon:'calendar',label:'Estimated bill',value:est?kpiMoney(est.total):'<span class="faint" style="font-size:0.7em">Pick a range</span>',sub:est?`<span class="vs">${fmtDay(new Date(CCP_EST_FROM))} – ${fmtDay(new Date(CCP_EST_TO))} · ${est.rows.length} transactions</span>`:'<span class="vs">Use the estimator below</span>',onclick:"document.getElementById('ccEstFrom')?.focus()",title:'Go to the estimator'}),
   ].join('');
   const cardCol=multi;
+  const pick=spPickOn('cards');
   const outRows=since.map(({t,card})=>{
-    const isEx=excluded.has(t.id),wasHidden=hidden.has(t.id),sid=escAttr(t.id);
-    return`<tr class="${isEx?'muted-row':''}">
+    const isEx=excluded.has(t.id),wasHidden=hidden.has(t.id),sid=escAttr(t.id),sp=spTxState(t),spb=sp.badge;
+    return`<tr class="${isEx?'muted-row':''}${pick&&SP_PICK.keys.has('tx:'+t.id)?' selected':''}">
+      ${pick?`<td class="sel-col">${sp.done?'':`<input type="checkbox" ${SP_PICK.keys.has('tx:'+t.id)?'checked':''} onchange="spPickToggle('tx:${sid}')" aria-label="Select ${escH(t.merchantClean||'')}">`}</td>`:''}
       <td class="date">${fmtDay(txDateOf(t))}</td>
-      <td class="merchant strike"><div class="merchant-name">${escH(t.merchantClean||t.merchantRaw||'—')}</div>${wasHidden||isEx||t.splitInfo?`<div class="merchant-sub">${wasHidden&&!isEx?'<span class="badge bad">Removed from Overview</span>':''}${isEx?'<span class="badge">Excluded from balance</span>':''}${t.splitInfo?`<span>Split · your share <span class="amt">${fmtIDR(t.amount)}</span></span>`:''}</div>`:''}</td>
+      <td class="merchant strike"><div class="merchant-name">${escH(t.merchantClean||t.merchantRaw||'—')}</div>${wasHidden||isEx||t.splitInfo||spb?`<div class="merchant-sub">${wasHidden&&!isEx?'<span class="badge bad">Removed from Overview</span>':''}${isEx?'<span class="badge">Excluded from balance</span>':''}${t.splitInfo?`<span>Split · your share <span class="amt">${fmtIDR(t.amount)}</span></span>`:''}${spb}</div>`:''}</td>
       ${cardCol?`<td><span class="badge">${escH(card)}</span></td>`:''}
       <td>${catChip(t.category)}</td>
       <td class="amount num">${amt(ccGross(t))}</td>
-      <td><div class="row-actions on"><button class="icon-btn sm${isEx?'':' danger'}" onclick="toggleCCPosExclude('${sid}')" aria-label="${isEx?'Restore to balance':'Exclude from balance'}" title="${isEx?'Restore to balance':'Exclude from balance'}">${ic(isEx?'refresh-cw':'x','s16')}</button></div></td></tr>`;
+      <td><div class="row-actions on">${sp.can?spBtnHTML(`spOne('tx','${sid}')`,t.merchantClean||t.merchantRaw):''}<button class="icon-btn sm${isEx?'':' danger'}" onclick="toggleCCPosExclude('${sid}')" aria-label="${isEx?'Restore to balance':'Exclude from balance'}" title="${isEx?'Restore to balance':'Exclude from balance'}">${ic(isEx?'refresh-cw':'x','s16')}</button></div></td></tr>`;
   }).join('');
   const estRows=est?est.rows.map(({t,card})=>`<tr><td class="date">${fmtDay(txDateOf(t))}</td><td class="merchant"><div class="merchant-name">${escH(t.merchantClean||t.merchantRaw||'—')}</div></td>${cardCol?`<td><span class="badge">${escH(card)}</span></td>`:''}<td>${catChip(t.category)}</td><td class="amount num">${amt(ccGross(t))}</td></tr>`).join(''):'';
   return`<div class="grid">${kpis}</div>
@@ -3456,9 +3692,10 @@ function renderCardsCurrent(sel){
       ${est?`<div style="margin-top:16px">${est.rows.length?`<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Date</th><th scope="col">Merchant</th>${cardCol?'<th scope="col">Card</th>':''}<th scope="col">Category</th><th scope="col" class="num">Amount</th></tr></thead><tbody>${estRows}</tbody>
         <tfoot><tr><td colspan="${cardCol?4:3}" style="font-weight:600">Estimated bill</td><td class="amount num">${amt(est.total)}</td></tr></tfoot></table></div>`:emptyHTML('inbox','No charges in this range')}</div>`:''}
     </section></div>
-    <div class="grid"><section class="card flush span-12">${cardHead('receipt',`Transactions in current balance`,`${since.length} transaction${since.length===1?'':'s'}${exCount?` · ${exCount} excluded`:''} · split rows count at full amount`)}
-      ${since.length?`<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Date</th><th scope="col">Merchant</th>${cardCol?'<th scope="col">Card</th>':''}<th scope="col">Category</th><th scope="col" class="num">Amount</th><th scope="col"><span class="sr-only">Exclude</span></th></tr></thead><tbody>${outRows}</tbody></table></div>`
+    <div class="grid"><section class="card flush span-12" id="ccTxCard">${cardHead('receipt',`Transactions in current balance`,`${since.length} transaction${since.length===1?'':'s'}${exCount?` · ${exCount} excluded`:''} · split rows count at full amount`,since.length?spPickBtnHTML('cards'):'')}
+      ${since.length?`<div class="table-wrap"><table class="data"><thead><tr>${pick?'<th class="sel-col" scope="col"><span class="sr-only">Select</span></th>':''}<th scope="col">Date</th><th scope="col">Merchant</th>${cardCol?'<th scope="col">Card</th>':''}<th scope="col">Category</th><th scope="col" class="num">Amount</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${outRows}</tbody></table></div>`
         :emptyHTML('square-check','No charges since your last payment')}
+      ${pick?spPickFootHTML():''}
     </section></div>`;
 }
 function renderCardsHistory(sel){
@@ -3817,6 +4054,7 @@ function brandLoaderHTML(){
    ══════════════════════════════════════════════════════════════════ */
 function renderAll(){
   if(ACTIVE_TAB==='home'&&!pageByKey('home'))ACTIVE_TAB='overview';
+  ACTIVE_TAB=tabAlias(ACTIVE_TAB);
   runHooks('beforeRender');
   buildNav();updateTopbar();renderSyncUI();
   const root=$('root');if(!root)return;
@@ -3831,7 +4069,6 @@ function renderAll(){
   {const pg=pageByKey(ACTIVE_TAB);if(pg){root.innerHTML=renderPage(pg);
     drawLater(()=>{if(ACTIVE_TAB!==pg.key||!pg.afterRender)return;try{pg.afterRender(pg);}catch(e){console.error('Page '+pg.key+' afterRender failed',e);}});return;}}
   if(ACTIVE_TAB==='networth'){root.innerHTML=renderNetWorth();drawLater(renderNetWorthCharts);return;}
-  if(ACTIVE_TAB==='accounts'){root.innerHTML=renderAccounts();drawLater(drawAccountChart);return;}
   if(ACTIVE_TAB==='close'&&typeof renderClose==='function'){root.innerHTML=renderClose();return;}
   if(ACTIVE_TAB==='income'){root.innerHTML=renderIncome();return;}
   if(ACTIVE_TAB==='cash'){root.innerHTML=renderCash();drawLater(drawCash);return;}
@@ -3852,15 +4089,21 @@ function renderAll(){
    imported into the private Drive file. The app never edits balances and never writes to the
    books. No personal figure is ever part of this code.
    ══════════════════════════════════════════════════════════════════ */
-let NW_VIEW='book', NW_RANGE=12, ACC_FILTER='active', ACC_SEL=null, CLOSE_SEL=null;
+let NW_VIEW='book', NW_RANGE=12, ACC_SEL=null, CLOSE_SEL=null;
 const WEALTH_SCHEMA='et-wealth/1';
 // Once the app's own book (js/ledger.js, docs/v3-ledger.md) is seeded, W(), BOOKS() and CM() return
 // views computed from it; until then the imported copies, unchanged.
 function LEDGER_VIEW(k){return typeof ledgerView==='function'?ledgerView(k):null;}
 function W(){return LEDGER_VIEW('wealth')||STATE.wealth||null;}
 // Includes accounts added in the app that the book doesn't have yet (pending:true, book 0).
-function wAccounts(){const w=W();if(!w)return[];const x=STATE.newAccounts&&Object.keys(STATE.newAccounts).length?naBalance().filter(a=>!w.accounts.some(b=>b.id===a.id)):[];return x.length?[...w.accounts,...x]:w.accounts;}
-function wAcc(id){return wAccounts().find(a=>a.id===id);}
+function wAccountsAll(){const w=W();if(!w)return[];const x=STATE.newAccounts&&Object.keys(STATE.newAccounts).length?naBalance().filter(a=>!w.accounts.some(b=>b.id===a.id)):[];return x.length?[...w.accounts,...x]:w.accounts;}
+// v4.1 (UX §11.10d): a suspended account is hidden from every list and picker built on wAccounts().
+// Totals (wTotals) and lookups (wAcc) still see it; a list of balances shows it only while it
+// holds one (wShown), muted with a Suspended badge (suspBadge).
+function wAccounts(){return wAccountsAll().filter(a=>!a.suspended);}
+function wAcc(id){return wAccountsAll().find(a=>a.id===id);}
+function wShown(mi,view){return wAccountsAll().filter(a=>!a.suspended||Math.abs(wValue(a,mi,view))>=1);}
+function suspBadge(a){return a&&a.suspended?'<span class="badge susp-badge" title="Suspended in your book: hidden unless it still holds a balance">Suspended</span>':'';}
 function wMonths(){const w=W();return w?w.months:[];}
 function wGroup(id){const w=W();return(w&&w.groups.find(g=>g.id===id))||{id,label:id,side:'asset'};}
 // Value of one account in one month: book balance, or the market value when the Market view is on
@@ -3874,7 +4117,7 @@ function wValue(acc,mi,view){
 }
 function wTotals(mi,view){
   let assets=0,liab=0;const groups={};
-  for(const a of wAccounts()){const v=wValue(a,mi,view);if(!v)continue;groups[a.group]=(groups[a.group]||0)+v;if(a.side==='asset')assets+=v;else liab+=v;}
+  for(const a of wAccountsAll()){const v=wValue(a,mi,view);if(!v)continue;groups[a.group]=(groups[a.group]||0)+v;if(a.side==='asset')assets+=v;else liab+=v;}
   return{assets,liab,net:assets-liab,groups};
 }
 function hasMarket(mi){const m=wMonths()[mi];if(!m)return false;const am=((STATE.monthEnd||{})[m.month]||{}).market;
@@ -4084,7 +4327,7 @@ const GROUP_ICON={cash:'wallet',deposits:'landmark',stocks:'trending-up',busines
 function groupBarsHTML(t){
   const w=W(),rows=w.groups.map(g=>({g,v:t.groups[g.id]||0})).filter(r=>Math.abs(r.v)>=1);
   const max=Math.max(1,...rows.map(r=>Math.abs(r.v)));
-  const sect=side=>rows.filter(r=>r.g.side===side).sort((a,b)=>b.v-a.v).map(r=>`<button class="rank-row" onclick="ACC_FILTER='active';ACC_SEL=null;setTab('accounts')" aria-label="${escH(r.g.label)}: ${fmtIDR(r.v)}">
+  const sect=side=>rows.filter(r=>r.g.side===side).sort((a,b)=>b.v-a.v).map(r=>`<button class="rank-row" onclick="ACC_SEL=null;setTab('accounts')" aria-label="${escH(r.g.label)}: ${fmtIDR(r.v)}">
       <span class="cat-square sm" style="background:${side==='asset'?'var(--accent-soft)':'var(--bad-soft)'};color:${side==='asset'?'var(--accent-text)':'var(--bad)'}">${ic(GROUP_ICON[r.g.id]||(side==='asset'?'wallet':'receipt'))}</span>
       <span class="rank-name">${escH(r.g.label)}</span><span class="rank-val"><span class="amt">${fmtIDRShort(r.v)}</span></span>
       <span class="rank-bar"><i style="width:${Math.max(2,Math.abs(r.v)/max*100)}%;background:${side==='asset'?'var(--accent)':'var(--bad)'}"></i></span></button>`).join('');
@@ -4093,14 +4336,14 @@ function groupBarsHTML(t){
 }
 function changesHTML(li){
   if(li<1)return emptyHTML('trending-up','One month of history so far');
-  const ch=wAccounts().map(a=>({a,d:wValue(a,li)-wValue(a,li-1)})).filter(x=>Math.abs(x.d)>=1).sort((x,y)=>Math.abs(y.d)-Math.abs(x.d)).slice(0,6);
+  const ch=wAccountsAll().filter(a=>!a.suspended||Math.abs(wValue(a,li))>=1||Math.abs(wValue(a,li-1))>=1).map(a=>({a,d:wValue(a,li)-wValue(a,li-1)})).filter(x=>Math.abs(x.d)>=1).sort((x,y)=>Math.abs(y.d)-Math.abs(x.d)).slice(0,6);
   if(!ch.length)return emptyHTML('square-check','No changes since last month');
   return`<div class="list">${ch.map(({a,d})=>{const good=a.side==='asset'?d>0:d<0;return`<div class="list-item">
-      <span class="li-body"><span class="li-title" style="display:block">${escH(a.name)}</span><span class="li-sub" style="display:block">${escH(wGroup(a.group).label)}</span></span>
+      <span class="li-body${a.suspended?' muted':''}"><span class="li-title" style="display:block">${escH(a.name)} ${suspBadge(a)}</span><span class="li-sub" style="display:block">${escH(wGroup(a.group).label)}</span></span>
       <span class="delta ${good?'good':'bad'} amt">${d>0?'▲ +':'▼ −'}${fmtIDRShort(Math.abs(d)).replace('Rp ','Rp ')}</span></div>`;}).join('')}</div>`;
 }
 function cardTieHTML(li){
-  const books=wAccounts().filter(a=>a.group==='cards').reduce((s,a)=>s+wValue(a,li,'book'),0);
+  const books=wAccountsAll().filter(a=>a.group==='cards').reduce((s,a)=>s+wValue(a,li,'book'),0);
   const app=CC_CARDS.map(c=>ccState(c.key)).reduce((s,c)=>s+c.balance,0);
   return`<div class="setting-row" style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px"><div><div class="li-title">Credit cards: books vs app</div>
     <div class="li-sub">Books ${asOfLabel()}: <span class="amt">${fmtIDR(books)}</span> · App today (Maybank + OCBC CC): <span class="amt">${fmtIDR(app)}</span></div></div>
@@ -4154,23 +4397,9 @@ function renderNetWorthCharts(){
   const tb=$('nwTable');if(tb)tb.innerHTML=`<table class="data"><thead><tr><th scope="col">Month</th><th scope="col" class="num">Net worth</th></tr></thead><tbody>${keys.map((k,i)=>`<tr><td>${monthLabel(k)}</td><td class="num amt">${fmtIDR(vals[i])}</td></tr>`).join('')}</tbody></table>`;
 }
 
-/* ── Accounts (§11.6) ── */
+/* ── Account detail pieces (the Accounts page itself is merged into Books › Chart of accounts in
+   v4.1; js/books.js may reuse these: toggleDeclared, accountDetailHTML, selectAccount, drawAccountChart) ── */
 function toggleDeclared(id,ev){if(ev)ev.stopPropagation();const d=STATE.declared||(STATE.declared={});d[id]=!d[id];scheduleDriveSave();renderAll();}
-function accountRowsHTML(li){
-  const w=W(),declared=STATE.declared||{};
-  const acc=wAccounts().filter(a=>ACC_FILTER==='all'||(ACC_FILTER==='active'&&a.active)||(ACC_FILTER==='undeclared'&&a.active&&!declared[a.id]));
-  return w.groups.map(g=>{
-    const list=acc.filter(a=>a.group===g.id);if(!list.length)return'';
-    const sub=list.reduce((s,a)=>s+wValue(a,li),0);
-    return`<tr class="group-row"><th scope="rowgroup" colspan="3">${escH(g.label)}</th><td class="num amt" style="font-weight:600">${fmtIDR(sub)}</td></tr>`+
-      list.map(a=>{const v=wValue(a,li),book=wValue(a,li,'book'),mk=v!==book;
-        return`<tr class="clickable${ACC_SEL===a.id?' selected':''}" onclick="selectAccount('${escAttr(a.id)}')" tabindex="0" onkeydown="if(event.key==='Enter')selectAccount('${escAttr(a.id)}')">
-          <td class="sel-col"><input type="checkbox" ${declared[a.id]?'checked':''} onclick="toggleDeclared('${escAttr(a.id)}',event)" aria-label="Declared in tax return: ${escH(a.name)}" title="Declared in tax return"></td>
-          <td class="merchant"><div class="merchant-name">${escH(a.name)}</div><div class="merchant-sub">${a.ccy!=='IDR'?`<span class="badge">${escH(a.ccy)}</span>`:''}${!a.active?'<span class="badge">Inactive</span>':''}${naBadge(a.id)}${mk?`<span>Book <span class="amt">${fmtIDRShort(book)}</span></span>`:''}${runHooks('accountsExtraCol',a).join('')}</div></td>
-          <td class="muted">${escH(a.id)}</td>
-          <td class="amount num">${amt(v)}</td></tr>`;}).join('');
-  }).join('');
-}
 function accountDetailHTML(id,li){
   const a=wAcc(id);if(!a)return emptyHTML('landmark','Select an account to see its history');
   const ms=wMonths(),v=wValue(a,li),pv=li>0?wValue(a,li-1):null,good=pv!=null&&(a.side==='asset'?v>=pv:v<=pv);
@@ -4195,22 +4424,6 @@ function drawAccountChart(){
   CHARTS.accChart=new Chart(el,{type:'line',data:{labels:ms.map(m=>monthLabel(m.month).replace(/ \d{4}$/,'')),datasets:[{data:vals,fill:true,borderColor:acc,backgroundColor:c=>gradientFill(c.chart),pointHitRadius:12}]},
     options:{responsive:true,maintainAspectRatio:false,...animOnce(),plugins:{tooltip:{displayColors:false,callbacks:{title:it=>monthLabel(ms[it[0].dataIndex].month,true),label:c=>moneyTip(c.parsed.y)}}},
       scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:6,maxRotation:0}},y:{border:{display:false},ticks:{maxTicksLimit:4,callback:moneyTick}}}}});
-}
-function renderAccounts(){
-  if(!W())return wealthEmptyHTML();
-  const li=wMonths().length-1,t=wTotals(li),declared=STATE.declared||{};
-  const nAct=wAccounts().filter(a=>a.active).length,nUndecl=wAccounts().filter(a=>a.active&&!declared[a.id]).length;
-  if(!ACC_SEL||!wAcc(ACC_SEL))ACC_SEL=null;
-  const seg=`<div class="seg" role="group" aria-label="Show accounts"><button aria-pressed="${ACC_FILTER==='active'}" onclick="ACC_FILTER='active';renderAll()">Active (${nAct})</button><button aria-pressed="${ACC_FILTER==='undeclared'}" onclick="ACC_FILTER='undeclared';renderAll()">Not declared (${nUndecl})</button><button aria-pressed="${ACC_FILTER==='all'}" onclick="ACC_FILTER='all';renderAll()">All</button></div>`;
-  return`${pageHead('Accounts',wealthSourceLine(),`<button class="btn btn-secondary" onclick="openAddAccount()">${ic('plus')}Add account</button>${nwViewSeg()}${hideBtn()}`)}
-    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">${seg}<span class="only-sm">${nwViewSeg()}</span><button class="btn btn-secondary btn-sm only-sm" onclick="openAddAccount()">${ic('plus','s16')}Add account</button></div>
-    ${naCardHTML()}
-    <div class="grid">
-      <section class="card flush span-7">${cardHead('landmark','All accounts',`Net worth <span class="amt">${fmtIDR(t.net)}</span> · tick = declared in your tax return`)}
-        <div class="table-wrap"><table class="data acc-table"><thead><tr><th class="sel-col" scope="col"><span class="sr-only">Declared</span>${ic('square-check','s16')}</th><th scope="col">Account</th><th scope="col">Code</th><th scope="col" class="num">${NW_VIEW==='market'?'Value':'Balance'}</th></tr></thead>
-        <tbody>${accountRowsHTML(li)||`<tr><td colspan="4">${emptyHTML('square-check','Every active account is marked as declared')}</td></tr>`}</tbody></table></div></section>
-      <section class="card span-5 hide-sm" id="accDetail">${cardHead('chart-column','Account detail','')}${accountDetailHTML(ACC_SEL,li)}</section>
-    </div>`;
 }
 /* ── Month-end close (§11.7, Phase 3). The close itself happens in chat with Claude, which
    reads the books on the user's computer; this page shows where each close stands. The only
@@ -4313,7 +4526,7 @@ function renderClose(){
         <tbody>${e.lines.map(l=>`<tr><td><span class="muted">${escH(l.account)}</span> ${escH(l.name||name(l.account))}</td><td class="num amt">${l.debit?fmtIDR(l.debit):''}</td><td class="num amt">${l.credit?fmtIDR(l.credit):''}</td></tr>`).join('')}</tbody>
         <tfoot><tr><td style="font-weight:600">Total${td!==tc?' <span class="badge bad">Unbalanced</span>':''}</td><td class="num amt" style="font-weight:600">${fmtIDR(td)}</td><td class="num amt" style="font-weight:600">${fmtIDR(tc)}</td></tr></tfoot></table></div></div>`;}).join('');
   const fillHere=!c.app&&!(c.positions&&c.positions.length)?`<button class="btn btn-secondary btn-sm" onclick="meStart('${escAttr(c.month)}')">${ic('table','s16')}Fill in positions here</button>`:'';
-  const positions=c.app?`<div class="grid">${mePositionsHTML(c.month)}</div><div class="grid">${meJournalHTML(c.month,c)}</div>`
+  const positions=c.app?''
     :`<div class="grid">
       <section class="card flush span-12">${cardHead('table','Positions vs books',c.positions&&c.positions.length?'Your month-end figures compared with the book':'',fillHere)}
         ${posRows?`<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Account</th><th scope="col" class="num">Books</th><th scope="col" class="num">Your figure</th><th scope="col" class="num">Difference</th></tr></thead><tbody>${posRows}</tbody></table></div>`
@@ -4321,12 +4534,108 @@ function renderClose(){
       </section></div>`;
   const otherCard=entries||!c.app?`<div class="grid"><section class="card span-12">${cardHead('receipt',c.app?'Other entries for this month':'Journal entries to post',entries?'Post these in Accurate yourself, then tick them.':'')}
       ${entries||emptyHTML('square-check','No entries for this close')}</section></div>`:'';
+  // v4.1 (UX §11.10d "Month-end: one flow"): an app close is three numbered steps on one page, with
+  // the month's status and a ⋯ More menu in the header. A close that came from chat stays read-only.
+  // Phones hide the page header's actions: the picker, the status and More sit in one row instead.
+  if(c.app)return`${pageHead('Month-end',desc,[start,picker,meStatusBadgeHTML(c),meMoreBtnHTML(c.month)].filter(Boolean).join(''))}
+    <div class="only-sm flex me-sm-head">${picker}${meStatusBadgeHTML(c).replace('id="meStatus"','id="meStatusSm"')}${meMoreBtnHTML(c.month).replace('id="meMore"','id="meMoreSm"')}</div>
+    ${naCardHTML()}
+    ${meStepsHTML(c)}
+    ${otherCard}`;
   return`${pageHead('Month-end',desc,[start,picker].filter(Boolean).join(''))}
     ${picker?`<div class="only-sm" style="margin-bottom:12px">${picker}</div>`:''}
     ${closeStatusCardHTML(c)}
     ${naCardHTML()}
     ${positions}
     ${otherCard}`;
+}
+/* ── One flow (v4.1): 1 Check balances · 2 Post the differences · 3 Close the month. The current step
+   is open, a done step folds to its summary line (Show unfolds it), and a later step stays open so
+   you can see what comes. The figures and rules are the month-end's own (meJournal, mePost, the
+   'month-end:M' ref): only the layout changed. ── */
+const ME_UNFOLD=new Set(),ME_REASON={};
+function meFlow(c){
+  const{steps}=closeSteps(c),own=meOwn(),ps=bookMonthState(c.month);
+  const done=[steps[0].done,steps[1].done,own?ps!=='open':steps[2].done];
+  let cur=done.findIndex(d=>!d);if(cur<0)cur=3;
+  const open=i=>!done[i]||ME_UNFOLD.has(c.month+':'+(i+1));
+  return{done,cur,open,ps,own};
+}
+function meFold(M,n){const k=M+':'+n;if(ME_UNFOLD.has(k))ME_UNFOLD.delete(k);else ME_UNFOLD.add(k);renderAll();}
+function meStepCard(o){
+  const tog=o.done?`<button class="btn btn-ghost btn-sm me-fold" onclick="meFold('${escAttr(o.M)}',${o.n})" aria-expanded="${o.open}">${o.open?'Hide':'Show'}</button>`:'';
+  return`<section class="card${o.flush?' flush':''} span-12 me-step${o.done?' done':''}${o.open?'':' folded'}${o.current?' current':''}" id="${o.id}" data-step="${o.n}" aria-label="Step ${o.n}: ${escH(o.label)}">
+    <div class="card-head"><div class="card-head-l"><span class="me-num" aria-hidden="true">${o.done?ic('square-check','s16'):o.n}</span><div><h2 class="card-title">${escH(o.label)}</h2>${o.desc?`<div class="card-desc">${o.desc}</div>`:''}</div></div>
+      ${o.tools||tog?`<div class="card-tools">${o.tools||''}${tog}</div>`:''}</div>
+    ${o.open?`<div class="me-step-body">${o.body}</div>`:''}${o.after||''}</section>`;
+}
+function meStepsHTML(c){
+  const f=meFlow(c);
+  return`<div class="grid">${mePositionsHTML(c.month,f)}</div><div class="grid">${meJournalHTML(c.month,c,f)}</div><div class="grid">${meCloseStepHTML(c,f)}</div>`;
+}
+// Header: Open · Entry posted · Closed.
+function meStatusBadgeHTML(c){
+  const M=c.month,ps=bookMonthState(M);
+  if(meOwn()){
+    if(ps!=='open')return`<span class="badge good" id="meStatus">${ic('lock','s16','width:11px;height:11px;margin-right:4px')}${ps==='locked'?'Locked':'Closed'}</span>`;
+    return meJournal(M).state==='posted'?'<span class="badge accent" id="meStatus">Entry posted</span>':'<span class="badge" id="meStatus">Open</span>';
+  }
+  return closeStatusBadge(c).replace('<span class="badge','<span id="meStatus" class="badge');
+}
+function meMoreBtnHTML(M){return`<button class="icon-btn" id="meMore" onclick="meMoreMenu(this,'${escAttr(M)}')" aria-haspopup="menu" aria-label="More for month-end" title="Statement accounts, entry settings, Excel, Accurate file, add account">${ic('ellipsis')}</button>`;}
+// Month-end's Add account opens the chart's New account form when js/books.js has one.
+function meAddAccount(){if(typeof window.openCoaNewAccount==='function')window.openCoaNewAccount();else openAddAccount();}
+// Step 3: the Periods close, inline (docs/v4-books.md §3). Without the app's own book it is the old
+// re-check ("Book matches"), since only the book has periods.
+function meCloseChecklist(M){try{return typeof ledgerCloseChecklist==='function'?ledgerCloseChecklist(M,ME_REASON[M]||''):null;}catch(e){return{error:bookErrMsg(e,'This month can’t be closed'),items:[],canClose:false};}}
+function meCloseRowsHTML(ck){
+  const T={previous:'Previous month closed',drafts:'No draft journals in the month',tb:'Trial balance balances',retained:'Year-end into Retained earnings'};
+  return(ck.items||[]).map(i=>{const waived=!i.ok&&!i.blocking;
+    return`<div class="bk-check" data-code="${escH(i.code)}" data-ok="${i.ok?1:0}">${ic(i.ok?'square-check':waived?'info':'triangle-alert')}<span class="li-body"><span class="li-title" style="display:block">${escH(T[i.code]||i.code)}</span><span class="li-sub" style="display:block">${escH(i.detail||'')}</span></span><span class="badge ${i.ok?'good':waived?'warn':'bad'}">${i.ok?'OK':waived?'Reason given':'Not yet'}</span></div>`;}).join('');
+}
+function meCloseStepHTML(c,f){
+  const M=c.month,ml=monthLabel(M,true),done=f.done[2],open=f.open(2),current=f.cur===2;
+  if(!f.own){
+    const s=closeSteps(c).steps[2];
+    return meStepCard({M,n:3,id:'meCloseStep',label:'Book matches',done,open,current,desc:escH(s.hint),body:`<p class="summary-line">${closeRecheckText(c)}</p>`});
+  }
+  const nx=meShift(M,1),startNext=nx<=meLastFinished()?(meStore()[nx]?`<button class="btn btn-secondary btn-sm" id="meNext" onclick="CLOSE_SEL='${escAttr(nx)}';renderAll()">Open ${escH(monthLabel(nx,true))}</button>`
+      :`<button class="btn btn-secondary btn-sm" id="meNext" onclick="meStart('${escAttr(nx)}')">${ic('calendar-check','s16')}Start ${escH(monthLabel(nx,true))}</button>`):'';
+  if(f.ps!=='open'){
+    const p=typeof ledgerPeriods==='function'?(ledgerPeriods(M.slice(0,4))||[]).find(x=>x.month===M):null,at=p&&p.closedAt;
+    const badge=`<span class="badge good" id="meClosedBadge">${ic('lock','s16','width:11px;height:11px;margin-right:4px')}${f.ps==='locked'?'Locked':'Closed'}${at?` on ${escH(fmtDay(new Date(at)))}`:''}</span>`;
+    return meStepCard({M,n:3,id:'meCloseStep',label:'Close the month',done:true,open,current:false,
+      desc:`${escH(ml)} is ${escH(f.ps)}: nothing can be posted, edited or voided in it.`,
+      tools:`${badge}<button class="btn btn-ghost btn-sm" id="meReopen" onclick="goPeriods()">Reopen in Periods</button>${startNext}`,
+      body:`<p class="help">To change an entry in ${escH(ml)}, reopen it in Books › Periods with a reason; the reopening is kept in the audit trail.</p>`});
+  }
+  const ck=meCloseChecklist(M);
+  if(!ck)return'';
+  const first=typeof ledgerSettings==='function'?(ledgerSettings()||{}).firstMonth:null;
+  if(first&&M<first)return meStepCard({M,n:3,id:'meCloseStep',label:'Close the month',done:false,open:true,current,desc:`Your book starts in ${escH(monthLabel(first,true))}, so there is nothing to close for ${escH(ml)}.`,body:''});
+  const dr=(ck.items||[]).find(i=>i.code==='drafts'),hasDrafts=!!dr&&(dr.count||0)>0;
+  const soft=!f.done[0]||!f.done[1]?`<p class="help" style="margin-top:8px">${ic('info','s16')}${!f.done[0]?'Some balances are still empty.':'The month’s entry isn’t posted yet.'} You can still close the month, but check steps 1 and 2 first.</p>`:'';
+  const reason=hasDrafts?`<div class="field" style="margin-top:12px"><label class="label" for="meCloseReason">Reason to close with ${dr.count} draft${dr.count===1?'':'s'} left</label>
+      <textarea class="input" id="meCloseReason" rows="2" maxlength="300" placeholder="e.g. These drafts belong to next month" oninput="meCloseReasonInput('${escAttr(M)}',this.value)">${escH(ME_REASON[M]||'')}</textarea>
+      <p class="help">Drafts don’t count in the book. <button class="bk-link" onclick="openJournals({status:'draft',from:'${escAttr(M)}-01',to:'${escAttr(meMonthEnd(M))}'})">Review them in Journals</button>, or give a reason to close anyway.</p></div>`:'';
+  const btn=`<button class="btn btn-primary btn-sm" id="meCloseBtn" onclick="meCloseMonth('${escAttr(M)}')"${ck.canClose?'':' disabled aria-disabled="true"'}>${ic('lock','s16')}Close ${escH(ml)}</button>`;
+  const left=(ck.items||[]).filter(i=>!i.ok&&i.blocking).length;
+  return meStepCard({M,n:3,id:'meCloseStep',label:'Close the month',done:false,open:true,current,
+    desc:ck.error?`<span class="bad">${escH(ck.error)}</span>`:ck.canClose?`Ready to close ${escH(ml)}`:`${left} check${left===1?'':'s'} to clear before ${escH(ml)} can close`,
+    tools:btn,body:`<div id="meCloseList">${meCloseRowsHTML(ck)}</div>${reason}${soft}`});
+}
+function meCloseReasonInput(M,v){
+  ME_REASON[M]=v;const ck=meCloseChecklist(M),b=$('meCloseBtn'),l=$('meCloseList');
+  if(b){b.disabled=!(ck&&ck.canClose);b.setAttribute('aria-disabled',String(b.disabled));}
+  if(l&&ck)l.innerHTML=meCloseRowsHTML(ck);
+}
+async function meCloseMonth(M){
+  if(!meOwn()||typeof ledgerClosePeriod!=='function'){toast('Your book isn’t set up yet');return;}
+  await ownBookPull();
+  try{ledgerClosePeriod(M,String(ME_REASON[M]||'').trim());}
+  catch(e){bookErrToast(e,`Couldn’t close ${monthLabel(M,true)}`);renderAll();return;}
+  delete ME_REASON[M];renderAll();
+  toast(`${monthLabel(M,true)} closed`,{action:'Periods',onAction:goPeriods});
 }
 /* ── Month-end in the app: you fill in your positions (prefilled from statements where they reach
    the month-end, or kept from last month), the app suggests the one journal voucher that brings
@@ -4364,7 +4673,9 @@ function meLedger(){const w=W(),l=w&&Array.isArray(w.ledger)?w.ledger:[];const x
 function meName(id){const a=wAcc(id);if(a)return a.name;const l=meLedger().find(x=>x.id===id);return l?l.name:id;}
 function meAccounts(M){
   const st=meClose0(M),order=W().groups.map(g=>g.id);
-  return wAccounts().filter(a=>a.active||(st&&st.pos[a.id]))
+  // A suspended account takes part only while it still holds a balance or already has a figure.
+  const bi=meBookIdx(M);
+  return wAccountsAll().filter(a=>a.suspended?!!(st&&st.pos[a.id])||Math.abs(meBook(a.id,bi))>=1:a.active||(st&&st.pos[a.id]))
     .sort((a,b)=>order.indexOf(a.group)-order.indexOf(b.group)||a.id.localeCompare(b.id,undefined,{numeric:true}));
 }
 function mePosOf(M,code){const st=meClose0(M),p=st&&st.pos[code];return p&&p.v!=null?p:null;}
@@ -4386,7 +4697,9 @@ function meParse(s){
    the same last four digits in the same currency; cards go to the book's one card account. A
    match you pick (or "not in the book") always wins. */
 function meAutoMap(ca){
-  const accs=wAccounts();
+  // A suspended card or bank that still holds a balance keeps its statement link (wShown), so its
+  // spending can still be turned into journals; empty suspended accounts are left out.
+  const accs=typeof wShown==='function'?wShown(wMonths().length-1):wAccounts();
   if(ca.kind==='card'){const c=accs.filter(a=>a.group==='cards');return c.length===1?c[0].id:'';}
   const m=String(ca.label||ca.id).match(/(\d{4})(?!.*\d)/);if(!m)return'';
   let hits=accs.filter(a=>a.group==='cash'&&(a.ccy||'IDR')===(ca.currency||'IDR')&&a.name.includes(m[1]));
@@ -4615,7 +4928,7 @@ function meIsDiff(M,a,bi){const p=mePosOf(M,a.id);return!!p&&Math.abs(Math.round
 function meCounts(M){const bi=meBookIdx(M),accs=meAccounts(M);return{all:accs.length,fill:accs.filter(a=>!mePosOf(M,a.id)).length,diff:accs.filter(a=>meIsDiff(M,a,bi)).length};}
 function meChipsHTML(M){
   const n=meCounts(M),b=(k,l)=>`<button aria-pressed="${ME_FILTER===k}" onclick="ME_FILTER='${k}';renderAll()">${l} <span class="me-cnt" id="me-cnt-${k}">${n[k]}</span></button>`;
-  return`<div class="seg sm me-chips" role="group" aria-label="Show rows">${b('all','All')}${b('fill','To fill')}${b('diff','Differences')}</div>`;
+  return`<div class="seg sm me-chips" role="group" aria-label="Show rows">${b('fill','To fill')}${b('diff','Differences')}${b('all','All')}</div>`;
 }
 // Jump from the status card: show the empty rows, or scroll to the entry.
 function meShow(M,what){
@@ -4630,11 +4943,16 @@ function meFillMenu(el,M){
     {label:'Same as last month',icon:'refresh-cw',onSelect:()=>meKeepAll(M)}]});
 }
 function meMoreMenu(el,M){
-  const items=[{label:'Download Excel',icon:'download',onSelect:()=>xlDownload(M)},{label:'Upload Excel',icon:'upload',onSelect:()=>xlPick(M)},{label:'Add account',icon:'plus',onSelect:()=>openAddAccount()}];
-  const c=CM();if(c&&c.accounts.length)items.push({label:'Match statements to accounts',icon:'arrow-left-right',onSelect:()=>meMapSheet()});
-  openMenu(el,{title:'Your balances',items});
+  const items=[],c=CM(),j=meJournal(M),own=meOwn(),st=meClose0(M),can=!j.dlIssues.length||(own&&j.state==='posted');
+  if(c&&c.accounts.length)items.push({label:'Statement accounts',icon:'arrow-left-right',onSelect:()=>meMapSheet()});
+  items.push({label:'Entry settings',icon:'settings',onSelect:()=>meSettingsSheet(M)},
+    {label:'Download Excel',icon:'download',onSelect:()=>xlDownload(M)},{label:'Upload Excel',icon:'upload',onSelect:()=>xlPick(M)});
+  const lbl=st&&st.exportedAt?'Download for Accurate again':'Download for Accurate';
+  items.push({label:can?lbl:`${lbl} · ${j.dlIssues[0]}`,icon:'download',onSelect:()=>{if(can)meExport(M);else toast(j.dlIssues[0]);}},
+    {label:'Add account',icon:'plus',onSelect:()=>meAddAccount()});
+  openMenu(el,{title:'Month-end',items});
 }
-function mePositionsHTML(M){
+function mePositionsHTML(M,f){
   const st=meClose0(M),bi=meBookIdx(M),accs=meAccounts(M),grpLabel=id=>wGroup(id).label;
   const show=a=>ME_FILTER==='fill'?!mePosOf(M,a.id):ME_FILTER==='diff'?meIsDiff(M,a,bi):true;
   const bookShort=bi<0?'':monthLabel(wMonths()[bi].month).replace(/ \d{4}$/,'');
@@ -4659,17 +4977,21 @@ function mePositionsHTML(M){
   let gap='';
   if(bi>=0&&wMonths()[bi].month<M){const bm=wMonths()[bi].month,after=[];for(let k=meShift(bm,1);k<=M&&after.length<4;k=meShift(k,1))after.push(monthLabel(k).replace(/ \d{4}$/,''));
     gap=`<div class="banner info me-banner">${ic('info')}<span class="msg">Your book runs to ${escH(monthLabel(bm,true))}, so differences include ${after.length>3?'every month since then':escH(after.length===1?after[0]:after.slice(0,-1).join(', ')+' and '+after[after.length-1])}.</span></div>`;}
-  const tools=`<button class="btn btn-secondary btn-sm" onclick="meFillMenu(this,'${escAttr(M)}')" aria-haspopup="menu">${ic('receipt','s16')}Fill empty rows${ic('chevron-down','s16')}</button>
-    <button class="icon-btn" onclick="meMoreMenu(this,'${escAttr(M)}')" aria-haspopup="menu" aria-label="More for your balances" title="Excel, add account, match statements">${ic('ellipsis')}</button>`;
+  const nf=meStmtReady(M),empties=accs.length-filled;
+  const tools=`<button class="btn btn-primary btn-sm" id="meFillBtn" onclick="meFill('${escAttr(M)}')" title="${nf?`Fill ${nf} empty row${nf===1?'':'s'} from statements dated ${escH(meDay(meMonthEnd(M)))}`:`No statement dated ${escH(meDay(meMonthEnd(M)))} yet for the empty rows`}">${ic('landmark','s16')}Fill from statements${nf?` (${nf})`:''}</button>
+    ${empties?`<button class="btn btn-ghost btn-sm" id="meKeepAllBtn" onclick="meKeepAll('${escAttr(M)}')" title="Fill the empty rows with last month's figures">${ic('refresh-cw','s16')}Same as last month</button>`:''}`;
   const empty=!rows?`<div style="padding:0 var(--card-pad) var(--card-pad)">${ME_FILTER==='fill'?emptyHTML('square-check','Every account has a balance'):ME_FILTER==='diff'?emptyHTML('square-check','No differences'):emptyHTML('table','No accounts to check yet')}</div>`:'';
-  return`<section class="card flush span-12" id="mePosCard">${cardHead('table','1 · Your balances',`<span id="me-count">${filled} of ${accs.length} entered</span> · amounts owed shown as positive`,tools)}
-    <div class="me-bar">${meChipsHTML(M)}</div>
+  const body=`<div class="me-bar">${meChipsHTML(M)}</div>
     ${gap?`<div style="padding:0 var(--card-pad)">${gap}</div>`:''}
-    ${rows?`<div class="table-wrap"><table class="data me-table"><thead><tr><th scope="col">Account</th><th scope="col" class="num">In your book${bookShort?` (${escH(bookShort)})`:''}</th><th scope="col">Your figure</th><th scope="col" class="num">Difference</th></tr></thead><tbody>${rows}</tbody></table></div>`:empty}
-    </section>`;
+    ${rows?`<div class="table-wrap"><table class="data me-table"><thead><tr><th scope="col">Account</th><th scope="col" class="num">In your book${bookShort?` (${escH(bookShort)})`:''}</th><th scope="col">Your figure</th><th scope="col" class="num">Difference</th></tr></thead><tbody>${rows}</tbody></table></div>`:empty}`;
+  f=f||{done:[false],open:()=>true,cur:0};
+  const done=f.done[0],open=f.open(0),nd=meCounts(M).diff;
+  return meStepCard({M,n:1,id:'mePosCard',flush:true,label:'Check balances',done,open,current:f.cur===0,
+    desc:`<span id="me-count">${filled} of ${accs.length} entered</span>${done?` · ${nd?`${nd} difference${nd===1?'':'s'} to post`:'no differences'}`:' · amounts owed shown as positive'}`,
+    tools:open?tools:'',body});
 }
 function meAccOptions(sel,blank,includeBalance){
-  const led=meLedger(),kinds=[['expense','Expense'],['income','Income'],['equity','Equity']];
+  const led=meLedger().filter(x=>!x.suspended),kinds=[['expense','Expense'],['income','Income'],['equity','Equity']];
   let o=`<option value="">${escH(blank)}</option>`;
   for(const[k,l]of kinds){const xs=led.filter(x=>x.kind===k);if(xs.length)o+=`<optgroup label="${l}">${xs.map(x=>`<option value="${escH(x.id)}"${x.id===sel?' selected':''}>${escH(x.id)} · ${escH(x.name)}</option>`).join('')}</optgroup>`;}
   if(includeBalance)o+=`<optgroup label="Balance sheet">${wAccounts().map(x=>`<option value="${escH(x.id)}"${x.id===sel?' selected':''}>${escH(x.id)} · ${escH(x.name)}</option>`).join('')}</optgroup>`;
@@ -4721,7 +5043,7 @@ function meEntryMoreMenu(el,M){
     {label:can?lbl:`${lbl} · ${j.dlIssues[0]}`,icon:'download',onSelect:()=>{if(can)meExport(M);else toast(j.dlIssues[0]);}},
     {label:'Entry settings',icon:'settings',onSelect:()=>meSettingsSheet(M)}]});
 }
-function meJournalHTML(M,c){
+function meJournalHTML(M,c,f){
   const j=meJournal(M),e=c.entries.find(x=>x.id==='J'),posted=e?entryPosted(c,e):false,st=meClose0(M),own=meOwn();
   const period=j.from?`${meDay(j.from)} ${j.from.slice(0,4)} – ${meDay(j.date)} ${j.date.slice(0,4)}`:`up to ${meDay(j.date)} ${j.date.slice(0,4)}`;
   const jtitle=(extra)=>`<div class="li-title"><span class="badge accent" style="margin-right:8px">J</span>${escH(j.description)} · dated ${escH(meDay(j.date))} ${j.date.slice(0,4)}${extra||''}</div>`;
@@ -4737,7 +5059,7 @@ function meJournalHTML(M,c){
       <div class="entry-tools"><button class="btn btn-ghost btn-sm" onclick="copyEntry('${escAttr(M)}','J')">${ic('download','s16')}Copy</button>
       <label class="check"><input type="checkbox" ${posted?'checked':''} onchange="toggleEntryPosted('${escAttr(M)}','J')"> Posted in Accurate</label></div>`}</div>
       ${upd?`<div class="banner info me-banner">${ic('info')}<span class="msg">You changed your figures after posting this month. Update the posted entry so the book follows; the earlier version stays in its history.</span></div>`:''}${j.lines.length?meLinesTable(j.lines):''}</div>`;
-  }else body=emptyHTML('square-check',j.issues.length?j.issues[0]:'Nothing to post');
+  }else body=emptyHTML('square-check',j.issues.length&&!/^Nothing to post/.test(j.issues[0])?j.issues[0]:'No differences: nothing to post');
   const fx=j.fx.length&&!(own&&j.state==='posted')?`<div class="entry"><div class="entry-head"><div class="li-title"><span class="badge warn" style="margin-right:8px">FX</span>${own?'Foreign-currency accounts — go into your book with the lines above. The Accurate import file leaves them out (it can’t carry exchange rates)':'Foreign-currency accounts — post by hand in Accurate (the import file can’t carry exchange rates)'}</div></div>${meLinesTable(j.fx)}</div>`:'';
   const can=!j.dlIssues.length||(own&&j.state==='posted');
   const next=st&&st.exportedAt?`<div class="me-next"><div class="li-title">${ic('square-check','s16')} Saved ${escH(fmtDateTime(st.exportedAt))} as <code>${escH(meFileName(M))}</code></div>
@@ -4749,13 +5071,19 @@ function meJournalHTML(M,c){
   const post=own&&j.state!=='posted'?`<button class="btn btn-primary btn-sm" id="mePostBtn" ${j.issues.length?'disabled aria-disabled="true"':''} onclick="mePost('${escAttr(M)}')" title="${j.issues.length?escH(j.issues[0]):'Put this entry in your own book'}">${ic('book-open','s16')}${j.state==='update'?'Update posted entry':'Post to book'}</button>`:'';
   const more=own?`<button class="icon-btn" id="meEntryMore" onclick="meEntryMoreMenu(this,'${escAttr(M)}')" aria-haspopup="menu" aria-label="More for the entry" title="Accurate file, entry settings">${ic('ellipsis')}</button>`
     :`<button class="icon-btn" onclick="meSettingsSheet('${escAttr(M)}')" aria-label="Entry settings" title="Entry settings">${ic('settings')}</button>`;
-  const tools=post+dl+more;
-  return`<section class="card span-12" id="meJournal">${cardHead('receipt','2 · Post the entry',`${own?'What changes in your book so it matches your balances':'What to post in Accurate so the book matches your balances'} · statement activity ${escH(period)}`,tools)}
-    ${j.locked?bookLockHTML(M,j.state==='update'?'update its entry':'post this entry'):''}
+  f=f||{done:[false,false],open:()=>true,cur:1};
+  const done=f.done[1],open=f.open(1),pv=own&&j.state==='posted'?j.posted:null;
+  // Folded once posted: the summary keeps "Posted to your book" and View voucher in reach.
+  const view=pv&&!open?`<button class="btn btn-ghost btn-sm" onclick="openJournals({from:'${escAttr(pv.date)}',to:'${escAttr(pv.date)}'})" title="Find the voucher in Journals">${ic('book-open','s16')}View voucher</button>`:'';
+  const tools=view+post+dl+more;
+  const desc=pv?`<span class="good">Posted to your book</span>${pv.number?` as ${escH(pv.number)}`:''}`:done&&!j.lines.length&&!j.fx.length?'No differences: nothing to post'
+    :`${own?'What changes in your book so it matches your balances':'What to post in Accurate so the book matches your balances'} · statement activity ${escH(period)}`;
+  const inner=`${j.locked?bookLockHTML(M,j.state==='update'?'update its entry':'post this entry'):''}
     ${meAskHTML()}
     ${!can&&!j.locked&&j.lines.length&&!(meAskHTML()&&j.issues[0]==='Choose where unexplained differences go')?`<p class="help err" style="margin-bottom:12px">${ic('info','s16')}${escH(j.issues[0])}</p>`:''}
     ${j.pending.length&&!own?`<p class="help" style="margin-bottom:12px;color:var(--warn)">${ic('triangle-alert','s16')}${j.pending.map(escH).join(', ')} ${j.pending.length===1?'isn’t':'aren’t'} in Accurate yet — create ${j.pending.length===1?'it':'them'} there before importing this file.</p>`:''}
-    ${body}${fx}${next}</section>`;
+    ${body}${fx}`;
+  return meStepCard({M,n:2,id:'meJournal',label:'Post the differences',done,open,current:f.cur===1,desc,tools,body:inner,after:next});
 }
 // Patch only what depends on the figures, so the input being typed in keeps its cursor.
 function mePatch(M){
@@ -4769,9 +5097,10 @@ function mePatch(M){
   const cnt=$('me-count');if(cnt)cnt.textContent=`${accs.filter(a=>mePosOf(M,a.id)).length} of ${accs.length} entered`;
   const n=meCounts(M);for(const k of['all','fill','diff']){const e=$('me-cnt-'+k);if(e)e.textContent=n[k];}
   const c=allCloses().find(x=>x.month===M);if(!c)return;
-  const j=$('meJournal');if(j){const open=[...j.querySelectorAll('details')].map(d=>d.open);j.outerHTML=meJournalHTML(M,c);
+  const j=$('meJournal');if(j){const open=[...j.querySelectorAll('details')].map(d=>d.open);j.outerHTML=meJournalHTML(M,c,c.app?meFlow(c):null);
     [...$('meJournal').querySelectorAll('details')].forEach((d,k)=>{if(open[k]!==undefined)d.open=open[k];});}
   const sc=$('closeStatus');if(sc)sc.outerHTML=closeStatusCardHTML(c);
+  const hb=$('meStatus');if(hb&&c.app){const h=meStatusBadgeHTML(c);if(hb.outerHTML!==h)hb.outerHTML=h;}
 }
 
 /* An app close as the page shows it: same shape as a snapshot close, so the stepper, ticks and
@@ -4818,7 +5147,7 @@ function naNextCode(near){
 }
 function naParent(code){const m=String(code).match(/^(.*)\.\d+$/);return m?m[1]:'';}
 function naNearOptions(kind,sel){
-  const xs=kind==='income'||kind==='expense'?meLedger().filter(l=>l.kind===kind):wAccounts().filter(a=>a.side===kind);
+  const xs=kind==='income'||kind==='expense'?meLedger().filter(l=>l.kind===kind&&!l.suspended):wAccounts().filter(a=>a.side===kind);
   return`<option value="">Choose…</option>`+xs.map(x=>`<option value="${escH(x.id)}"${x.id===sel?' selected':''}>${escH(x.id)} · ${escH(x.name)}</option>`).join('');
 }
 function naGroupOptions(kind,sel){return W().groups.filter(g=>g.side===kind).map(g=>`<option value="${escH(g.id)}"${g.id===sel?' selected':''}>${escH(g.label)}</option>`).join('');}
@@ -4980,7 +5309,7 @@ function incAnswerSnapshot(id,yes){const x=incStore()[id],w=W();if(!x||!w)return
 function incOn(code,bookEnd,to){return incList().filter(x=>x.account===code&&x.date<=to&&!incInBook(x,bookEnd)).reduce((s,x)=>s+Math.round(x.amount),0);}
 function incIntoAccounts(){return wAccounts().filter(a=>a.side==='asset'&&(a.ccy||'IDR')==='IDR'&&(a.active||a.pending));}
 function incIncomeOptions(sel){
-  const xs=meLedger().filter(l=>l.kind==='income');
+  const xs=meLedger().filter(l=>l.kind==='income'&&!l.suspended);
   let o=`<option value="">Choose…</option>`+xs.map(x=>`<option value="${escH(x.id)}"${x.id===sel?' selected':''}>${escH(x.id)} · ${escH(x.name)}${x.pending?' (new)':''}</option>`).join('');
   if(sel&&!xs.some(x=>x.id===sel))o+=`<option value="${escH(sel)}" selected>${escH(sel)}</option>`;
   return o;
@@ -5484,16 +5813,19 @@ function cashTxBodyHTML(){
     const changed=ty!==t.type,cls=m.g==='internal'?'internal':t.amount>0?'in':'';
     const sub=[escH(m.label),escH(a.label)];if(other)sub.push(`↔ ${escH(cashAcc(other.account).label)}`);if(changed)sub.push('changed by you');
     const title=t.counterparty||t.desc||'—',money=`${t.amount>0?'+':'−'}${cashMoney(t.amount,t.currency)}`;
-    html+=`<button class="cm-row" onclick="openCashTx('${escAttr(t.id)}')" aria-label="${escH(title)}, ${escH(m.label)}, ${t.amount>0?'in':'out'} ${escH(cashMoney(t.amount,t.currency))}, ${fmtDay(new Date(t.date+'T00:00:00'))}. Change type">
+    const sp=spCashState(t),pick=spPickOn('cash'),pk='cash:'+t.id;
+    const row=`<button class="cm-row" onclick="openCashTx('${escAttr(t.id)}')" aria-label="${escH(title)}, ${escH(m.label)}, ${t.amount>0?'in':'out'} ${escH(cashMoney(t.amount,t.currency))}, ${fmtDay(new Date(t.date+'T00:00:00'))}. Change type">
       <span class="cat-square" style="background:${G.soft};color:${G.color}" aria-hidden="true">${ic(m.icon)}</span>
-      <span class="cm-body"><span class="tx-title" style="display:block">${escH(title)}</span><span class="tx-sub" style="display:block">${sub.join(' · ')}</span></span>
+      <span class="cm-body"><span class="tx-title" style="display:block">${escH(title)}</span><span class="tx-sub" style="display:block">${sub.join(' · ')}${sp.badge}</span></span>
       <span class="cm-amt ${cls}"><span class="amt">${money}</span></span></button>`;
+    // Spend lines take a "To journal" button (and a tick box in Select) beside the row (UX §11.10d).
+    html+=sp.row?`<div class="cm-line${pick&&SP_PICK.keys.has(pk)?' selected':''}">${pick?`<span class="cm-pick">${sp.done?'':`<input type="checkbox" ${SP_PICK.keys.has(pk)?'checked':''} onchange="spPickToggle('${escAttr(pk)}')" aria-label="Select ${escH(title)}">`}</span>`:''}${row}${sp.can?`<span class="cm-sp">${spBtnHTML(`spOne('cash','${escAttr(t.id)}')`,title)}</span>`:''}</div>`:row;
   }
-  return`<div>${html}</div>${all.length>CM_LIMIT?`<div class="table-foot"><button class="btn btn-ghost" onclick="CM_LIMIT+=50;renderCashTxBody()">Show more · ${all.length-CM_LIMIT} left</button></div>`:''}`;
+  return`<div>${html}</div>${all.length>CM_LIMIT?`<div class="table-foot"><button class="btn btn-ghost" onclick="CM_LIMIT+=50;renderCashTxBody()">Show more · ${all.length-CM_LIMIT} left</button></div>`:''}${spPickOn('cash')?spPickFootHTML():''}`;
 }
 function cashTxCardHTML(){
   const accs=CM().accounts,seg=[['all','All'],['in','Money in'],['out','Money out'],['internal','Internal'],['invest','Investments']];
-  return`<section class="card flush span-12" id="cmTxCard">${cardHead('receipt','Transactions',`${cashFilteredTxns().length} in ${monthLabel(CM_MONTH,true)} · tap one to change its type`)}
+  return`<section class="card flush span-12" id="cmTxCard">${cardHead('receipt','Transactions',`${cashFilteredTxns().length} in ${monthLabel(CM_MONTH,true)} · tap one to change its type`,spPickBtnHTML('cash'))}
     <div class="cm-tools">
       <div class="seg" role="group" aria-label="Show">${seg.map(([k,l])=>`<button aria-pressed="${CM_FILTER===k}" onclick="cashSetFilter('${k}')">${l}</button>`).join('')}</div>
       <select class="input" aria-label="Account" onchange="cashSetAcc(this.value)"><option value="all">All accounts</option>${accs.map(a=>`<option value="${escH(a.id)}"${CM_ACC===a.id?' selected':''}>${escH(a.label)}</option>`).join('')}</select>
