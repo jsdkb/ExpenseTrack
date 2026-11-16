@@ -3269,10 +3269,21 @@ function spConvert(rows,o){
   if(!spOwn()){toast('Set up your book first in Settings › Your book');return;}
   const s=spSplit(rows);
   if(o.single&&s.done.length){const f=spFind(s.done[0].ref,s.done[0].stmtLine);toast(`Already in your book${f&&f.number?` as ${f.number}`:' as a draft'}`);return;}
+  // One row whose card or bank has no book account yet: open the journal form anyway, so the
+  // accounts are picked right there instead of sending the owner off to map the statement first.
+  if(o.single&&!s.go.length&&s.skip.length&&window.etEntry&&typeof etEntry.openPrefilled==='function'){spOpenPick(s.skip[0]);return;}
   if(!s.go.length){if(s.skip.length)spSkipToast(s.skip);else toast('Nothing to turn into a journal');return;}
   const need=[...new Set(s.go.map(r=>r.category))].filter(c=>!spCatAcc(c));
   const go=()=>spMake(s.go,s.skip,o);
   if(need.length)spCatSheet(need,s.go,go,o);else go();
+}
+async function spOpenPick(r){
+  await ownBookPull();SP_IDX=null;
+  if(spFind(r.ref,r.stmtLine)){toast('Already in your book');return;}
+  const v=spVoucher(r,spCatAcc(r.category)||spSuggest(r.category)||'');
+  v.lines[1].account=spAcc(r.credit)?r.credit:'';
+  try{etEntry.openPrefilled(v);toast(`No book account for ${r.source} yet: pick the accounts here`,{duration:6000});}
+  catch(e){console.error('openPrefilled failed',e);spSkipToast([r]);}
 }
 function spSkipToast(sk){toast(spSkipNote(sk),{action:'Statement accounts',duration:9000,onAction:()=>{setTab('close');setTimeout(()=>{if(typeof meMapSheet==='function')meMapSheet();},80);}});}
 function spCatSheet(cats,rows,then,o){
