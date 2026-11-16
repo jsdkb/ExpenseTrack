@@ -153,7 +153,15 @@ A refund on a spending row (money in on the same category) is `spending` with `d
 - `BOOK2()` → the live book or null. `book2Status()` → `idle | loading | ready | none | error |
   blocked`. `ensureBook2()` → Promise; once per sign-in: IndexedDB cache (only when it belongs to
   the signed-in account), then Drive `book.json`; when neither exists and the old book is ready,
-  offers the conversion (never automatic: the owner taps **Convert my book** on a new page).
+  the conversion runs **by itself once per sign-in** (owner, 16 Nov 2026: "I want the new version
+  to automatically be filled with data"; before that it waited for **Convert my book**, which
+  stays on Start here). The gate still decides whether the copy is kept.
+- **Automatic links** (same date): every email bank and rupiah statement that has no entry in
+  `bankMap` / `stmtMap` yet is linked to the account the current app uses for it: a statement
+  to its Month-end statement link (`meMapOf`, old code `c` → new account `a-c`), a bank to the
+  statement its alerts are linked to (`ETStatements.linkFor` with `STATE.cardMap`). Only an
+  asset or liability account in use is taken. Unlinking stores `''`, so a link the owner removed
+  is never put back. `window.W2_AUTO = false` switches both off (the test suites use it).
 - Saving: debounced, compare-and-swap on the Drive file revision using the core's existing
   `driveFindFileByName`, `driveReadJson`, `driveUploadJson`, `driveGetRevision`; on a conflict
   re-read, `bookLib.merge`, retry. Signed out or offline: the cache only, marked unsaved, saved on

@@ -214,7 +214,7 @@
     const list = `<div class="only-sm w2-pad"><div class="list" id="w2rList">${rows.map(r => `<div class="list-item" data-w2-row="${escH(r.e.id)}" data-kind="${escH(r.e.kind)}"><div class="li-body${r.notMine >= r.amount ? ' w2-dim' : ''}"><div class="li-title">${escH(r.e.description || '—')}</div>
         <div class="li-sub">${escH(fmtDay(new Date(r.e.date + 'T00:00:00')))} · ${escH(r.category)}${r.e.kind === 'split' ? ` · your part ${money(r.amount - r.notMine)}` : ''}</div>${rowBadge(r) ? `<div style="margin-top:4px">${rowBadge(r)}</div>` : ''}</div>
         <span class="w2-right">${money(r.amount)}</span>${rowMenuBtn(r)}</div>`).join('')}</div></div>`;
-    const body = rows.length ? table + list : emptyHTML('inbox', Object.keys((b.settings || {}).bankMap || {}).length ? 'No email rows in this month' : 'No rows yet. Link your banks on Start here first.', 'Open Start here', "setTab('w2-start')");
+    const body = rows.length ? table + list : emptyHTML('inbox', Object.values((b.settings || {}).bankMap || {}).some(Boolean) ? 'No email rows in this month' : 'No rows yet. Link your banks on Start here first.', 'Open Start here', "setTab('w2-start')");
     return `${pageHead(title, desc, hideBtn())}
       <div class="w2-bar">${stepper(months, M, 'rowsStep')}</div>
       <div class="grid">${strip}</div>

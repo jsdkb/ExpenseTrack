@@ -148,6 +148,7 @@
     clearTimeout(SAVE_T); clearTimeout(SYNC_T); SAVE_T = null; SYNC_T = null;
     B = null; BFOR = ''; STATUS = 'idle'; ERROR = null; BLOCKED = null; BUSY = null; LOCAL_DONE = false; DRIVE_TRIED = false;
     fileId = null; revId = null; UNSAVED = false; COUNTS = null; GATE = null; SYNC_SIG = ''; VER++;
+    AUTO_CONVERT_TRIED = false; AUTO_SIG = '';
   }
 
   // Loads the new book once per sign-in: the device cache (only this account's entry), then Drive.
@@ -392,12 +393,14 @@
     try { const c = typeof CM === 'function' ? CM() : null; return c && Array.isArray(c.accounts) ? c : null; } catch (_) { return null; }
   }
   // Links one statement account to a book account (settings.stmtMap); an empty accountId removes the link.
+  // Unlinking keeps the key with '' ("left unlinked on purpose"), so the automatic links (autoLink)
+  // never link it again by themselves.
   function book2SetStmtMap(stmtAccount, accountId) {
     stmtAccount = String(stmtAccount || ''); if (!stmtAccount) throw new Error('Pick a statement');
     return book2Do(w => {
       if (accountId && !usable(w.accounts[accountId])) throw new Error('Pick an account that is in use');
       const t = now(), after = { ...((w.settings || {}).stmtMap || {}) };
-      if (accountId) after[stmtAccount] = accountId; else delete after[stmtAccount];
+      after[stmtAccount] = accountId || '';
       try { bookLib.setSetting(w, 'stmtMap', after, t); }
       catch (e) { if (!/not a setting/.test(errText(e))) throw e; w.settings.stmtMap = after; w.settings.at = t; }   // an engine without the key yet
       return after;
@@ -408,10 +411,68 @@
     return book2Do(w => {
       if (accountId && !usable(w.accounts[accountId])) throw new Error('Pick an account that is in use');
       const t = now(), after = { ...((w.settings || {}).bankMap || {}) };
-      if (accountId) after[bank] = accountId; else delete after[bank];
+      after[bank] = accountId || '';
       bookLib.setSetting(w, 'bankMap', after, t);   // stamps settings.at and writes the audit record
       return after;
     }, 'bank-map');
+  }
+
+  /* ── Filling the new book by itself (owner, 16 Nov 2026) ──
+     The owner wants the new book filled without tapping anything, to compare it with the current app.
+     1. Conversion: tried once per sign-in when no new book exists yet and the current book is ready.
+        The gate still decides: the copy is kept only when every month-end balance matches.
+     2. Links: each email bank and each rupiah statement gets the account the current app already uses
+        for it (statement links on Month-end; a bank's alerts follow its linked statement). Only links
+        that are not set yet are filled; a link the owner changed or removed is never touched. */
+  let AUTO_CONVERT_TRIED = false, AUTO_SIG = '';
+  const autoOn = () => window.W2_AUTO !== false;
+  const oldAccountFor = sa => {
+    if (!sa || typeof meMapOf !== 'function' || typeof cashAcc !== 'function') return '';
+    const code = meMapOf(cashAcc(sa));
+    return code ? 'a-' + code : '';
+  };
+  const linkable = (w, id) => !!id && usable(w.accounts[id]) && ['asset', 'liability'].includes(w.accounts[id].kind);
+  function autoLink() {
+    if (!autoOn() || !B || BLOCKED || !dataReady()) return 0;
+    const c = stmtAccounts(), st = B.settings || {}, bm = st.bankMap || {}, sm = st.stmtMap || {};
+    const banks = book2Banks().filter(b => !Object.prototype.hasOwnProperty.call(bm, b));
+    const stmts = c ? c.accounts.filter(a => (a.currency || 'IDR') === 'IDR' && !Object.prototype.hasOwnProperty.call(sm, a.id)) : [];
+    const s = banks.join('|') + '#' + stmts.map(a => a.id).join('|') + '#' + Object.keys(B.accounts).length;
+    if (s === AUTO_SIG) return 0;
+    AUTO_SIG = s;
+    const addB = {}, addS = {};
+    for (const a of stmts) { const id = oldAccountFor(a.id); if (linkable(B, id)) addS[a.id] = id; }
+    if (c && window.ETStatements && typeof ETStatements.linkFor === 'function') {
+      const cardMap = (typeof STATE !== 'undefined' && STATE && STATE.cardMap) || {};
+      for (const b of banks) {
+        const r = rows().find(t => rowBank(t) === b);
+        if (!r) continue;
+        const sa = ETStatements.linkFor(r.bank, c.accounts, cardMap).link;
+        const sAcc = sa && c.accounts.find(a => a.id === sa);
+        // Only through a rupiah statement; a statement the owner unlinked on purpose ('') is not guessed past.
+        if (!sAcc || (sAcc.currency || 'IDR') !== 'IDR') continue;
+        const id = Object.prototype.hasOwnProperty.call(sm, sa) ? sm[sa] : (addS[sa] || '');
+        if (linkable(B, id)) addB[b] = id;
+      }
+    }
+    const nB = Object.keys(addB).length, nS = Object.keys(addS).length;
+    if (!nB && !nS) return 0;
+    book2Do(w => {
+      const t = now();
+      if (nB) bookLib.setSetting(w, 'bankMap', { ...((w.settings || {}).bankMap || {}), ...addB }, t);
+      if (nS) {
+        const after = { ...((w.settings || {}).stmtMap || {}), ...addS };
+        try { bookLib.setSetting(w, 'stmtMap', after, t); }
+        catch (e) { if (!/not a setting/.test(errText(e))) throw e; w.settings.stmtMap = after; w.settings.at = t; }
+      }
+    }, 'auto-link');
+    return nB + nS;
+  }
+  function autoConvert() {
+    if (!autoOn() || AUTO_CONVERT_TRIED || BUSY || STATUS !== 'none' || B || GATE || !token()) return;
+    if (typeof ledgerStatus === 'function' && ledgerStatus() !== 'ready') return;
+    AUTO_CONVERT_TRIED = true;
+    book2Convert().catch(e => console.warn('ExpenseTrack preview: the automatic copy stopped: ' + errText(e)));
   }
 
   /* ── Hooks: load once someone is signed in; sync after the rows or the links changed ── */
@@ -419,6 +480,8 @@
     const me = owner(); if (!me) return;
     if (BFOR && BFOR !== me) reset();
     if (!BUSY && (STATUS === 'idle' || (token() && !DRIVE_TRIED && !BLOCKED && Date.now() >= RETRY_AT))) ensureBook2();
+    autoConvert();
+    try { autoLink(); } catch (e) { console.warn('ExpenseTrack preview: the automatic links stopped: ' + errText(e)); }
     if (B && !BLOCKED && dataReady() && !SYNC_T && sig() !== SYNC_SIG) {
       SYNC_T = setTimeout(() => { SYNC_T = null; try { if (B && dataReady() && sig() !== SYNC_SIG) book2SyncSpending(); } catch (e) { console.warn('Spending sync failed', e); } }, 0);
     }
@@ -470,7 +533,7 @@
       const old = typeof LEDGER === 'function' ? LEDGER() : null;
       const n = old ? Object.values(old.vouchers || {}).filter(v => v && v.status === 'posted').length : 0;
       return `<div class="card span-12">${head('Not set up yet')}
-        <p class="muted" style="margin:0 0 12px">The new book starts as a copy of your current one. Every account and every posted journal is copied, then every month-end balance is checked against your current book. The copy is kept only when all of them match. Your current book is never changed.</p>
+        <p class="muted" style="margin:0 0 12px">The new book starts as a copy of your current one, made by itself once your current book has loaded. Every account and every posted journal is copied, then every month-end balance is checked against your current book. The copy is kept only when all of them match. Your current book is never changed.</p>
         ${old ? `<p class="help" style="margin:0 0 12px">Your current book has ${plural(Object.keys(old.accounts || {}).length, 'account')} and ${plural(n, 'posted journal')}.</p>` : `<p class="help" style="margin:0 0 12px">Your current book has not loaded yet. Open Books once, then come back.</p>`}
         <button class="btn btn-primary" id="w2Convert" onclick="w2Start.convert(this)"${old && token() ? '' : ' disabled'}>${ic('repeat')}Convert my book</button>
         ${!token() ? '<p class="help" style="margin-top:8px">Sign in again to convert.</p>' : ''}
@@ -505,7 +568,7 @@
       return `<div class="setting-row" data-w2-bank="${escH(b)}"><div style="min-width:0"><div class="li-title">${escH(b)}</div><div class="li-sub">${plural(count[b] || 0, 'email row')}${from ? ' since ' + escH(dayText(from)) : ''}${cur ? '' : ' · waiting for a link'}</div></div>
         <select class="input me-select" id="w2Bank${i}" data-bank="${escH(b)}" aria-label="Account for ${escH(b)}" onchange="w2Start.pick(this)">${accountOptions(cur)}</select></div>`;
     }).join('') : emptyHTML('inbox', dataReady() ? 'No bank emails found yet' : 'Your bank emails are still loading');
-    return `<div class="card span-12" id="w2Banks">${cardHead('landmark', 'Link your banks', 'Tell the new book which account each bank’s emails belong to. Spending from a bank is added once it is linked.')}${body}</div>`;
+    return `<div class="card span-12" id="w2Banks">${cardHead('landmark', 'Link your banks', 'Each bank is linked by itself to the account your current app uses for it. Change a link here if it is wrong; a bank that could not be matched waits for you.')}${body}</div>`;
   }
   function stmtCardHTML() {
     const c = stmtAccounts(); if (!c) return '';
@@ -519,7 +582,7 @@
       return `<div class="setting-row" data-w2-stmt="${escH(a.id)}"><div style="min-width:0"><div class="li-title">${escH(a.label || a.id)}</div><div class="li-sub">${sub}</div></div>
         ${foreign ? '<span class="badge">Left out</span>' : `<select class="input me-select" id="w2Stmt${i}" data-stmt="${escH(a.id)}" data-label="${escH(a.label || a.id)}" aria-label="Account for ${escH(a.label || a.id)}" onchange="w2Start.pickStmt(this)">${accountOptions(cur)}</select>`}</div>`;
     }).join('') : emptyHTML('inbox', 'No statements in the app yet');
-    return `<div class="card span-12" id="w2Stmts">${cardHead('receipt', 'Link your statements', 'Tell the new book which account each bank or card statement belongs to. Its lines then show in the Inbox; nothing is guessed for a statement that is not linked.')}${body}</div>`;
+    return `<div class="card span-12" id="w2Stmts">${cardHead('receipt', 'Link your statements', 'Each statement is linked by itself to the account your current app’s Month-end uses for it. Its lines then show in the Inbox; nothing is guessed for a statement that is not linked.')}${body}</div>`;
   }
   function syncCardHTML() {
     const c = COUNTS, cell = (label, n, sub) => `<div class="strip-cell"><span class="kpi-label">${label}</span><span class="kpi-value">${n}</span><span class="kpi-sub">${sub}</span></div>`;
