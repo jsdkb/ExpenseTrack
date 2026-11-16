@@ -149,7 +149,8 @@
     .sb-brand .wordmark { font-size: 15px; }
     .logomark { width: 22px; height: 22px; flex-shrink: 0; display: block; }
     .wordmark { font-weight: 600; letter-spacing: -0.01em; }
-    .sb-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+    .sb-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 8px;
+      flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
     .sb-group { font-size: 11px; line-height: 14px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
       color: var(--text-3); padding: 14px 12px 6px; }
     .sb-item {

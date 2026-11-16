@@ -32,7 +32,7 @@ the current app as an extra so both can be used at once, without changing the or
 | `tests/w2/*.test.mjs` | Node tests for `book.js` (`node --test tests/w2`). |
 | `tests/test_w2_*.py`, `tests/run_w2.py` | Playwright suites using `tests/harness.py` (import it, do not edit it) and fabricated fixtures in `tests/fixtures/w2-*.js(on)`. |
 
-Menu: `boot.js` appends `['w2','New · preview']` to the core's `NAV_GROUPS` array (it is a
+Menu: `boot.js` appends `['w2','Version 2 · new book (preview)']` to the core's `NAV_GROUPS` array (it is a
 top-level `const` array, so pushing to it needs no core edit) and registers its pages with
 `registerPage({group:'w2', ...})`. Page keys start with `w2-`. Icons come from the existing sprite
 or `registerIcon`.

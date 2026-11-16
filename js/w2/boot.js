@@ -25,7 +25,7 @@
   // NAV_GROUPS is a top-level const array in the core: pushing to it needs no core edit.
   try {
     if (typeof NAV_GROUPS !== 'undefined' && Array.isArray(NAV_GROUPS) && !NAV_GROUPS.some(function (g) { return g && g[0] === 'w2'; })) {
-      NAV_GROUPS.push(['w2', 'New · preview']);
+      NAV_GROUPS.push(['w2', 'Version 2 · new book (preview)']);
     }
   } catch (_) { /* the core is not there: nothing to add to */ }
 
