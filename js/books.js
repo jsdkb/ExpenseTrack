@@ -79,6 +79,7 @@
     .bk-grow{flex:1 1 auto}
     table.bk-coa tr.bk-muted td,table.bk-coa tr.bk-muted .merchant-name,table.bk-coa tr.bk-muted .bk-band-l{color:var(--text-3)}
     .badge.bk-muted-b{background:var(--surface-3);color:var(--text-3)}
+    .bk-kind{font-size:12px;line-height:16px;color:var(--text-2);white-space:nowrap}
     td.bk-decl,th.bk-decl{text-align:center;width:64px}
     table.bk-coa tr:not(.bk-band) td:last-child{width:48px;padding-left:0;padding-right:8px;text-align:right}
     .bk-dchk{width:20px;height:20px;accent-color:var(--accent);cursor:pointer;vertical-align:middle;margin:0}
@@ -267,6 +268,10 @@
   }
   const kindBadge=k=>{const[t,tone]=JKIND[k]||[k,''];return`<span class="badge${tone?' '+tone:''}" data-kind="${attr(k)}">${escH(t)}</span>`;};
   const statBadge=s=>{const[t,tone]=JSTAT[s]||[s,''];return`<span class="badge${tone?' '+tone:''}" data-status="${attr(s)}">${escH(t)}</span>`;};
+  // The Journals list is quiet (UX §8.4): the kind as small grey text, a status chip only for a
+  // draft or a void journal. The voucher panel keeps the badges, the reference and the line count.
+  const kindText=k=>`<span class="bk-kind" data-kind="${attr(k)}">${escH((JKIND[k]||[k])[0])}</span>`;
+  const listStat=s=>s==='posted'?'':statBadge(s);
   const numHTML=j=>j.number?escH(j.number):'<span class="bk-draftno">(draft)</span>';
   // A suspended account still in a report (it holds figures there): muted badge.
   const suspB=on=>on?' <span class="badge bk-muted-b" data-badge="suspended">Suspended</span>':'';
@@ -409,7 +414,7 @@
     const lock=/\ben-lock\b/.test(tools)?'':lockNote(j);
     const errs=j.status==='draft'&&j.errors&&j.errors.length?`<div class="bk-errs" id="bkVErrs">${j.errors.map(e=>`<div class="help err">${ic('triangle-alert','s16')}<span>${escH(e)}</span></div>`).join('')}</div>`:'';
     const batch=en&&typeof en.batchBadge==='function'?en.batchBadge(j)||'':'';
-    return`<div class="bk-vhead" id="bkVHead" data-id="${attr(j.id)}" data-status="${attr(j.status)}"><div class="eyebrow">${escH(dLong(j.date))}${j.refNo?` · ${escH(j.refNo)}`:''}</div>
+    return`<div class="bk-vhead" id="bkVHead" data-id="${attr(j.id)}" data-status="${attr(j.status)}"><div class="eyebrow">${escH(dLong(j.date))}${j.refNo?` · <span id="bkVRef">${escH(j.refNo)}</span>`:''} · <span id="bkVCount">${j.lines.length} line${j.lines.length===1?'':'s'}</span></div>
         <div class="bk-vtitle" id="bkVNum">${numHTML(j)}</div>
         <div class="muted" style="overflow-wrap:anywhere">${escH(j.description||'')}</div>
         <div class="bk-badges">${kindBadge(j.kind)}${statBadge(j.status)}${batch}</div></div>
@@ -420,15 +425,15 @@
   }
   function openVoucherSheet(id){const j=findJournal(id);if(!j)return;openSheet({title:'Journal',body:voucherHTML(j),wide:true});}
   function jRowHTML(j){
-    const sel=U.journals.sel===j.id,en=EN();
+    const sel=U.journals.sel===j.id;
     return`<tr class="clickable${sel?' selected':''}" data-bk="jopen" data-id="${attr(j.id)}" data-status="${attr(j.status)}" tabindex="0">
       <td class="bk-no">${numHTML(j)}</td><td class="date">${escH(dShort(j.date))}</td>
-      <td class="merchant"><div class="merchant-name" style="font-weight:500">${escH(j.description||'—')}</div><div class="merchant-sub">${j.refNo?`<span>${escH(j.refNo)}</span>`:''}${en&&en.batchBadge?en.batchBadge(j):''}<span>${j.lines.length} lines</span></div></td>
-      <td><div class="bk-badges">${kindBadge(j.kind)}${statBadge(j.status)}</div></td><td class="num" data-raw="${j.debit}" style="white-space:nowrap">${plain(j.debit)}</td></tr>`;
+      <td class="merchant"><div class="merchant-name" style="font-weight:500">${escH(j.description||'—')}</div></td>
+      <td><div class="bk-badges">${kindText(j.kind)}${listStat(j.status)}</div></td><td class="num" data-raw="${j.debit}" style="white-space:nowrap">${plain(j.debit)}</td></tr>`;
   }
   function jItemHTML(j){
     return`<button class="list-item" data-bk="jopen" data-id="${attr(j.id)}" data-status="${attr(j.status)}"><span class="li-body"><span class="li-title" style="display:block">${escH(j.description||'—')}</span>
-      <span class="li-sub" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${escH(dShort(j.date))} · ${numHTML(j)} ${kindBadge(j.kind)}${j.status!=='posted'?statBadge(j.status):''}</span></span><span class="li-amt">${plain(j.debit)}</span></button>`;
+      <span class="li-sub" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${escH(dShort(j.date))} · ${numHTML(j)} · ${kindText(j.kind)}${listStat(j.status)}</span></span><span class="li-amt">${plain(j.debit)}</span></button>`;
   }
   function jListHTML(){
     const list=jFiltered(),n=list.length,pages=Math.max(1,Math.ceil(n/PAGE_SIZE)),u=U.journals;
@@ -439,7 +444,7 @@
     const pager=`<div class="bk-pager"><span class="help" id="bkJCount" data-n="${n}">${(s+1).toLocaleString('en-GB')}–${(s+page.length).toLocaleString('en-GB')} of ${n.toLocaleString('en-GB')} journals</span>
       <span class="btns"><button class="btn btn-secondary btn-sm" data-bk="page" data-p="journals" data-d="-1" ${u.page===0?'disabled':''}>${ic('chevron-left','s16')}Previous</button>
       <button class="btn btn-secondary btn-sm" data-bk="page" data-p="journals" data-d="1" ${u.page>=pages-1?'disabled':''}>Next${ic('chevron-right','s16')}</button></span></div>`;
-    return`<div class="table-wrap hide-sm"><table class="data" id="bkJTable"><thead><tr>${sortTH('journals','number','Number')}${sortTH('journals','date','Date')}<th scope="col">Description</th><th scope="col">Kind · status</th>${sortTH('journals','amount','Amount',true)}</tr></thead>
+    return`<div class="table-wrap hide-sm"><table class="data" id="bkJTable"><thead><tr>${sortTH('journals','number','Number')}${sortTH('journals','date','Date')}<th scope="col">Description</th><th scope="col">Kind</th>${sortTH('journals','amount','Amount',true)}</tr></thead>
       <tbody>${page.map(jRowHTML).join('')}</tbody></table></div>
       <div class="list bk-list only-sm" style="padding:0 var(--card-pad)">${page.map(jItemHTML).join('')}</div>${pager}`;
   }

@@ -132,10 +132,10 @@ Pages:
   the app; add others with `registerIcon` (Lucide path markup, 24×24 view box).
 - Menu placement: groups render in the order top, Wealth, Books, Plan; the Books and Plan headings
   only appear once a page is registered in them. Within a group, pages sort by `order`
-  (built-ins: Daily spending 10 — key `overview`, short label "Spending" —, Spending 20, Credit
-  cards 30; Net worth 10, Cash movements 20, Income 30, Accounts 40, Month-end 50). A `top` page with
-  `order` below 10 comes first: Home is `order: 5`. The resulting menu is Home · Daily spending ·
-  Spending · Credit cards · Wealth (Net worth, Cash movements, Income, Investment returns 35,
+  (built-ins: Spending 10 — key `overview`; the old key `spending` is an alias that opens it on
+  its Insights view, and stays reserved —, Credit cards 30; Net worth 10, Cash movements 20, Income 30, Accounts 40, Month-end 50). A `top` page with
+  `order` below 10 comes first: Home is `order: 5`. The resulting menu is Home · Spending ·
+  Credit cards · Wealth (Net worth, Cash movements, Income, Investment returns 35,
   Accounts, Month-end, SPT pack 60) · Books (Chart of accounts, Journals, General ledger, Balance
   sheet, Income statement, Trial balance) · Plan (Budgets, Goals); Settings sits in the sidebar
   footer.
@@ -161,7 +161,7 @@ Hooks (results are HTML strings inserted as-is: escape data with `escH()`):
 
 | Hook | Called from | Return |
 |---|---|---|
-| `txnBadges(tx)` | every transaction row on Overview and Spending (web table and phone list) | HTML appended to the row's sub-line |
+| `txnBadges(tx)` | every transaction row on Spending (web table and phone list) | HTML appended to the row's sub-line. Return a chip only when the row needs the owner (UX §8.4): the built-in hooks return "Check" (alert missing from a closed statement, undecided) and "Draft" (its journal is a draft), nothing else |
 | `cardsHistory(cards)` | Credit cards › History, once per render; `cards` = the selected card states (`{key, label, ...}`) | HTML appended below the paid-through history (e.g. a statements section) |
 | `accountsExtraCol(acc)` | each account row on Accounts | HTML appended to the account's sub-line under its name |
 | `homeComingUp()` | Home (B calls `runHooks('homeComingUp')`) | items `{date, kind: 'statement'\|'due'\|'missing'\|'manual', account, label, amount?}` |
@@ -181,7 +181,7 @@ untransformed(name, list)              // → copies of the rows with every unap
 `load()` runs `ALL_TRANSACTIONS = runTransforms('transactions', ALL_TRANSACTIONS)` in both of its
 paths (cache and Gmail), right after the core rules (`applySplits`) and before the
 `ALL_TRANSACTIONS_RAW` snapshot, the hidden filter, manual entries and every total. So whatever a
-transform changes is seen by Daily spending, Spending and Credit cards alike. With no transform
+transform changes is seen by Spending (both views) and Credit cards alike. With no transform
 registered the list is unchanged.
 
 The cache never holds a transform's changes. The Gmail path calls `saveCache` before

@@ -216,7 +216,7 @@
   const LINE=obj({account:{type:'string',description:'posting account id'},debit:{type:'integer',description:'whole rupiah, 0 for a credit line'},credit:{type:'integer',description:'whole rupiah, 0 for a debit line'},
     memo:{type:'string'},fx:{anyOf:[{type:'null'},obj({ccy:{type:'string'},amount:{type:'number'},rate:{type:'number'}},['ccy','amount','rate'])]}},['account','debit','credit','memo','fx']);
   const ACTIONS=[
-    {name:'navigate',description:'Opens a page for the owner at once (no data changes): any page key (overview = Daily spending, spending, cards, networth, cash, accounts, income, close = Month-end, settings, more, home, coa, journals, ledger, bs, pl, tb, periods, audit, budgets, goals, invest, spt), optionally with filters.',
+    {name:'navigate',description:'Opens a page for the owner at once (no data changes): any page key (overview = Spending on its Transactions view, spending = the same Spending page on its Insights view, cards, networth, cash, accounts, income, close = Month-end, settings, more, home, coa, journals, ledger, bs, pl, tb, periods, audit, budgets, goals, invest, spt), optionally with filters.',
       input_schema:obj({page:S.str,month:{type:'string',description:'YYYY-MM'},from:S.str,to:S.str,category:S.str,merchant:S.str,bank:S.str,card:S.str,cards_view:{type:'string',enum:['current','history','fx']},account:S.str,journal:{type:'string',description:'journal id or number'}},['page'])},
     {name:'set_category',description:'Proposes a category for listed transactions (1–200 ids). Per transaction only; never a merchant rule.',
       input_schema:obj({transaction_ids:{type:'array',items:S.str},category:{type:'string',description:'a known category, or a new name of at most 40 characters'}},['transaction_ids','category'])},
@@ -726,12 +726,14 @@
     const parts=[pageLabel(k)];
     const go=()=>{if(typeof closeAllSheets==='function')closeAllSheets();if(ACTIVE_TAB===k)renderAll();else setTab(k);};
     if(k==='overview'||k==='spending'){
+      // One Spending page (UX §11.2): `spending` opens its Insights view, `overview` Transactions.
+      const view=k==='spending'?'insights':'tx';parts.push(view==='insights'?'Insights':'Transactions');
       let f=null,t=null;if(i.month){if(!validMonth(i.month))bad('month must be YYYY-MM');f=i.month+'-01';t=monthEnd(i.month);}
       else if(i.from||i.to){[f,t]=range(i,true);}
       if(f){CUSTOM_FROM=f;CUSTOM_TO=t;ACTIVE_RANGE='custom';parts.push(rangeLabel(f,t));}
       if(f||i.category||i.merchant||i.bank){ACTIVE_CATEGORIES=new Set(i.category?[String(i.category)]:[]);ACTIVE_MERCHANT=i.merchant?String(i.merchant):null;if(i.bank)ACTIVE_BANK=String(i.bank);}
       if(i.category)parts.push(String(i.category));if(i.merchant)parts.push(String(i.merchant));if(i.bank)parts.push(String(i.bank));
-      TX_LIMIT=50;go();
+      TX_LIMIT=50;if(typeof closeAllSheets==='function')closeAllSheets();setSpendView(view);window.scrollTo(0,0);
     }else if(k==='cards'){
       if(i.cards_view)CARDS_SUB=i.cards_view;if(i.card){const c=cardOf(i.card);if(!c)bad(`card ${i.card} is not one of ${CC_CARDS.map(x=>x.key).join(', ')}`);CCP_CARD=c.key;parts.push(c.label);}
       parts.push({current:'Current cycle',history:'History',fx:'Foreign currency'}[CARDS_SUB]||CARDS_SUB);go();
@@ -873,8 +875,7 @@
       ${a.items.some(i=>i.number)?`<div class="as-item-sub">${a.items.filter(i=>i.number).map(i=>escH(i.number)).join(' · ')}</div>`:''}
       ${a.skipped&&a.skipped.length?`<div class="as-note" id="asSkipped"><span class="as-note-t">Not undone (${a.skipped.length}): ${a.skipped.map(s=>`${amtText(s.summary)} — ${amtText(s.why)}`).join('; ')}</span></div>`:''}</section>`;
   }
-  const CHIPS={overview:['Recategorise this month’s ride-hailing trips','What did I spend most on this month?','Add a cash expense from today'],
-    spending:['Which categories grew most this month?','Recategorise this month’s ride-hailing trips','Show Food & Dining for last month'],
+  const CHIPS={overview:['Recategorise this month’s ride-hailing trips','Which categories grew most this month?','Add a cash expense from today'],
     budgets:['Suggest budgets from my last 3 months','Which budgets am I on pace to overspend?','Set a budget for Groceries'],
     journals:['Record a transfer between my accounts','Show this month’s journals','Find journals for a description'],
     cards:['How much do I owe on each card?','Mark my card as paid today','Show the last card cycles'],

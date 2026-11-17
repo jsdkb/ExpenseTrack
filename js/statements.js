@@ -286,7 +286,7 @@
       commit(v==='__none'?`${bank} alerts are no longer checked against a statement`:`${bank} alerts now checked against ${accLabel(v)}`);},
     setManual(id,on){put('manual',id,on?{on:true}:{deleted:true});commit(on?'Download reminder on':'Download reminder off');},
     setWhenUsed(id,on){put('whenUsed',id,on?{on:true}:{deleted:true});commit(on?'Marked as only sending a statement when used':'Back to a statement every month');},
-    openStmt,
+    openStmt,openCheck,
     // For tests and other modules (read-only).
     reconcile,strip,unapply,apply,calendar,linkFor,calendarRows:()=>calRows(),cycleDay,expectedNext,comingUp,LAG_DEFAULT,LATE_GRACE,WINDOW_PERIODS,last:()=>LAST,refresh,
   };
@@ -497,15 +497,20 @@
   }
 
   /* ── Hooks ── */
-  const badge=(cls,text,title)=>`<span class="badge${cls?' '+cls:''}" style="margin-left:4px" title="${escH(title)}">${escH(text)}</span>`;
+  // A row shows a label only when something needs the owner (UX §8.4): a matched, added, kept,
+  // excluded or undone row is silent; an alert missing from a closed statement and not decided
+  // yet gets one small "Check" chip that opens the place where it is decided.
   registerHook('txnBadges',t=>{
-    const s=t&&t.stmt;if(!s)return null;
-    if(s.kind==='match')return badge('good','Statement ✓',s.set!==s.orig?`Statement amount. The alert said ${s.orig==null?'no rupiah amount':fmtIDR(s.orig)}`:'Matches the statement');
-    if(s.kind==='added')return badge('accent','From statement','On the statement but not in your email alerts, so it was added');
-    if(s.kind==='review')return badge('warn','Not on statement','Not found on the closed statement. Review it under Credit cards › History');
-    if(s.kind==='excluded')return badge('','Excluded','Not on the statement; excluded from your totals');
-    return null;
+    const s=t&&t.stmt;if(!s||s.kind!=='review')return null;
+    return`<button type="button" class="badge warn stmt-check" style="margin-left:4px" title="Not on the statement. Open to decide" onclick="event.stopPropagation();ETStatements.openCheck()">Check</button>`;
   });
+  // Where a "Check" row is decided: today the review card under Credit cards › History.
+  function openCheck(){
+    if(typeof closeAllSheets==='function')closeAllSheets();
+    CARDS_SUB='history';CCP_CARD='all';
+    if(ACTIVE_TAB==='cards')renderAll();else setTab('cards');
+    requestAnimationFrame(()=>{const e=document.getElementById('stmtReview');if(e)e.scrollIntoView({block:'center'});});
+  }
 
   registerHook('homeComingUp',()=>{try{return comingUp(calRows(),todayISO());}catch(e){console.error('Statements comingUp failed',e);return[];}});
 
@@ -617,7 +622,7 @@
       <div class="list" style="margin-top:8px">
         ${row('Statement charges','Spending lines on the statement',money(s.charges),'')}
         ${row('Alerts before fixes','What your email alerts said',money(s.before),'')}
-        ${row('Alerts after fixes','What Daily spending, Spending and Credit cards now count',money(s.after),'')}</div>
+        ${row('Alerts after fixes','What Spending and Credit cards now count',money(s.after),'')}</div>
       <p class="help" style="margin-top:8px">${s.exact} alert${s.exact===1?'':'s'} matched the statement exactly.</p>
       ${part('Amounts fixed',fixRows)}${part('Only on the statement',addRows)}${part('Alerts not on the statement',revRows)}`;
   }

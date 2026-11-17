@@ -101,8 +101,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 | Section | Contains | Comes from today | Ships in |
 |---|---|---|---|
 | **Home** (landing page) | Net worth, real savings, the wealth bridge, liquidity, debts, coming up, data freshness (§11.11) | Snapshot + books + statements | v2 (2026-11-03) |
-| **Daily spending** (was Overview; key `overview`, phone label "Spending") | KPI row, spend trend, category breakdown, transactions list, subscriptions to review — e-mail alerts corrected by the statements | Overview tab | Phase 1, renamed v2 |
-| **Spending** | Trend analysis, categories, top merchants, top transfers, recurring charges, bank split | Reporting tab | Phase 1 |
+| **Spending** (key `overview`; was two pages, Daily spending and Spending, merged 2026-11-16) | One page, two views (§11.2). **Transactions:** the month's figure with its trend, key figures, the transactions list — e-mail alerts corrected by the statements. **Insights:** KPIs, monthly and category charts, month so far, cash flow, categories, bank split, top merchants and transfers, recurring charges | Overview + Reporting tabs | Phase 1, merged 2026-11-16 |
 | **Credit Cards** | Per-card position, estimated billing, paid-through history, current-balance transactions; sub-tab **Foreign currency** | CC Position + Foreign Currency tabs | Phase 1 |
 | **Net Worth** | Net worth over time, Book/Market toggle, assets vs liabilities by group, what changed, card tie-out, allocation | Monthly snapshot of the accounting book | Phase 2 (shipped 2026-10-16) |
 | **Accounts** | All accounts grouped with subtotals, balance history, "declared in tax return" flag | Same snapshot | Phase 2 (shipped 2026-10-16) |
@@ -123,8 +122,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 │ ▣ ExpenseTrack       │  ← monogram + Inter 600 wordmark, 56px tall area
 ├──────────────────────┤
 │ ⌂ Home               │  ← landing page; active: accent-soft fill, accent-text label, 3px left bar
-│ ◎ Daily spending     │
-│ ◔ Spending           │
+│ ◎ Spending           │  ← one item; its two views switch inside the page (§11.2)
 │ ▭ Credit Cards       │
 │ ─ WEALTH ─────────── │  ← group label
 │ ◇ Net Worth          │
@@ -156,7 +154,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 
 ```
 ┌─────────────────────────────┐
-│ Daily spending ⟳● [This mo▾] + │ ← top app bar 56px: title · sync dot · period chip · add
+│ Spending    ⟳● [This mo▾]  + │ ← top app bar 56px: title · sync dot · period chip · add
 ├─────────────────────────────┤
 │                             │
 │          content            │
@@ -167,11 +165,11 @@ anywhere, and a home screen organised like a financial statement rather than a r
 └─────────────────────────────┘
 ```
 
-- **Tabs (v2):** Home · Spending · Cards · Net Worth · More — exactly these five. "Spending" here is
-  **Daily spending** (its short label); the Spending category page moves to More on phones.
-  (Phase 1 was Overview · Spending · Cards · More.) Never more than 5.
-- **More** opens a full page list in menu order: Spending, the Wealth pages not in the bar, the
-  Books pages, Budgets, Goals, then Settings, Export, Sign out.
+- **Tabs (v2):** Home · Spending · Cards · Net Worth · More — exactly these five. "Spending" is the
+  one merged Spending page (§11.2); it opens on its Transactions view, and Insights is one tap
+  away on the page's own switch. (Phase 1 was Overview · Spending · Cards · More.) Never more than 5.
+- **More** opens a full page list in menu order: the Wealth pages not in the bar, the Books pages,
+  Budgets, Goals, then Settings, Export, Sign out. There is no second Spending entry.
 - Active tab: accent icon + label, a 32×4px accent pill above the icon. Inactive: text-3.
 - Tapping the active tab again scrolls its page to top.
 - The bar hides on scroll-down and returns on scroll-up only inside long lists; elsewhere it is fixed.
@@ -428,20 +426,34 @@ Disabled: 40% opacity, no hover. Loading: label stays, spinner replaces the icon
 - **Status badge** (`micro`, `--radius-xs`): `OK` (good), `Fail` (bad), `Pending` (warn),
   `Excluded` (neutral `--surface-2`). Replaces today's "✓ OK / ✗ Fail" spans.
 - **Bank badge:** neutral badge with the bank's short code; no bank logos (trademark + extra assets).
-- **Source badges (v2)** — say where a figure comes from, on the row's sub-line:
+- **Rule for list rows (2026-11-16): a row shows a label only when something needs the owner.
+  Normal is silent.** A row that matched its statement, came from a statement, is posted or is
+  already in the book carries no chip: that is the expected state, and the detail stays one tap
+  away (the statement sheet, Credit cards › History, the voucher panel). Chips left on rows are
+  the ones that ask for a decision or warn that a figure is not final: `Check`, `Draft`, `Void`,
+  `Failed`, and the exclusion marks on the Credit cards table.
+
+  | Row | Shows | Never shows |
+  |---|---|---|
+  | Spending transaction (table and phone list) | `Check` (warn) when the alert is missing from a closed statement and undecided; `Draft` (info) when its journal is still a draft; `Failed` | `Statement ✓`, `From statement`, `Excluded`, `In book` |
+  | Credit cards current-cycle table, Cash movements rows | `Draft` (info); the cards table keeps `Excluded from balance` and `Removed from Overview` | `In book` |
+  | Journals list | `Draft` (info), `Void`; the kind as small grey text, not a chip | `Posted`, the line count, the Accurate reference, the `AI · n of m` chip (all three are in the voucher panel) |
+
+  `Check` is a small warn chip and a button: title "Not on the statement. Open to decide"; it
+  opens the place where that is decided (today the review card under Credit cards › History).
+- **Source badges (v2)** — say where a figure comes from, in detail views and on rows that are not
+  the lists above:
 
   | Badge | Tone | Means |
   |---|---|---|
-  | `Statement ✓` | good | The e-mail alert matches the statement; the statement's rupiah amount is used (tooltip gives the alert's amount when it differed) |
-  | `From statement` | accent | On the statement only (fee, interest, missed alert), added to spending |
-  | `Not on statement` | warn | Alert missing from a closed statement, waiting in the review list |
-  | `Excluded` | neutral | Removed from the totals by the owner (original kept, undoable) |
+  | `Check` | warn | Alert missing from a closed statement, waiting in the review list (was `Not on statement`) |
   | `Book only` | neutral | A figure from the book with no market value recorded |
   | `Prepared, not in Accurate yet` | warn | A voucher the app prepared (month-end, income) that the imported book doesn't have yet |
   | `Provisional` | warn | Filled in from statements/typed income after the book's last month-end (§11.11) |
   | `Stale` / `Missing` | warn / neutral | Data freshness (§11.11) |
 
-- **Origin badges (v3)** — on a voucher in the book (Journals panel, voucher sheet), beside the
+- **Origin badges (v3)** — on a voucher in the book (Journals panel, voucher sheet; the Journals
+  list shows the same word as plain grey text), beside the
   date line: `From Accurate` neutral · `Manual` neutral · `AI` accent · `Month-end` neutral ·
   `Income` neutral; a voided voucher adds `Void` (bad). The accent is reserved for `AI` so an entry
   Claude drafted is easy to spot; the badge never implies the entry is wrong.
@@ -498,7 +510,8 @@ Esc closes, focus returns to the trigger. On mobile every menu becomes a bottom 
 - Header row: `--surface-2`, `label` style, sticky when the table scrolls.
 - Rows 44px, 1px `--border` dividers, hover `--surface-2`. Numbers right-aligned, tabular.
 - Column order for transactions: Date · Merchant (+ note line) · Category chip · Bank · Amount ·
-  row actions (visible on hover: edit, split, delete; always visible on focus).
+  row actions (visible on hover: edit, split, delete; always visible on focus). The merchant's
+  sub-line carries a chip only when the row needs the owner (§8.4).
 - Sortable headers show a sort arrow; current sort is announced via `aria-sort`.
 - Long tables paginate at 50 rows or use "Show more"; never render thousands of rows at once.
 - **Below 768px tables become row lists (§8.9).** Never shrink a table to fit a phone.
@@ -526,6 +539,9 @@ Esc closes, focus returns to the trigger. On mobile every menu becomes a bottom 
 - 64px tall, 16px padding. Leading 36px category square; title `body-strong`; second line `small`
   `--text-2`; amount `body-strong` right-aligned. Refunds/credits show `+Rp` in `--good`.
 - Grouped by day with sticky day headers ("Today", "Yesterday", "Mon 13 Oct") and a day total.
+- The second line is quiet: category · bank, then a chip only when the row needs the owner
+  (`Check`, `Draft`; §8.4). When a chip is there the text shortens with an ellipsis and the chip
+  stays whole; `Check` is a button with a padded hit area and does not open the row's sheet.
 - Tap → transaction detail sheet. Swipe → actions (§10.2). Long-press → multi-select mode
   (bulk categorise) — see [Open items](#20-open-items).
 
@@ -709,10 +725,36 @@ Wireframes are structural, not pixel-exact. All numbers are placeholders.
   button full width. The explanation stays collapsible.
 - No glow, no animation beyond the standard fade-in.
 
-### 11.2 Overview (home) — v1.1 "statement" layout
+### 11.2 Spending — one page, two views (merged 2026-11-16)
 
-Question: *"Where do I stand this month?"* The page reads top-down like a statement: one headline
-figure with its trend, a strip of supporting figures, then detail.
+The owner asked for one spending tab, not two. Daily spending (the v1.1 "statement" layout) and
+Spending (was Reporting, §11.3) are now **one page, key `overview`, label "Spending"** everywhere:
+sidebar, top bar, document title, phone bar. A two-part segmented control (§8.3 `seg`,
+`aria-label="Spending views"`) sits under the page head and the filter row:
+
+**Transactions** (default) | **Insights**
+
+- The page opens on Transactions; leaving the page and coming back returns to Transactions.
+- Switching view keeps the period, bank, category and merchant filters: one filter row and one
+  period button serve both views, and a category or merchant picked in Insights also filters the
+  transactions list.
+- The page head is the same in both views: greeting line, period button, **Add**, hide amounts,
+  **Sync**. On phones the top bar shows the period chip and Add in both views.
+- **Every card appears in exactly one view.** Old links to the Spending page (`setTab('spending')`,
+  Ask Claude's page `spending`) open this page on Insights.
+- Only the visible view's charts are drawn.
+
+| View | Cards, in order |
+|---|---|
+| Transactions | Summary panel (spent, delta, pace, trend chart) · key-figures strip · phones only: "n recurring charges to review" (opens Insights at the recurring card) · Transactions |
+| Insights | 4 KPI cards · Monthly spend + Category mix per month · Month so far · Cash flow (with a wealth snapshot) · Where it went (full list) + Split by bank · Top merchants + Top transfers (phones: one card with a Merchants / Transfers switch) · Recurring charges to review |
+
+#### Transactions view
+
+Question: *"Where do I stand this month, and what did I buy?"* It reads top-down like a
+statement: one headline figure with its trend, a strip of supporting figures, then the list.
+"Where it went" (short list), "Card status" and the desktop recurring card left this view on
+2026-11-16: the first and last live in Insights, card status on Credit cards.
 
 **Web (lg)**
 ```
@@ -720,6 +762,7 @@ figure with its trend, a strip of supporting figures, then detail.
 │         ││ Good afternoon                  [This month ▾] [+ Add] [◉] [⟳] │
 │         ││ Thursday, 16 October · Synced 2 min ago                         │
 │         ││ (bank chips / active filter chips)                              │
+│         ││ [ Transactions | Insights ]                                     │
 │         ││┌─ Summary panel (12) ──────────┬───────────────────────────────┐│
 │         │││ SPENT · THIS MONTH            │ Spend trend      [6 mo|12|All]││
 │         │││ Rp 12.345.678 (display)       │                               ││
@@ -732,13 +775,7 @@ figure with its trend, a strip of supporting figures, then detail.
 │         │││ CARDS OWED      │ AVERAGE PER MONTH │ BIGGEST CATEGORY         ││
 │         │││ Rp 8,1 jt       │ Rp 10,9 jt        │ [■] Food & Dining        ││
 │         ││└───────────────────────────────────────────────────────────────┘│
-│         ││┌─ Where it went (7) ─────────────┐┌─ Card status (5) ──────────┐│
-│         │││ ranked category bars, top 6     ││ Maybank CC     Rp 1,7 jt   ││
-│         │││                                 ││ Last paid 12 Sep · 34 d    ││
-│         │││                                 ││ OCBC CC        Rp 3,0 jt   ││
-│         │││                                 ││ No payment logged (warn)   ││
-│         ││└─────────────────────────────────┘└────────────────────────────┘│
-│         ││ Transactions (12) · Recurring charges (12)                      │
+│         ││ Transactions (12)                                               │
 └─────────┘└────────────────────────────────────────────────────────────────┘
 ```
 - The greeting follows local time (morning before 12:00, afternoon before 18:00, then evening).
@@ -748,17 +785,19 @@ figure with its trend, a strip of supporting figures, then detail.
   trend chart with its range control.
 - Statement strip: one card, cells split by 1px `--border` rules, labels uppercase `micro`, values
   `kpi` size, sub-lines `small`. Each cell is a button (cards owed → Credit cards, average →
-  Spending, biggest category → category filter).
-- Card status: one row per card — name, amount owed (right), "Last paid 12 Sep · 34 days ago" or a
-  `--warn` "No payment logged yet"; footer link "Open credit cards".
+  the Insights view, biggest category → category filter).
+- Transaction rows are quiet (§8.4): no `Statement ✓`, `From statement`, `Excluded` or `In book`
+  chips. A row shows `Check` (warn, opens the review card under Credit cards › History) or
+  `Draft` (info) only.
 - No coloured icon squares on summary figures (v1.1); icons stay in card headers only.
 
 **Mobile**
 ```
 ┌─────────────────────────────┐
-│ Overview  [This month▾] ● ◉ +│
+│ Spending  [This month▾] ● ◉ +│
 ├─────────────────────────────┤
 │ Good afternoon · 16 Oct      │
+│ [ Transactions | Insights ]  │
 │ ┌ Summary ─────────────────┐│
 │ │ SPENT · THIS MONTH        ││
 │ │ Rp 12,3 jt   ▼ 8%         ││
@@ -767,32 +806,34 @@ figure with its trend, a strip of supporting figures, then detail.
 │ │ area chart 160px          ││
 │ └───────────────────────────┘│
 │ ┌ Statement strip (3 rows) ┐│
-│ ┌ 3 recurring to review   ›┐│
-│ ┌ Where it went ───────────┐│
-│ ┌ Card status ─────────────┐│
+│ ┌ 3 recurring to review   ›┐│ ← opens Insights at the recurring card
 │ Today                -Rp 120rb│
 │ [■] Merchant      -Rp 85.000 │
 ├─────────────────────────────┤
-│ Overview Spending Cards More │
+│ Home Spending Cards NetW. More│
 └─────────────────────────────┘
 ```
 
-### 11.3 Spending (was Reporting)
+### 11.3 Spending — Insights view (was the Spending / Reporting page)
 
+The second view of the Spending page (§11.2), under the same page head, filter row and switch.
 Question it answers: *"What is driving my spend, and is anything unusual?"*
 
 - **Web:** KPI strip (Total · Avg per month · Avg transaction · Biggest single expense) →
-  monthly bars + category stacked bars side by side (6/6) → ranked categories (full) with
-  drill-down → Top merchants (6) + Top transfers (6) → Recurring charges table → Bank split
-  (100% bar).
+  monthly bars + category stacked bars side by side (6/6) → month so far (when the period is
+  this month, this year or all time) → cash flow → ranked categories (full) with drill-down +
+  bank split (100% bar) → Top merchants (6) + Top transfers (6) → Recurring charges to review.
 - **Mobile:** same order, single column; Top merchants/transfers become a segmented control
   (Merchants | Transfers) in one card to save scroll.
+- A link that shows transactions (a top merchant, the biggest single expense, a recurring
+  charge) switches to the Transactions view and scrolls to the list.
 - **Cash flow (Phase 4, shown once a wealth snapshot exists):** income vs expense per month from
   the book's P&L (bars in `--good` / `--bad`), with the card spend the app sees in Gmail as a
   dashed `--text-3` reference line; four facts above the chart (last month's income, expense,
   saved + rate, and the 12-month savings rate; 2×2 on mobile) and a table view.
-- **Drill-down:** clicking a category (bar, chip or legend) filters the whole page to it and shows a
-  removable filter chip under the header ("Food & Dining ✕"). Same pattern for merchant.
+- **Drill-down:** clicking a category (bar, chip or legend) filters the whole page — both views —
+  to it and shows a removable filter chip under the header ("Food & Dining ✕"). Same pattern for
+  merchant.
 
 ### 11.4 Credit Cards (was CC Position + Foreign Currency)
 
@@ -1129,8 +1170,9 @@ the imported `books.json`; each shows its own import step until a file exists.
     The help line under **Draft with Claude** and the Settings › AI note both say what is sent:
     chart of accounts, account balances, open receivables and payables, the last 60 days of
     statement lines and the sentence.
-  - Journals rows of vouchers posted together from one sentence carry an accent badge
-    "AI · 1 of 2"; the voucher panel adds "Entry 1 of 2 from one prompt: …" with links to the others.
+  - Vouchers posted together from one sentence carry an accent badge "AI · 1 of 2" **in the
+    voucher panel** (not on the Journals row since 2026-11-16, §8.4); the panel also adds
+    "Entry 1 of 2 from one prompt: …" with links to the others.
   - **Edit** adds a required "Why the change" field; an Accurate voucher gets a warn note "your
     book differs from Accurate from now on". **Void** is a small sheet with a required reason and a
     destructive **Void voucher** button (the one confirm-style step: voiding is permanent in the
@@ -1186,9 +1228,17 @@ particular:
 - Each is `good` or `bad`.
 
 **Journals:**
-- **Columns:** Number (tabular, `--ink-2`; "(draft)" in italics) · Date · Description · Kind badge
-  (Manual · AI · Month-end · Income · Opening · Year-end · From Accurate) · Status badge (Draft
-  `info`, Posted `good`, Void `neutral` struck through) · Amount (Σ debits).
+- **Columns:** Number (tabular, `--ink-2`; "(draft)" in italics) · Date · Description · Kind ·
+  Amount (Σ debits). The row is quiet (§8.4, 2026-11-16):
+  - **Kind** is small grey text (Manual · AI · Month-end · Income · Opening · Spending ·
+    Year-end · From Accurate), not a chip. The column header reads "Kind".
+  - A **status chip only for Draft (`info`) and Void (`neutral`, struck through)**, beside the
+    kind. Posted is the normal state and shows nothing.
+  - The description has no sub-line: the line count, the Accurate reference number and the
+    "AI · n of m" chip are not on the row.
+  - The **voucher panel** (and the phone sheet) keeps all of it: date · Accurate reference ·
+    "n lines" on the eyebrow line, then the Kind badge, the Status badge (Posted `good` included)
+    and the "AI · n of m" badge.
 - **Filters:** search (number or description) · Status (All · Draft · Posted · Void) · Kind ·
   Account · dates.
 - **Header:** primary **New journal**, secondary **Download Excel** (the filtered list).
@@ -1331,11 +1381,12 @@ Where this section and §11.10b, §11.6 or §11.7 disagree, this section wins.
     balances, the declared tick, the next statement, and buttons **Open ledger** and **Edit**.
 - **Phones:** class bands stay full width; Declared and Type sit in the row's sub-line.
 
-**Spending → journal** (Daily spending list, Credit cards rows, Cash movements spend lines):
+**Spending → journal** (Spending transactions list, Credit cards rows, Cash movements spend lines):
 - **Each row:** a ghost icon button `file-plus` labelled "To journal" (36px; a text button in the
   row's detail sheet on phones).
-- **Converted rows:** a row already in the book shows a badge, `info` "Draft" or `good` "In book"
-  with the JV number on hover. The button is gone, and the row can't be selected.
+- **Converted rows:** a row whose journal is still a draft shows an `info` "Draft" badge. A row
+  whose journal is posted shows no badge (§8.4, 2026-11-16; it was `good` "In book"). Either way
+  the button is gone, and the row can't be selected.
 - **Bulk:**
   - a **Select** toggle in the list's card header shows tick boxes;
   - a sticky footer bar: "n selected · Rp total", ghost **Cancel**, primary **Make n draft
@@ -1523,7 +1574,7 @@ Web: the drawer opens on the right; the page stays visible and usable on the lef
   - The chat lives for this tab only and is not saved. **New chat** clears it. Applied change sets
     are kept in the log (below).
 - **Empty state:** "Ask me to find, fix or add something." Three example chips depend on the page,
-  for example on Daily spending "Recategorise this month's ride-app trips", on Budgets "Suggest
+  for example on Spending "Recategorise this month's ride-app trips", on Budgets "Suggest
   budgets from my last 3 months", on Journals "Record a transfer between my accounts". A tap fills
   the input; it does not send.
 - **No key yet:** the panel says "Add your Anthropic API key in Settings › AI to use Claude" and

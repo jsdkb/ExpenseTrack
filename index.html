@@ -378,6 +378,12 @@
     .tx-body { flex: 1; min-width: 0; }
     .tx-title { font-size: 15px; line-height: 22px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tx-sub { font-size: 13px; line-height: 18px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* A row that needs the owner (§8.4): the text shortens, the chip always stays whole and tappable. */
+    .tx-sub.has-chip { display: flex; align-items: center; overflow: visible; }
+    .tx-sub.has-chip > .tx-sub-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .tx-sub.has-chip > .badge { flex: none; }
+    .tx-sub .stmt-check { position: relative; }
+    .tx-sub .stmt-check::after { content: ''; position: absolute; inset: -12px -8px; }
     .tx-note { font-size: 12px; line-height: 16px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* ── Cash movements rows — own classes, so the Spending swipe/tap handlers (.tx-row) never see them ── */
@@ -1886,7 +1892,8 @@ let ALL_TRANSACTIONS=[];
 let ALL_TRANSACTIONS_RAW=[]; // pipeline-applied snapshot before the hidden filter — Credit Cards still sees hidden txns
 let CHARTS={};
 let ACTIVE_BANK='all';
-let ACTIVE_TAB='home';               // home (js/home.js; falls back to overview) | overview | spending | cards | … | settings | more
+let ACTIVE_TAB='home';               // home (js/home.js; falls back to overview) | overview (= Spending) | cards | … | settings | more
+let SPEND_VIEW='tx';                 // the Spending page's view (UX §11.2): tx (Transactions) | insights
 let CARDS_SUB='current';             // current | history | fx
 let CCP_EST_FROM='', CCP_EST_TO='';
 let CCP_CARD='all';                  // all | Maybank | OCBC CC
@@ -2382,8 +2389,7 @@ function renderPage(p){
 }
 
 const SECTIONS=[
-  {key:'overview',label:'Daily spending',short:'Spending',icon:'layout-dashboard',order:10},
-  {key:'spending',label:'Spending',icon:'chart-pie',order:20},
+  {key:'overview',label:'Spending',icon:'chart-pie',order:10},
   {key:'cards',label:'Credit cards',short:'Cards',icon:'credit-card',order:30},
 ];
 // Wealth group (§3.2): Net worth and Cash movements always (each hosts its connect step); the rest
@@ -2399,22 +2405,27 @@ function navGroup(g){
   const reg=PAGES.filter(p=>p.group===g&&pageVisible(p));
   return reg.length?[...base,...reg].sort((a,b)=>(a.order||0)-(b.order||0)):base;
 }
-// Bottom bar (phones): Home · Spending (Daily spending) · Cards · Net worth, then More; everything
-// else, the Spending category page included, is listed on the More page. A key whose page isn't
-// registered (e.g. js/home.js failed to load) is skipped.
+// Bottom bar (phones): Home · Spending · Cards · Net worth, then More; everything else is listed
+// on the More page. A key whose page isn't registered (e.g. js/home.js failed to load) is skipped.
 const BOTTOM_KEYS=['home','overview','cards','networth'];
 function bottomSections(){const all=NAV_GROUPS.flatMap(([g])=>navGroup(g));return BOTTOM_KEYS.map(k=>all.find(s=>s.key===k)).filter(Boolean);}
-// The landing page: Home when js/home.js registered it, else Daily spending.
+// The landing page: Home when js/home.js registered it, else Spending.
 function defaultTab(){return pageByKey('home')?'home':'overview';}
 function moreSections(){const b=bottomSections().map(s=>s.key);return NAV_GROUPS.flatMap(([g])=>navGroup(g)).filter(s=>!b.includes(s.key));}
-const TAB_TITLES={overview:'Daily spending',spending:'Spending',cards:'Credit cards',networth:'Net worth',cash:'Cash movements',income:'Income',close:'Month-end',settings:'Settings',more:'More'};
+const TAB_TITLES={overview:'Spending',spending:'Spending',cards:'Credit cards',networth:'Net worth',cash:'Cash movements',income:'Income',close:'Month-end',settings:'Settings',more:'More'};
 // Wealth › Accounts is merged into Books › Chart of accounts (v4.1, UX §11.10d): every old link to
 // it (Net worth, Home, the SPT pack, Ask Claude) lands on the chart, with ACC_SEL kept for it.
-function tabAlias(t){return t==='accounts'?(pageByKey('coa')?'coa':'networth'):t;}
+// Daily spending and Spending are one page (key `overview`, UX §11.2): the old key `spending` is
+// an alias that opens it on the Insights view. Any other way in opens it on Transactions.
+function tabAlias(t){return t==='accounts'?(pageByKey('coa')?'coa':'networth'):t==='spending'?'overview':t;}
 function setTab(t){
+  const ins=t==='spending';
   t=tabAlias(t);
-  if(t===ACTIVE_TAB){if(t==='coa'&&ACC_SEL){renderAll();return;}window.scrollTo({top:0,behavior:'smooth'});return;}
-  ACTIVE_TAB=t;SELECT_MODE=false;SELECTED.clear();TX_LIMIT=50;SP_PICK.on=null;SP_PICK.keys.clear();
+  if(t===ACTIVE_TAB){if(t==='coa'&&ACC_SEL){renderAll();return;}if(ins&&SPEND_VIEW!=='insights'){setSpendView('insights');return;}
+    // Tapping Spending again while on Insights goes back to the Transactions view.
+    if(!ins&&t==='overview'&&SPEND_VIEW==='insights'){setSpendView('tx');window.scrollTo(0,0);return;}
+    window.scrollTo({top:0,behavior:'smooth'});return;}
+  ACTIVE_TAB=t;SPEND_VIEW=ins?'insights':'tx';SELECT_MODE=false;SELECTED.clear();TX_LIMIT=50;SP_PICK.on=null;SP_PICK.keys.clear();
   renderAll();window.scrollTo(0,0);
 }
 function buildNav(){
@@ -2431,7 +2442,7 @@ function buildNav(){
 }
 function updateTopbar(){
   const tt=$('topTitle');if(tt)tt.textContent=TAB_TITLES[ACTIVE_TAB]||'';
-  const tp=$('topPeriod');if(tp)tp.innerHTML=(ACTIVE_TAB==='overview'||ACTIVE_TAB==='spending')&&DATA_READY?periodButton():'';
+  const tp=$('topPeriod');if(tp)tp.innerHTML=ACTIVE_TAB==='overview'&&DATA_READY?periodButton():'';
   const ta=$('topAdd');if(ta)ta.style.display=ACTIVE_TAB==='overview'&&DATA_READY?'':'none';
   const th=$('topHide');if(th){th.setAttribute('aria-pressed',String(amountsHidden()));th.setAttribute('aria-label',amountsHidden()?'Show amounts':'Hide amounts');th.innerHTML=ic(amountsHidden()?'eye-off':'eye','s20');}
   document.title=(TAB_TITLES[ACTIVE_TAB]?TAB_TITLES[ACTIVE_TAB]+' · ':'')+'ExpenseTrack';
@@ -2549,7 +2560,7 @@ function reportGoTo(opts){
   ACTIVE_BANK=opts.bank||ACTIVE_BANK;
   ACTIVE_CATEGORIES=new Set(opts.category?[opts.category]:(opts.categories||[]));
   ACTIVE_MERCHANT=opts.merchant||null;
-  ACTIVE_TAB='overview';TX_LIMIT=50;
+  ACTIVE_TAB='overview';SPEND_VIEW='tx';TX_LIMIT=50;
   renderAll();
   requestAnimationFrame(()=>{const c=$('txCard');if(c)c.scrollIntoView({behavior:'smooth',block:'start'});else window.scrollTo({top:0,behavior:'smooth'});});
 }
@@ -3075,7 +3086,7 @@ function txListHTML(list){
   for(const t of list){
     const k=dayKey(txDateOf(t));
     if(k!==lastKey){html+=`<div class="tx-day"><span>${fmtDayHeader(k)}</span><span class="amt">−${fmtIDR(dayTotals[k])}</span></div>`;lastKey=k;}
-    const sid=escH(t.id||''),sel=SELECTED.has(t.id),spDone=spTxState(t).done;
+    const sid=escH(t.id||''),sel=SELECTED.has(t.id),spDone=spTxState(t).done,chips=runHooks('txnBadges',t).join('');
     html+=`<div class="tx-row${sel?' selected':''}${spDone?' sp-done':''}" data-id="${sid}">
       <div class="tx-actions" aria-hidden="true">
         <div class="tx-actions-l"><button class="tx-act note" data-action="note" data-id="${sid}" tabindex="-1">${ic('pencil')}Note</button></div>
@@ -3089,7 +3100,7 @@ function txListHTML(list){
         <span class="tx-check">${ic('check')}</span>
         ${catSquare(t.category)}
         <div class="tx-body"><div class="tx-title">${escH(t.merchantClean||t.merchantRaw||'—')}</div>
-          <div class="tx-sub">${escH(t.category||'')} · ${escH(bankLabel(t))}${t.splitInfo?` · split ${t.splitInfo.people}×`:''}${!txOk(t)?' · Failed':''}${runHooks('txnBadges',t).join('')}</div>
+          <div class="tx-sub${chips?' has-chip':''}"><span class="tx-sub-t">${escH(t.category||'')} · ${escH(bankLabel(t))}${t.splitInfo?` · split ${t.splitInfo.people}×`:''}${!txOk(t)?' · Failed':''}</span>${chips}</div>
           ${t.note?`<div class="tx-note">${ic('pencil','s16','width:11px;height:11px;vertical-align:-1px')} ${escH(t.note)}</div>`:''}</div>
         <div class="tx-amt">${t.amount>0?`<span class="amt">−${fmtIDR(t.amount)}</span>`:txAmountHTML(t)}</div>
       </div></div>`;
@@ -3205,10 +3216,10 @@ function spCashRowOf(l){
     source:cashAcc(l.account).label||l.account,credit:meMapOf(cashAcc(l.account))||''};
 }
 function spRowByKey(k){return k.startsWith('cash:')?spCashRowOf(cashTx(k.slice(5))):spRowOf(spTxById(k.slice(3)));}
+// Only a draft is labelled: a row whose journal is posted is the normal state and stays silent (UX §8.4).
 function spBadgeHTML(f){
-  if(!f)return'';
-  if(f.status==='draft')return`<span class="badge info sp-badge" style="margin-left:4px" title="A draft journal in your book">Draft</span>`;
-  return`<span class="badge good sp-badge" style="margin-left:4px" title="${escH(f.number||'In your book')}">In book</span>`;
+  if(!f||f.status!=='draft')return'';
+  return`<span class="badge info sp-badge" style="margin-left:4px" title="A draft journal in your book">Draft</span>`;
 }
 // {row, done (its journal), can (show To journal), badge}
 function spState(r){const f=r?spFind(r.ref,r.stmtLine):null;return{row:r,done:f,can:!!r&&!f&&spOwn(),badge:spBadgeHTML(f)};}
@@ -3345,7 +3356,7 @@ function recurringRows(cands,limit){
 function recurringCard(span){
   const cands=detectSubscriptionCandidates(ALL_TRANSACTIONS.filter(t=>(t.amount||0)>0));
   if(!cands.length)return'';
-  return`<section class="card ${span||'span-12'}">${cardHead('repeat',`Recurring charges to review (${cands.length})`,'Same merchant, similar amount, 2+ months. Mark as a subscription or dismiss.',cands.length>3?`<button class="link-btn" onclick="openRecurringSheet()">See all</button>`:'')}
+  return`<section class="card ${span||'span-12'}" id="recurringCard">${cardHead('repeat',`Recurring charges to review (${cands.length})`,'Same merchant, similar amount, 2+ months. Mark as a subscription or dismiss.',cands.length>3?`<button class="link-btn" onclick="openRecurringSheet()">See all</button>`:'')}
     <div class="list">${recurringRows(cands,3)}</div></section>`;
 }
 function openRecurringSheet(){
@@ -3408,14 +3419,15 @@ function avgPerMonth(){
 }
 function monogram(cls){return`<svg class="logomark${cls?' '+cls:''}" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5.3" fill="var(--accent)"/><rect x="6" y="6.9" width="12" height="2.2" rx="1.1" fill="#fff"/><rect x="6" y="10.9" width="8.4" height="2.2" rx="1.1" fill="#fff"/><rect x="6" y="14.9" width="12" height="2.2" rx="1.1" fill="#fff"/></svg>`;}
 function greeting(){const h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening';}
-function cardStatusHTML(cc){
-  const rows=cc.map(c=>`<button class="list-item cs-row" onclick="CCP_CARD='${escAttr(c.key)}';CARDS_SUB='current';setTab('cards')" aria-label="${escH(c.label)}: ${fmtIDR(c.balance)} owed. Open">
-      <span class="li-body"><span class="li-title" style="display:block">${escH(c.label)}</span>
-        <span class="li-sub" style="display:block">${c.lastPayDate?`Last paid ${fmtDay(c.lastPayDate)} · ${c.daysSince} day${c.daysSince===1?'':'s'} ago`:'<span class="warn">No payment logged yet</span>'} · ${c.since.length} charge${c.since.length===1?'':'s'}</span></span>
-      <span class="cs-amt amt">${fmtIDR(c.balance)}</span></button>`).join('');
-  const total=cc.reduce((s,c)=>s+c.balance,0);
-  return`<div class="list">${rows}</div><div class="cs-total"><span class="muted">Total owed</span><b class="amt">${fmtIDR(total)}</b></div>
-    <div style="margin-top:12px"><button class="link-btn" onclick="setTab('cards')">Open credit cards ${ic('chevron-right','s16','width:14px;height:14px;vertical-align:-2px')}</button></div>`;
+// The Spending page's two views (UX §11.2). Switching keeps the period and every filter; `anchor`
+// (an element id) is scrolled to after the switch.
+function spendViewSeg(){
+  return`<div class="seg" id="spendViewSeg" role="group" aria-label="Spending views" style="margin-bottom:20px">${[['tx','Transactions'],['insights','Insights']].map(([k,l])=>`<button aria-pressed="${SPEND_VIEW===k}" data-view="${k}" onclick="setSpendView('${k}')">${l}</button>`).join('')}</div>`;
+}
+function setSpendView(v,anchor){
+  SPEND_VIEW=v==='insights'?'insights':'tx';ACTIVE_TAB='overview';SELECT_MODE=false;SELECTED.clear();TX_LIMIT=50;SP_PICK.on=null;SP_PICK.keys.clear();
+  renderAll();
+  if(anchor)requestAnimationFrame(()=>{const e=$(anchor);if(e)e.scrollIntoView({behavior:'smooth',block:'start'});});
 }
 function renderOverview(txns){
   if(!ALL_TRANSACTIONS.length)return renderBrandEmpty();
@@ -3460,7 +3472,7 @@ function renderOverview(txns){
     ${nw?`<button class="strip-cell" onclick="setTab('networth')"><span class="eyebrow">Net worth</span><span class="strip-val">${kpiMoney(nw.net)}</span><span class="strip-sub">As of ${escH(asOfLabel())}</span></button>`:''}
     <button class="strip-cell" onclick="setTab('cards')"><span class="eyebrow">Cards owed</span><span class="strip-val">${kpiMoney(ccTotal)}</span>
       <span class="strip-sub">${unpaid.length?`<span class="warn">No payment logged for ${escH(unpaid.map(c=>c.label).join(', '))}</span>`:`Across ${cc.length} cards`}</span></button>
-    <button class="strip-cell" onclick="setTab('spending')"><span class="eyebrow">Average per month</span><span class="strip-val">${kpiMoney(Math.round(ap.avg))}</span>
+    <button class="strip-cell" onclick="setSpendView('insights');window.scrollTo(0,0)"><span class="eyebrow">Average per month</span><span class="strip-val">${kpiMoney(Math.round(ap.avg))}</span>
       <span class="strip-sub">${ap.full?`Last ${ap.n} full month${ap.n===1?'':'s'}`:'Includes this month so far'}</span></button>
     ${top?`<button class="strip-cell" onclick="toggleCategory('${escAttr(top[0])}')" aria-label="Biggest category ${escH(top[0])}. Filter by it"><span class="eyebrow">Biggest category · ${escH(pl)}</span>
       <span class="strip-val" style="font-size:18px">${catSquare(top[0],true)}<span style="overflow:hidden;text-overflow:ellipsis">${escH(top[0])}</span></span>
@@ -3468,24 +3480,21 @@ function renderOverview(txns){
       :`<div class="strip-cell"><span class="eyebrow">Biggest category</span><span class="strip-val faint">—</span><span class="strip-sub">No spend in this period</span></div>`}
   </section>`;
   const sub=`${now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})} · ${escH(syncView().label)}`;
+  // One page head, filter row and view switch for both views; each card lives in exactly one view.
   return`<div class="page-head greet"><div><h1 class="page-title">${greeting()}</h1><p class="page-desc">${sub}</p></div>
       <div class="page-actions">${periodButton()}<button class="btn btn-primary" onclick="openAddModal()">${ic('plus')}Add</button>${hideBtn()}<button class="icon-btn" onclick="load(true)" aria-label="Sync now" title="Sync now">${ic('refresh-cw')}</button></div></div>
     <p class="only-sm mob-greet">${greeting()} · ${now.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</p>
     ${filterRowHTML()}
-    <div class="grid">${summary}</div>
+    ${spendViewSeg()}
+    ${SPEND_VIEW==='insights'?renderSpending(txns):`<div class="grid">${summary}</div>
     <div class="grid">${strip}</div>
     <div class="grid only-sm">${recurringMini()}</div>
-    <div class="grid">
-      <section class="card span-7">${cardHead('chart-pie','Where it went',escH(pl)+' · click a category to filter')}${rankedCategoriesHTML(idr,isMobile()?5:6)}</section>
-      <section class="card span-5">${cardHead('credit-card','Card status','What each card owes since its last payment')}${cardStatusHTML(cc)}</section>
-    </div>
-    <div class="grid">${transactionsCard()}</div>
-    <div class="grid hide-sm">${recurringCard('span-12')}</div>`;
+    <div class="grid">${transactionsCard()}</div>`}`;
 }
 function recurringMini(){
   const n=detectSubscriptionCandidates(ALL_TRANSACTIONS.filter(t=>(t.amount||0)>0)).length;
   if(!n)return'';
-  return`<button class="card clickable span-12" style="display:flex;align-items:center;gap:12px" onclick="openRecurringSheet()">${ic('repeat')}<span style="flex:1;font-weight:500">${n} recurring charge${n===1?'':'s'} to review</span>${ic('chevron-right','s16')}</button>`;
+  return`<button class="card clickable span-12" id="recurringMini" style="display:flex;align-items:center;gap:12px" onclick="setSpendView('insights','recurringCard')">${ic('repeat')}<span style="flex:1;font-weight:500">${n} recurring charge${n===1?'':'s'} to review</span>${ic('chevron-right','s16')}</button>`;
 }
 function trendSummary(){
   const s=monthSeries(ALL_TRANSACTIONS.filter(filterOthers),TREND_RANGE||0);if(!s.keys.length)return'No spending yet';
@@ -3506,7 +3515,9 @@ function renderBrandEmpty(){
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   SPENDING (was Reporting) — §11.3
+   SPENDING › INSIGHTS view (was the Spending / Reporting page) — §11.3.
+   renderSpending returns the view's cards only; renderOverview adds the
+   page head, filter row and view switch.
    ══════════════════════════════════════════════════════════════════ */
 function getMoMData(){
   const now=new Date(),ts=new Date(now.getFullYear(),now.getMonth(),1),ls=new Date(now.getFullYear(),now.getMonth()-1,1),le=new Date(now.getFullYear(),now.getMonth(),0,23,59,59,999);
@@ -3575,9 +3586,7 @@ function renderSpending(txns){
     <div class="legend">${banks.map(([b,v])=>`<button class="legend-item" onclick="setBank('${escAttr(b)}')" title="Filter by ${escH(b)}"><i style="background:${BANK_COLOR[b]||'#94A3B8'}"></i>${escH(b)} · <span class="amt">${fmtIDRShort(v)}</span> · ${fmtPct(total?v/total*100:0)}</button>`).join('')}</div>`
     :emptyHTML('inbox','No spending in this period');
   const maxS=topS[0]?topS[0][1].total:1,maxT=topT[0]?topT[0][1].total:1;
-  return`${pageHead('Spending','What is driving your spend, and is anything unusual?',`${periodButton()}${hideBtn()}`)}
-    ${filterRowHTML()}
-    <div class="grid">${kpis}</div>
+  return`<div class="grid">${kpis}</div>
     <div class="grid">
       <section class="card span-6" id="spMonthlyCard">${cardHead('chart-column','Monthly spend',rangeTxt+' · current month highlighted',trendSeg()+tableToggle('spMonthlyCard'))}
         <div class="chart-readout" id="spMonthlyReadout" aria-live="polite"></div>
@@ -4066,6 +4075,7 @@ function brandLoaderHTML(){
    ══════════════════════════════════════════════════════════════════ */
 function renderAll(){
   if(ACTIVE_TAB==='home'&&!pageByKey('home'))ACTIVE_TAB='overview';
+  if(ACTIVE_TAB==='spending')SPEND_VIEW='insights';
   ACTIVE_TAB=tabAlias(ACTIVE_TAB);
   runHooks('beforeRender');
   buildNav();updateTopbar();renderSyncUI();
@@ -4086,12 +4096,11 @@ function renderAll(){
   if(ACTIVE_TAB==='cash'){root.innerHTML=renderCash();drawLater(drawCash);return;}
   if(!DATA_READY){if(!$('prog'))root.innerHTML=skeletonHTML();return;}
   const txns=getFiltered();
-  if(ACTIVE_TAB==='spending')root.innerHTML=renderSpending(txns);
-  else if(ACTIVE_TAB==='cards')root.innerHTML=renderCards();
+  if(ACTIVE_TAB==='cards')root.innerHTML=renderCards();
   else root.innerHTML=renderOverview(txns);
+  // Only the visible Spending view's charts are drawn (the other view's canvases aren't on the page).
   drawLater(()=>{
-    if(ACTIVE_TAB==='overview'&&ALL_TRANSACTIONS.length)renderOverviewCharts();
-    else if(ACTIVE_TAB==='spending'&&ALL_TRANSACTIONS.length)renderSpendingCharts();
+    if(ACTIVE_TAB==='overview'&&ALL_TRANSACTIONS.length){if(SPEND_VIEW==='insights')renderSpendingCharts();else renderOverviewCharts();}
     maybeSwipeHint();
   });
 }
