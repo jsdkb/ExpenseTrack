@@ -113,8 +113,8 @@ Merge rule for new keys (`mergeStates`, when two devices saved at once):
 ## 4. Page registry (F1 builds, A–D use)
 
 ```js
-registerPage({key, label, short?, icon, group, order, render, afterRender?, needs?})  // → true, or false if refused
-// group ∈ 'top' | 'wealth' | 'books' | 'plan'; needs ∈ 'wealth' | 'books' | 'cash'
+registerPage({key, label, short?, icon, group, order, render, afterRender?, needs?, badge?})  // → true, or false if refused
+// group ∈ 'top' | 'wealth' | 'books' | 'plan'; needs ∈ 'wealth' | 'books' | 'cash'; badge: () => number
 registerHook(name, fn)
 runHooks(name, ...args)        // → array of every hook's non-null result
 registerIcon(name, svgInner)   // add a Lucide icon to the sprite so ic(name) works
@@ -134,8 +134,8 @@ Pages:
   only appear once a page is registered in them. Within a group, pages sort by `order`
   (built-ins: Spending 10 — key `overview`; the old key `spending` is an alias that opens it on
   its Insights view, and stays reserved —, Credit cards 30; Net worth 10, Cash movements 20, Income 30, Accounts 40, Month-end 50). A `top` page with
-  `order` below 10 comes first: Home is `order: 5`. The resulting menu is Home · Spending ·
-  Credit cards · Wealth (Net worth, Cash movements, Income, Investment returns 35,
+  `order` below 10 comes first: Home is `order: 5`; Checks (js/checks.js) is `order: 40`. The
+  resulting menu is Home · Spending · Credit cards · Checks · Wealth (Net worth, Cash movements, Income, Investment returns 35,
   Accounts, Month-end, SPT pack 60) · Books (Chart of accounts, Journals, General ledger, Balance
   sheet, Income statement, Trial balance) · Plan (Budgets, Goals); Settings sits in the sidebar
   footer.
@@ -145,6 +145,11 @@ Pages:
   with their `short` labels (Home · Spending · Cards · Net worth), then More. A key whose page isn't
   registered is skipped. Every other page, the Spending category page included, is listed on the
   More page in group order.
+- `badge` (optional, round 2): `() => number`, the page's open items. `buildNav` (sidebar) and
+  `renderMore` (the More list) call it on every render and draw a small count (`.nav-count`,
+  UX §3.2) when it is above 0; at 0, or when it throws or returns no number, nothing is drawn.
+  Keep it cheap. The item's tooltip and accessible name become "Label, n open". Only Checks has
+  one today (statement lines to sort + alerts to check).
 - `needs`: a `wealth` or `cash` page (outside groups `top`/`books`) stays out of the menu until
   that data exists. `books` pages and `top` pages always show and render their own empty state.
   Rendering a page with `needs: 'books'` or key `home` starts the lazy books load once someone is
@@ -155,7 +160,39 @@ Pages:
   therefore draw each chart once ("Canvas is already in use" can't happen).
 
 Keys: `home` (B), `coa`, `journals`, `ledger`, `bs`, `pl`, `tb` (A), `budgets`, `goals`,
-`invest`, `spt` (D). C adds no page: it extends built-in pages through hooks.
+`invest`, `spt` (D), `checks` (round 2, js/checks.js, loaded right after js/statements.js). C adds
+no page itself: it extends built-in pages through hooks and computes what the Checks page draws.
+
+**Checks (round 2, UX §11.14).** The page is `js/checks.js`; the logic is in `js/statements.js`:
+
+- `STATE.stmtFix.sort` `{lineId: {as: 'spend' | 'ignore' | 'own', at}}` and `STATE.stmtFix.sortPayer`
+  `{payerKey: {as: 'ignore' | 'own', at}}` (payer key = `cashPayerKey(line)`). Dated entries written
+  through the module's `put`; a removal is a dated `{deleted: true}`. They merge like every other
+  `stmtFix` sub-map (per key, the newer `at` wins; `mergeStates` walks every sub-map it finds).
+  `as: 'spend'` is an input of `reconcile` (`o.fix.sort`): the line is pushed into `R.added` with
+  `manual: true` and becomes the Spending row `stmt:<lineId>`. `as: 'own'` only records that the
+  "Between my accounts" tag (`STATE.cashTypeOverrides[lineId]` / `STATE.cashPayerRules[payerKey]`
+  = `'own-transfer'`, the Cash movements mechanism) was set from this page.
+- `ETStatements.sortCandidates()` → the statement lines nothing accounts for, newest first;
+  `checkCounts()` → `{lines, alerts, open}`; `sortLine(id, as)`, `sortLines(ids, as)` (one Undo;
+  `'spend'` only for a line `reconcile` would count as a charge), `unsortLine(id)`,
+  `sortPayer(lineId, as)`, `unsortPayer(lineId)`, `payerCount(lineId)`.
+- `ETStatements.checksModel()` → `{ambiguous, accounts: [{id, label, kind, open, periods: [{id, real,
+  start, end, closed, label, status, diffs, linked, open, rows, out, in}]}]}`, rebuilt on every
+  render. A period is a statement period, or a calendar month (`<account>|month:YYYY-MM`) for lines
+  outside every statement. A row is `{kind: 'line' | 'alert' | 'income', id, key, date, desc, sub,
+  stmt, app, as, tone, open, acts, flow}`: `stmt` / `app` are signed rupiah or null, `as` the plain
+  label of what holds it in the app, `acts` the actions the page draws. `out` / `in` are
+  `{stmt, app, diff}`; for a statement checked against alerts `out.stmt` / `out.app` equal
+  `R.stmts[id].charges` / `.after`.
+- `openIncome(null, {date, amount, payer, account, stmtLine})` opens the Income form filled in from a
+  statement line; the saved receipt keeps `stmtLine`, which `incLinks()` honours before its
+  automatic rule (same account and amount within 3 days). `ledgerRemapCashRefs` moves `stmtFix.sort`
+  keys and income `stmtLine` when a line's id changes in a new statement file.
+- `ETStatements.openCheck(key?)` → `ETChecks.focus(key)`: opens Checks at that alert's account and
+  period and marks its row (no key: the newest undecided alert). Without the Checks page it opens
+  Credit cards › History, where the `cardsHistory` hook then still draws the review and statement
+  lists.
 
 Hooks (results are HTML strings inserted as-is: escape data with `escH()`):
 

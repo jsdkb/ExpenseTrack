@@ -1052,7 +1052,9 @@
     const f=STATE.stmtFix||{};
     for(const[a,b]of pairs){
       for(const v of Object.values(f.match||{}))if(v&&v.line===a){v.line=b;n++;}
-      rekey(f.added,a,b);rekey(STATE.cashTypeOverrides,a,b);
+      rekey(f.added,a,b);rekey(f.sort,a,b);rekey(STATE.cashTypeOverrides,a,b);
+      // A receipt added from a statement line (Checks › Add to income) keeps its explicit link.
+      for(const x of Object.values(STATE.income||{}))if(x&&x.stmtLine===a){x.stmtLine=b;n++;}
       for(const k of['catOverrides','txEdits','splits','notes','subDecisions'])rekey(STATE[k],'stmt:'+a,'stmt:'+b);
       for(const k of['hiddenIds','ccPosExcludedIds'])if(Array.isArray(STATE[k])){const i=STATE[k].indexOf('stmt:'+a);if(i>=0){STATE[k][i]='stmt:'+b;n++;}}
     }

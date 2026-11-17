@@ -160,6 +160,9 @@
       transition: background var(--dur-fast) ease-out, color var(--dur-fast) ease-out;
     }
     .sb-item:hover { background: var(--surface-2); color: var(--text-1); }
+    /* Open-items count on a menu item or a More row (UX §3.2); drawn only above 0 */
+    .nav-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: auto; flex-shrink: 0;
+      border-radius: var(--radius-pill); background: var(--warn-soft); color: var(--warn); font-size: 11px; line-height: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .sb-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent-text); }
     .sb-item[aria-current="page"]::before {
       content: ''; position: absolute; left: -12px; top: 8px; bottom: 8px; width: 3px;
@@ -702,6 +705,7 @@
       .sb-brand { padding: 0; justify-content: center; }
       .sb-item, .sync-pill { width: 48px; justify-content: center; padding: 0; }
       .sb-item[aria-current="page"]::before { left: -12px; }
+      .sb-item .nav-count { position: absolute; top: 0; right: 0; min-width: 16px; height: 16px; padding: 0 4px; font-size: 10px; }
       .main { margin-left: var(--rail-w); }
       .content { padding: 24px 24px 40px; }
       .banner { padding: 10px 24px; }
@@ -2322,7 +2326,8 @@ function openSyncSheet(){
 const PAGES=[],HOOKS={};
 const NAV_GROUPS=[['top',''],['wealth','Wealth'],['books','Books'],['plan','Plan']];
 const BUILTIN_TABS=['overview','spending','cards','networth','cash','accounts','income','close','settings','more'];
-// p: {key,label,short?,icon,group:'top'|'wealth'|'books'|'plan',order,render()→html,afterRender?(),needs?:'wealth'|'books'|'cash'}
+// p: {key,label,short?,icon,group:'top'|'wealth'|'books'|'plan',order,render()→html,afterRender?(),needs?:'wealth'|'books'|'cash',
+//     badge?()→number: open items shown as a small count on the menu item and the More row, nothing at 0}
 function registerPage(p){
   const ok=p&&typeof p.key==='string'&&/^[a-z][a-z0-9_-]*$/.test(p.key)&&!BUILTIN_TABS.includes(p.key)&&p.label&&typeof p.render==='function'&&NAV_GROUPS.some(g=>g[0]===p.group);
   if(!ok){console.warn('registerPage refused',p&&p.key);return false;}
@@ -2428,9 +2433,16 @@ function setTab(t){
   ACTIVE_TAB=t;SPEND_VIEW=ins?'insights':'tx';SELECT_MODE=false;SELECTED.clear();TX_LIMIT=50;SP_PICK.on=null;SP_PICK.keys.clear();
   renderAll();window.scrollTo(0,0);
 }
+// A page's open-items count (its optional badge()): a whole number above 0, else 0. Never throws.
+function navCount(s){
+  if(!s||typeof s.badge!=='function')return 0;
+  try{const n=Math.floor(Number(s.badge()));return n>0?n:0;}catch(e){console.error('Page '+s.key+' badge failed',e);return 0;}
+}
+function navCountHTML(n){return n?`<span class="nav-count" aria-hidden="true">${n>99?'99+':n}</span>`:'';}
 function buildNav(){
   const sb=$('sbNav');
-  const item=s=>`<button class="sb-item" data-tab="${s.key}" onclick="setTab('${s.key}')" title="${s.label}"${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span class="lbl">${s.label}</span></button>`;
+  const item=s=>{const n=navCount(s),t=n?`${s.label}, ${n} open`:s.label;
+    return`<button class="sb-item" data-tab="${s.key}" onclick="setTab('${s.key}')" title="${t}"${n?` aria-label="${t}"`:''}${ACTIVE_TAB===s.key?' aria-current="page"':''}>${ic(s.icon)}<span class="lbl">${s.label}</span>${navCountHTML(n)}</button>`;};
   if(sb)sb.innerHTML=NAV_GROUPS.map(([g,l])=>{const s=navGroup(g);return s.length?(l?`<div class="sb-group" aria-hidden="true">${l}</div>`:'')+s.map(item).join(''):'';}).join('');
   document.querySelectorAll('.sb-foot .sb-item[data-tab]').forEach(b=>{if(b.dataset.tab===ACTIVE_TAB)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   const bn=$('bottomNav');
@@ -3938,7 +3950,7 @@ function renderSettings(){
 function renderMore(){
   const theme=themeName();
   return`<div class="card" style="padding-top:6px;padding-bottom:6px"><div class="list">
-    ${moreSections().map(s=>`<button class="list-item" onclick="setTab('${s.key}')">${ic(s.icon)}<span class="li-body"><span class="li-title">${s.label}</span></span>${ic('chevron-right','s16')}</button>`).join('')}
+    ${moreSections().map(s=>{const n=navCount(s);return`<button class="list-item" data-tab="${s.key}" onclick="setTab('${s.key}')"${n?` aria-label="${s.label}, ${n} open"`:''}>${ic(s.icon)}<span class="li-body"><span class="li-title">${s.label}</span></span>${navCountHTML(n)}${ic('chevron-right','s16')}</button>`;}).join('')}
     <button class="list-item" onclick="setTab('settings')">${ic('settings')}<span class="li-body"><span class="li-title">Settings</span><span class="li-sub" style="display:block">Theme, rules, data</span></span>${ic('chevron-right','s16')}</button>
     <div class="list-item">${ic(theme==='dark'?'moon':'sun')}<span class="li-body"><span class="li-title">Dark theme</span></span><button class="switch" role="switch" aria-checked="${theme==='dark'}" aria-label="Dark theme" onclick="setTheme('${theme==='dark'?'light':'dark'}')"></button></div>
     <div class="list-item">${ic('eye-off')}<span class="li-body"><span class="li-title">Hide amounts</span></span><button class="switch" role="switch" aria-checked="${amountsHidden()}" aria-label="Hide amounts" onclick="toggleHideAmounts()"></button></div>
@@ -5262,16 +5274,21 @@ function naBadge(code){return naPending(code)?'<span class="badge warn">Not in A
    The month-end journal treats a receipt dated after the book's month as already booked, and a
    receipt that matches a statement line (same account and amount, within 3 days) takes that line
    out of the statement buckets, so nothing is booked twice. ── */
-let INC_MONTH=null,INC_EDIT=null;
+let INC_MONTH=null,INC_EDIT=null,INC_LINE=null;
 function incStore(){return STATE.income||(STATE.income={});}
 function incList(){return Object.values(STATE.income||{}).filter(x=>x&&x.id&&!x.deleted).sort((a,b)=>a.date.localeCompare(b.date)||String(a.at).localeCompare(String(b.at)));}
 function incMonths(){const d=new Date(),now=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;return[...new Set([...incList().map(x=>x.date.slice(0,7)),now])].sort();}
-// The statement receipt each income matches: earliest income first, closest date wins.
+// The statement receipt each income matches. A receipt added from a statement line (Checks › Add to
+// income, x.stmtLine) keeps that exact line while it still exists and no other receipt took it;
+// every other receipt: earliest income first, closest date wins.
 function incLinks(){
   const out={};if(!CM())return out;
   const used=new Set(),ins=cashTxns().filter(t=>t.currency==='IDR'&&t.amount>0&&cashMeta(cashType(t)).g==='in');
+  {const xs=incList().filter(x=>!x.unlinked&&x.stmtLine);
+    if(xs.length){const byId=new Map(cashTxns().filter(t=>t.currency==='IDR'&&t.amount>0).map(t=>[t.id,t]));
+      for(const x of xs){const t=byId.get(x.stmtLine);if(t&&!used.has(t.id)){out[x.id]=t;used.add(t.id);}}}}
   for(const x of incList()){
-    if(x.unlinked||!x.account)continue;
+    if(out[x.id]||x.unlinked||!x.account)continue;
     let best=null,bd=99;
     for(const t of ins){
       if(used.has(t.id)||Math.round(t.amount)!==Math.round(x.amount)||meMapOf(cashAcc(t.account))!==x.account)continue;
@@ -5341,10 +5358,13 @@ function incIntoOptions(sel){
   if(sel&&!xs.some(x=>x.id===sel))o+=`<option value="${escH(sel)}" selected>${escH(sel)}</option>`;
   return o;
 }
-function openIncome(id){
+// pre (optional, new receipts only): {date, amount, payer, account, stmtLine} fills the form in from
+// a statement line; stmtLine is kept on the saved receipt as its explicit link (incLinks).
+function openIncome(id,pre){
   if(!W()){toast('Import the wealth snapshot first');return;}
-  const cur=id?incStore()[id]:null,x=cur||{date:new Date().toISOString().slice(0,10),payer:'',amount:null,account:'',incomeAccount:'',note:''};
-  INC_EDIT=cur?cur.id:null;
+  const cur=id?incStore()[id]:null,p=!cur&&pre&&typeof pre==='object'?pre:null;
+  const x=cur||{date:(p&&p.date)||new Date().toISOString().slice(0,10),payer:(p&&p.payer)||'',amount:p&&p.amount>0?p.amount:null,account:(p&&p.account)||'',incomeAccount:'',note:''};
+  INC_EDIT=cur?cur.id:null;INC_LINE=p&&p.stmtLine?String(p.stmtLine):null;
   const payers=[...new Set(incList().map(i=>i.payer))].sort();
   openSheet({title:cur?'Edit income':'Add income',body:`<div class="form-grid">
       <div class="field"><label class="label" for="incDate">Date received</label><input class="input" id="incDate" type="date" value="${escH(x.date)}"></div>
@@ -5365,7 +5385,7 @@ function openIncome(id){
         :cur&&(cur.exportedAt||cur.posted)?`<div class="help full">${ic('info','s16')}${cur.posted?'Already posted in Accurate.':`Already saved for import on ${escH(fmtDateTime(cur.exportedAt))}.`} If the voucher is in Accurate, correct or delete it there: saving a change here makes a new voucher.</div>`:''}
     </div>`,
     foot:`${cur?`<button class="btn btn-ghost" style="color:var(--bad);margin-right:auto" onclick="incRemove()">Remove</button>`:''}<button class="btn btn-secondary" onclick="closeTopSheet(true)">Cancel</button><button class="btn btn-primary" onclick="incSave()">${cur?'Save':'Add income'}</button>`,
-    focus:cur?'#incAmount':'#incPayer',onEnter:incSave,onClose:()=>{INC_EDIT=null;}});
+    focus:cur?'#incAmount':p?'#incAcc':'#incPayer',onEnter:incSave,onClose:()=>{INC_EDIT=null;INC_LINE=null;}});
 }
 // A payer you used before brings back the accounts you picked for them last time.
 function incPayerFill(){
@@ -5380,7 +5400,7 @@ function incSave(){
   if(bad||!/^\d{4}-\d{2}-\d{2}$/.test(date))return;
   const s=incStore(),id=INC_EDIT||'inc-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),old=s[id]||{};
   const changed=(old.exportedAt||old.posted)&&(old.date!==date||Math.round(old.amount)!==Math.round(amount)||old.account!==account||old.incomeAccount!==incomeAccount);
-  const nx={...old,id,date,payer,amount:Math.round(amount),account,incomeAccount,note:meText($('incNote').value,60),at:meStamp(),...(changed?{exportedAt:null,exportFile:null,posted:false,postedAt:null,inBookAt:null,notInBookAt:null}:{})};
+  const nx={...old,id,date,payer,amount:Math.round(amount),account,incomeAccount,note:meText($('incNote').value,60),at:meStamp(),...(!INC_EDIT&&INC_LINE?{stmtLine:INC_LINE}:{}),...(changed?{exportedAt:null,exportFile:null,posted:false,postedAt:null,inBookAt:null,notInBookAt:null}:{})};
   // A receipt posted to the book: its voucher is edited in place (the earlier version stays in the voucher's history).
   const pv=incPostedV(old);
   // Edit the voucher actually in the book (found by ref), which may differ from a stale postedId.
@@ -6318,6 +6338,7 @@ window.addEventListener('load', initAuth);
 <script src="js/entry.js"></script>
 <script src="js/home.js"></script>
 <script src="js/statements.js"></script>
+<script src="js/checks.js"></script>
 <script src="js/extras.js"></script>
 <script src="js/assistant.js"></script>
 </body>

@@ -103,6 +103,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 | **Home** (landing page) | Net worth, real savings, the wealth bridge, liquidity, debts, coming up, data freshness (§11.11) | Snapshot + books + statements | v2 (2026-11-03) |
 | **Spending** (key `overview`; was two pages, Daily spending and Spending, merged 2026-11-16) | One page, two views (§11.2). **Transactions:** the month's figure with its trend, key figures, the transactions list — e-mail alerts corrected by the statements. **Insights:** KPIs, monthly and category charts, month so far, cash flow, categories, bank split, top merchants and transfers, recurring charges | Overview + Reporting tabs | Phase 1, merged 2026-11-16 |
 | **Credit Cards** | Per-card position, estimated billing, paid-through history, current-balance transactions; sub-tab **Foreign currency** | CC Position + Foreign Currency tabs | Phase 1 |
+| **Checks** (key `checks`) | The one place for statement matching (§11.14), laid out like a statement: pick an account and a statement period, then one row per transaction with the statement's amount and the app's side by side, so what is not in yet stands out; totals and the difference at the foot | Statement file + e-mail alerts + the owner's decisions in the Drive file (`stmtFix`) | Round 2 (2026-11-17) |
 | **Net Worth** | Net worth over time, Book/Market toggle, assets vs liabilities by group, what changed, card tie-out, allocation | Monthly snapshot of the accounting book | Phase 2 (shipped 2026-10-16) |
 | **Accounts** | All accounts grouped with subtotals, balance history, "declared in tax return" flag | Same snapshot | Phase 2 (shipped 2026-10-16) |
 | **Month-end Close** | Close status: positions vs books → journal entries → re-check → closed (the close runs in chat with Claude) | Snapshot `closes` | Phase 3 (shipped 2026-10-16) |
@@ -124,6 +125,7 @@ anywhere, and a home screen organised like a financial statement rather than a r
 │ ⌂ Home               │  ← landing page; active: accent-soft fill, accent-text label, 3px left bar
 │ ◎ Spending           │  ← one item; its two views switch inside the page (§11.2)
 │ ▭ Credit Cards       │
+│ ☑ Checks           6 │  ← always; the count is the open items (§11.14), nothing at 0
 │ ─ WEALTH ─────────── │  ← group label
 │ ◇ Net Worth          │
 │ ⇄ Cash Movements     │  ← always; hosts its own connect step, like Net Worth
@@ -149,6 +151,13 @@ anywhere, and a home screen organised like a financial statement rather than a r
 - Width **240px** at ≥1024px; **72px icon-only rail** at 768–1023px (labels appear as tooltips).
 - Item: 40px tall, 12px horizontal padding, icon 18px + label 14/500, radius 10.
 - Keyboard: ↑/↓ moves between items, Enter activates; the sidebar is a `<nav>` landmark.
+- **Open-items count (2026-11-17).** A menu item may carry one small count at its right edge: a
+  20px-tall pill, `micro` 600, `--warn-soft` fill with `--warn` text (the same tone as the `Check`
+  chip: it means "waiting for you"). It shows only when the count is above 0; at 0 nothing is drawn,
+  not a "0" and not a tick. On the 72px rail it sits on the icon's top-right corner. The item's
+  tooltip and accessible name say it in words ("Checks, 6 open"). Today only **Checks** has one
+  (lines to sort + alerts to check). A count is never used for news or totals, only for items that
+  need a decision.
 
 ### 3.3 Mobile — bottom tab bar + top app bar
 
@@ -168,8 +177,9 @@ anywhere, and a home screen organised like a financial statement rather than a r
 - **Tabs (v2):** Home · Spending · Cards · Net Worth · More — exactly these five. "Spending" is the
   one merged Spending page (§11.2); it opens on its Transactions view, and Insights is one tap
   away on the page's own switch. (Phase 1 was Overview · Spending · Cards · More.) Never more than 5.
-- **More** opens a full page list in menu order: the Wealth pages not in the bar, the Books pages,
-  Budgets, Goals, then Settings, Export, Sign out. There is no second Spending entry.
+- **More** opens a full page list in menu order: Checks (with its open-items count, §3.2, before
+  the chevron), the Wealth pages not in the bar, the Books pages, Budgets, Goals, then Settings,
+  Export, Sign out. There is no second Spending entry. The bottom bar itself does not change.
 - Active tab: accent icon + label, a 32×4px accent pill above the icon. Inactive: text-3.
 - Tapping the active tab again scrolls its page to top.
 - The bar hides on scroll-down and returns on scroll-up only inside long lists; elsewhere it is fixed.
@@ -429,7 +439,7 @@ Disabled: 40% opacity, no hover. Loading: label stays, spinner replaces the icon
 - **Rule for list rows (2026-11-16): a row shows a label only when something needs the owner.
   Normal is silent.** A row that matched its statement, came from a statement, is posted or is
   already in the book carries no chip: that is the expected state, and the detail stays one tap
-  away (the statement sheet, Credit cards › History, the voucher panel). Chips left on rows are
+  away (the statement sheet, the Checks page, the voucher panel). Chips left on rows are
   the ones that ask for a decision or warn that a figure is not final: `Check`, `Draft`, `Void`,
   `Failed`, and the exclusion marks on the Credit cards table.
 
@@ -440,7 +450,8 @@ Disabled: 40% opacity, no hover. Loading: label stays, spinner replaces the icon
   | Journals list | `Draft` (info), `Void`; the kind as small grey text, not a chip | `Posted`, the line count, the Accurate reference, the `AI · n of m` chip (all three are in the voucher panel) |
 
   `Check` is a small warn chip and a button: title "Not on the statement. Open to decide"; it
-  opens the place where that is decided (today the review card under Credit cards › History).
+  opens the place where that is decided: that alert's row on the Checks sheet (§11.14), with its
+  account and statement chosen, scrolled into view and marked.
 - **Source badges (v2)** — say where a figure comes from, in detail views and on rows that are not
   the lists above:
 
@@ -854,10 +865,11 @@ Credit Cards                       [Card: All ▾]  [This cycle ▾]
   it is a horizontal scroll of card "tiles" (credit-card shaped, 160×96, subtle `--accent`
   edge on the selected one).
 - **History:** paid-through timeline as a vertical list of statement cycles with status badges.
-  Below it (v2): the review list (alerts not on a statement, with Exclude / Keep), each statement
-  as a row saying `Reconciled` (good) or `n differences`, the statement calendar (§8.4 palette) and
-  the statement links (which card an e-mail bank is checked against). A statement row opens a sheet
-  with every fix and its own Undo, plus "Undo all for this statement".
+  Below it: one quiet row "Statement matching is on Checks" (opens the Checks page, §11.14), then
+  the statement calendar (§8.4 palette) and the statement links (which card an e-mail bank is
+  checked against). The review list and the statement-by-statement list lived here until
+  2026-11-17; they are on Checks now, so there is one place for matching and History is about
+  payments and timing.
 - **Foreign currency:** FX rate inputs as an editable list (currency code · rate · last updated),
   then the foreign transactions table with original amount + converted `Rp` amount. This is the
   one place amounts show `IDR`/`USD` codes instead of `Rp`.
@@ -1622,6 +1634,115 @@ Web: the drawer opens on the right; the page stays visible and usable on the lef
   off) as a `--bad-soft` note in the chat with **Try again**. A failed request never leaves a
   half-built change set.
 - **Hide amounts (§20):** every figure in the panel blurs too.
+
+### 11.14 Checks — statement matching in one place (round 2, 2026-11-17; statement layout 2026-11-17)
+
+Question: *"Is there anything on my statements I haven't accounted for?"* The owner's words for the
+layout: like a statement, with both sides in columns and the transactions in rows, so what is not
+in yet is plain to see.
+
+```
+Checks
+9 lines to sort · 2 alerts to check                ← the answer; "Everything matches" at 0 / 0
+
+[▣ Savings ••1111  4] [▣ Savings ••2222  7] [▭ Card ••0022  2] [▭ Card ••0033]   ← accounts
+[ 30 Sept · 2 not in yet ▾ ]  2 not in yet  Details                              ← period
+
+┌ Savings ••2222 · 30 Sept ─────────────────────── [All | Not in yet · 6] [Select] ┐
+│ DATE    DESCRIPTION           ON STATEMENT   IN THE APP                          │
+│ 5 Sept  PAYER A                −Rp 85.000    Not in yet     [Add to spending] [Between my accounts] [Ignore] [⋯] │
+│ 7 Sept  SHOP B                 −Rp 40.000    −Rp 40.000     Journal JV/2026/00012 │
+│ 9 Sept  CLIENT C              +Rp 500.000    +Rp 500.000    Income               │
+│ 12 Sept ALERT D           Not on statement   −Rp 30.000     Spending  [Exclude] [Keep] │
+│ ─────────────────────────────────────────────────────────────────────────────── │
+│         Money out              Rp 125.000    Rp 70.000      Difference Rp 55.000 │
+│         Money in               Rp 500.000    Rp 500.000     No difference        │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Where it is.** Its own page (`js/checks.js`), in the top group after Credit cards: Home ·
+  Spending · Credit cards · Checks. Always in the menu. On phones it is the first row of More; the
+  bottom bar stays Home · Spending · Cards · Net worth · More. The menu item and the More row carry
+  the open-items count (§3.2) = statement lines nothing accounts for + alerts not decided.
+- **The answer line** opens the page (§1): "9 lines to sort · 2 alerts to check", only the parts
+  above 0; "Everything matches" with a `--good` check icon when both are 0. It counts exactly what
+  the sheets mark as open, over every account and period.
+- **No statement file yet:** one card with the empty state "Checks needs your bank and card
+  statements" and a button to Cash movements, where the file is connected.
+- **Picker.** One filter chip (§8.4) per rupiah account with statements or lines in the sync
+  period, bank accounts first, then cards; each with its open count (the §3.2 pill) when above 0.
+  Then a select of that account's periods, newest first, each option saying its state
+  (`Reconciled`, `n differences`, `n not in yet`, `All in`), the same state as a badge beside it,
+  and **Details** (ghost) for a statement checked against alerts, which opens the existing
+  statement sheet. Lines outside every statement period (after the last statement, or an account
+  with no statements) are grouped by calendar month, labelled "Oct 2026 · no statement". On
+  opening, the newest period with something open is shown, else the newest closed statement. The
+  choice is a per-viewer convenience kept in memory only, never in the Drive file.
+- **The sheet** (one card): title "account · period", sub-line the dates and the number of
+  transactions; in the head a segmented control **All | Not in yet · n** (default All) and
+  **Select**. Columns: Date · Description · On statement · In the app (amount plus a short plain
+  label of what holds it) · Action. Rows by date. "Not in yet" and "Not on statement" are `--warn`
+  text; a row that needs the owner, or whose two amounts differ, has a `--warn-soft` background.
+  No chips in rows (§8.4).
+
+  | Row | On statement | In the app | Actions |
+  |---|---|---|---|
+  | Alert matched to the line | amount | amount · "Spending" | none; when the amounts differ: "Spending · amount corrected", highlighted, **Undo** (or **Use statement** once undone) |
+  | Charge added from the statement | amount | amount · "Added from statement" ("Spending · added by you" when the owner added it) | **Remove**; a removed one reads "Removed" with **Add back** |
+  | In a journal / linked to income | amount | amount · "Journal JV/…" or "Journal draft" / "Income" | none |
+  | Moves between own accounts, card payments, investments | amount | "Between my accounts" / "Card payment" / "Investment" | none |
+  | Not in yet (a bank line nothing accounts for) | amount | "Not in yet" (warn), highlighted | **Add to spending** (only for a line the matching would count as a charge) or **Add to income** (money in), **Between my accounts**, **Ignore**, **⋯** |
+  | A refund paid into a bank account | +amount | "Not in yet · refund" | **Between my accounts**, **Ignore** (never Add to income: a refund is not income) |
+  | Sorted by you | amount | "Ignored" / "Between my accounts" | **Undo** ("Undo for this payer" under a payer rule) |
+  | Alert not found on a closed statement | "Not on statement" (warn) | amount · "Spending", highlighted | **Exclude**, **Keep**; decided: "Excluded" / "Spending · kept" with **Undo** |
+  | Income typed in for this account, linked to no line | "Not on statement" | amount · "Income" | **Open in Income** (matching it by hand comes later) |
+  | Card line, no alerts linked to that card / statement still open | amount | "Not checked · no alerts linked to this card" / "Statement still open" | none |
+
+  - **Add to spending:** the line becomes an ordinary Spending row, exactly like a charge the
+    matching added by itself (notes, category, split, To journal all work), counted once.
+    Toast "Added to your spending · Undo".
+  - **Add to income:** opens the Income form (§11.9) filled in from the line (date, amount,
+    payer, "Received into" when the account is mapped); saving links the entry to that exact line.
+    Without the wealth snapshot or the book it is disabled, with the hint "Income needs your book:
+    set it up in Settings › Your book".
+  - **Between my accounts** re-tags the line with the Cash movements tag; **Ignore** records that
+    the line needs nothing. Both toast with Undo.
+  - **⋯** (icon button) opens "Between my accounts: all n from this payer" and "Ignore: all n
+    from this payer" when the payer has more than one line (n = its lines in the statement file,
+    as on Cash movements). On phones Ignore moves into this menu, so a row has at most two lines of
+    buttons.
+  - **Select** puts a tick box on the visible "not in yet" bank lines and shows the bulk bar
+    "n selected · Select all shown · Between my accounts · Ignore selected · Cancel"; one toast,
+    one Undo for the batch.
+  - **Not in yet** filter: only the rows that need the owner, plus income with no statement line.
+- **Foot of the sheet:** "Charges" (cards) or "Money out", and for bank accounts "Money in" (only
+  when there is any). Each row gives the statement's total, the app's total and the difference.
+  The statement side is always what the statement says: money out counts the charges the matching
+  counts (for a statement checked against alerts exactly its `charges`, and the app side its
+  `after`), ignored lines included; money in counts the income-type lines and refunds. Under each
+  row, only when not zero, a quiet row "Ignored by you" gives the sum of the lines ignored on that
+  side. Difference = statement − in the app − ignored, so a fully sorted sheet ends at "No
+  difference"; a non-zero difference is in `--warn`. Ignore decisions and payer rules only ever
+  apply to bank-account lines, never to a card's.
+- **Which lines can be open:** only lines on an account that is in the statement file, is not a
+  card and is in rupiah; the same rule decides what the answer line counts and what the sheets
+  show, so the two always agree.
+- **The `Check` chip** on a Spending row opens this page at that alert: its account and period
+  chosen, filter All, the row scrolled into view and marked with a 3px `--warn` bar on its left.
+- **Ambiguous links:** when an e-mail bank fits several cards, a warn line above the picker says to
+  choose one under Credit cards › History › Statement links.
+- **Phones and narrow windows (below 1200px):** the table becomes stacked rows: line 1 date and
+  description; line 2 two compact columns "Statement | In the app" side by side, each with a small
+  label; then the actions. The foot keeps the same two columns. No horizontal page scroll.
+- Nothing here ever deletes. Every decision is a dated entry in the private Drive file; undo writes
+  a dated removal, so two devices converge on the newest decision.
+- **Never twice.** A line added to spending cannot become a second journal from Cash movements
+  (both rows carry the same statement line, and the book refuses the second); a line added as
+  income is not offered for spending.
+- **Ask Claude** can open this page but has no tool that sorts a line (§11.13).
+- **States:** loading shows the page skeleton; a render problem shows the standard error card
+  (§12). If `js/checks.js` fails to load, the app works as before: the review and statement lists
+  are back under Credit cards › History and the `Check` chip opens them there.
 
 ### 11.9 Settings
 

@@ -1,5 +1,6 @@
 /* ExpenseTrack v2 — Statements module.
-   Owner: Statements builder (C). Adds no page: it extends built-in pages through hooks —
+   Owner: Statements builder (C). Adds no page itself (the Checks page, js/checks.js, draws what
+   this module computes): it extends built-in pages through hooks —
    txnBadges(tx), cardsHistory(cards), accountsExtraCol(acc), homeComingUp() — and the
    'transactions' transform, and keeps STATE.stmtFix / STATE.cardMap (docs/v2-interfaces.md §3, §6).
 
@@ -170,6 +171,19 @@
       // Per statement: the statement's charges against the alerts, before and after the fixes.
       for(const x of L){const st=R.stmts[x.p.id];if(st&&(usedL.has(x.l.id)||chargeLine(x.l)))st.charges+=x.amt;}
     }
+    // Lines the owner added to spending by hand (Checks › Lines to sort, fix.sort[line] = {as:'spend'}):
+    // a rupiah charge on any account that no alert matched and the rule above did not add. stmtId is
+    // the line's statement period when it has one (R.stmts only holds linked accounts' periods).
+    {
+      const taken=new Set();for(const m of R.matches)taken.add(m.line.id);for(const a of R.added)taken.add(a.line.id);
+      for(const l of cash.txns||[]){
+        const sv=l&&(fix.sort||{})[l.id];
+        if(!live(sv)||sv.as!=='spend'||taken.has(l.id)||(l.currency||'IDR')!=='IDR'||l.date<hs||!chargeLine(l))continue;
+        const acc=accById.get(l.account),p=periodOf(l.account,l.date);taken.add(l.id);
+        R.added.push({line:l,stmtId:p?p.id:null,account:l.account,bank:(banksOf[l.account]||[])[0]||(acc&&acc.label)||String(l.account),
+          amount:-l.amount,type:typeOf(l),excluded:false,manual:true});
+      }
+    }
     for(const m of R.matches){
       const st=R.stmts[m.stmtId];if(!st)continue;const o0=m.orig||0,same=Math.round(o0)===Math.round(m.amount);
       st.matched++;st.before+=o0;
@@ -226,12 +240,12 @@
     return txns.concat(add);
   }
 
-  let LAST=reconcile([],{}),SIG=null;
+  let LAST=reconcile([],{}),SIG=null,SORT=null;   // SORT: the Checks page's lists, rebuilt on every render
   const opts=()=>({cash:CM(),fix:STATE.stmtFix||{},cardMap:STATE.cardMap||{},today:todayISO(),historyStart:typeof HISTORY_START==='string'?HISTORY_START:''});
   const sig=()=>{const c=CM();return[c?`${c.generatedAt}#${(c.txns||[]).length}#${(c.statements||[]).length}`:'',
     JSON.stringify(STATE.stmtFix||{}),JSON.stringify(STATE.cardMap||{}),JSON.stringify(STATE.cashTypeOverrides||{}),
     JSON.stringify(STATE.cashPayerRules||{}),todayISO()].join('|');};
-  function run(list){const base=strip(list);LAST=reconcile(base,opts());const out=apply(LAST,base);SIG=sig();CAL=null;return out;}
+  function run(list){const base=strip(list);LAST=reconcile(base,opts());const out=apply(LAST,base);SIG=sig();CAL=null;SORT=null;MODEL=null;return out;}
 
   registerTransform('transactions',run,unapply);
 
@@ -261,7 +275,10 @@
     undoMatch(key){const m=findMatch(key);if(!m)return;const s=snapshot([['match',key]]);
       put('match',key,{stmtId:m.stmtId,line:m.line.id,amount:m.amount,off:true});commit('Back to the alert amount',s);},
     redoMatch(key){const s=snapshot([['match',key]]);put('match',key,{deleted:true});commit('Statement amount used',s);},
-    removeAdded(id){const a=LAST.added.find(x=>x.line.id===id);if(!a)return;const s=snapshot([['added',id]]);
+    removeAdded(id){const a=LAST.added.find(x=>x.line.id===id);if(!a)return;
+      // A line the owner added by hand goes back to Lines to sort: its decision is taken off.
+      if(a.manual){const s=snapshot([['sort',id]]);put('sort',id,{deleted:true});commit('Removed from your spending · back in Lines to sort',s);return;}
+      const s=snapshot([['added',id]]);
       put('added',id,{stmtId:a.stmtId,excluded:true});commit('Removed from your spending',s);},
     restoreAdded(id){const s=snapshot([['added',id]]);put('added',id,{deleted:true});commit('Added back from the statement',s);},
     decide(key,decision){const s=snapshot([['review',key]]);
@@ -271,9 +288,9 @@
       const ms=LAST.matches.filter(m=>m.stmtId===stmtId&&!m.off&&Math.round(m.orig||0)!==Math.round(m.amount));
       const as=LAST.added.filter(a=>a.stmtId===stmtId&&!a.excluded),rs=LAST.review.filter(r=>r.stmtId===stmtId&&r.decision==='exclude');
       if(!ms.length&&!as.length&&!rs.length)return;
-      const s=snapshot([...ms.map(m=>['match',m.key]),...as.map(a=>['added',a.line.id]),...rs.map(r=>['review',r.key])]);
+      const s=snapshot([...ms.map(m=>['match',m.key]),...as.map(a=>[a.manual?'sort':'added',a.line.id]),...rs.map(r=>['review',r.key])]);
       for(const m of ms)put('match',m.key,{stmtId:m.stmtId,line:m.line.id,amount:m.amount,off:true});
-      for(const a of as)put('added',a.line.id,{stmtId:a.stmtId,excluded:true});
+      for(const a of as)if(a.manual)put('sort',a.line.id,{deleted:true});else put('added',a.line.id,{stmtId:a.stmtId,excluded:true});
       for(const r of rs)put('review',r.key,{deleted:true});
       commit('Fixes for this statement undone',s);},
     reapplyAll(stmtId){
@@ -286,6 +303,9 @@
       commit(v==='__none'?`${bank} alerts are no longer checked against a statement`:`${bank} alerts now checked against ${accLabel(v)}`);},
     setManual(id,on){put('manual',id,on?{on:true}:{deleted:true});commit(on?'Download reminder on':'Download reminder off');},
     setWhenUsed(id,on){put('whenUsed',id,on?{on:true}:{deleted:true});commit(on?'Marked as only sending a statement when used':'Back to a statement every month');},
+    // Checks page (js/checks.js, UX §11.14): sort a statement line nothing accounts for yet.
+    sortLine(id,as){return sortLines([id],as);},sortLines,unsortLine,sortPayer,unsortPayer,
+    sortCandidates:()=>sortState().lines,checkCounts,checksModel:()=>checksModel(),payerCount,
     openStmt,openCheck,
     // For tests and other modules (read-only).
     reconcile,strip,unapply,apply,calendar,linkFor,calendarRows:()=>calRows(),cycleDay,expectedNext,comingUp,LAG_DEFAULT,LATE_GRACE,WINDOW_PERIODS,last:()=>LAST,refresh,
@@ -293,6 +313,202 @@
   window.ETStatements=API;
 
   const accLabel=id=>{const c=CM(),a=c&&c.accounts.find(x=>x.id===id);return a?(a.label||a.id):String(id||'');};
+
+  /* ── Lines to sort (Checks page, UX §11.14) ──
+     A statement line is listed when it is rupiah, inside the sync period, on a bank account (card
+     lines are the matching engine's), typed money in or money out, and nothing accounts for it:
+       money out: not matched to an alert, not added from the statement (removed ones included),
+                  in no draft or posted journal (spFind → ledgerFindSpending), not sorted by the owner;
+       money in:  not linked to an income entry (incLinks), in no journal, not sorted by the owner.
+     Decisions live in STATE.stmtFix.sort {lineId:{as:'spend'|'ignore'|'own'}} and .sortPayer
+     {payerKey:{as:'ignore'|'own'}} (dated entries, removals are tombstones, like every stmtFix
+     entry). 'spend' is read by reconcile(); 'own' only remembers that the "Between my accounts"
+     tag (STATE.cashTypeOverrides / cashPayerRules, the Cash movements mechanism) was set here. ── */
+  registerHook('beforeRender',()=>{SORT=null;MODEL=null;});
+  const payerKey=l=>typeof cashPayerKey==='function'?cashPayerKey(l):'';
+  // The accounts whose lines the owner sorts by hand: present in the statement file, not a card,
+  // in rupiah. Shared by the listing (sortState) and the sheet (checksModel), so the counts and the
+  // sheets always hold the same lines.
+  function sortAccounts(c){const m=new Map();for(const a of(c&&c.accounts)||[])if(a&&a.id&&(a.kind||'account')!=='card'&&(a.currency||'IDR')==='IDR')m.set(a.id,a);return m;}
+  function sortState(){
+    if(SORT)return SORT;
+    const out={lines:[],sorted:[]},c=CM();
+    if(!c||!Array.isArray(c.txns)||typeof DATA_READY==='undefined'||!DATA_READY)return out;
+    const hs=typeof HISTORY_START==='string'?HISTORY_START:'',fix=STATE.stmtFix||{},S=fix.sort||{},SP=fix.sortPayer||{};
+    const own=sortAccounts(c);
+    const taken=new Set();for(const m of LAST.matches)taken.add(m.line.id);for(const a of LAST.added)taken.add(a.line.id);
+    let inc=new Set();
+    try{if(typeof incLinks==='function')inc=new Set(Object.values(incLinks()).map(t=>t.id));}catch(e){console.error('Statements: income links failed',e);}
+    const inBook=(ref,id)=>typeof spFind==='function'&&!!spFind(ref,id);
+    const ov=STATE.cashTypeOverrides||{},pr=STATE.cashPayerRules||{};
+    for(const l of c.txns){
+      if(!l||!l.id||(l.currency||'IDR')!=='IDR'||!l.amount||(hs&&l.date<hs)||!own.has(l.account))continue;
+      const ty=typeOf(l),g=groupOf(ty),d=live(S[l.id])?S[l.id]:null,key=payerKey(l),pd=key&&live(SP[key])?SP[key]:null;
+      if(ty==='own-transfer'){
+        // Listed under "Sorted by you" only when the tag was set from the Checks page.
+        if(ov[l.id]==='own-transfer'){if(d&&d.as==='own')out.sorted.push({line:l,how:'own',payer:false});}
+        else if(key&&pr[key]==='own-transfer'&&pd&&pd.as==='own')out.sorted.push({line:l,how:'own',payer:true});
+        continue;
+      }
+      if(g!=='in'&&g!=='out')continue;
+      if(l.amount<0?(taken.has(l.id)||inBook('spend:cash:'+l.id,l.id)):(inc.has(l.id)||inBook(null,l.id)))continue;
+      if(d&&d.as==='ignore'){out.sorted.push({line:l,how:'ignore',payer:false});continue;}
+      if(pd&&pd.as==='ignore'){out.sorted.push({line:l,how:'ignore',payer:true});continue;}
+      out.lines.push(l);
+    }
+    const order=(a,b)=>cmp(b.date,a.date)||Math.abs(b.amount)-Math.abs(a.amount)||cmp(String(a.id),String(b.id));
+    out.lines.sort(order);out.sorted.sort((a,b)=>order(a.line,b.line));
+    return SORT=out;
+  }
+  function checkCounts(){const lines=sortState().lines.length,alerts=LAST.review.filter(r=>!r.decision).length;return{lines,alerts,open:lines+alerts};}
+  // How many statement lines share this line's payer (for "all n from this payer").
+  function payerCount(id){const l=lineOf(id),k=l?payerKey(l):'',c=CM();return k&&c?(c.txns||[]).filter(t=>payerKey(t)===k).length:0;}
+
+  /* ── The Checks sheet (UX §11.14): per statement account and period, one row per transaction with
+     what the statement says and what the app has. Built from LAST (the matching), sortState (lines
+     nothing accounts for), the book (spFind), income (incLinks / incList) and the owner's decisions.
+     Rebuilt on every render (MODEL is cleared with SORT).
+     Row: {kind:'line'|'alert'|'income', id, key, date, desc, sub, stmt (signed rupiah or null),
+       app (signed rupiah or null), as (plain label), tone ('open'|'diff'|''), open (needs the owner),
+       acts [...], line?, flow ('out'|'in'|null: which footer total it counts in)}.
+     Footer per period: out {stmt, app, diff} (= R.stmts[id].charges / .after for a linked statement,
+     ignored lines included), and for a bank account in; each {stmt, app, ign, diff}, diff = stmt − app − ign. ── */
+  let MODEL=null;
+  const monthEndIso=m=>{const[y,mo]=m.split('-').map(Number);return`${m}-${pad(dim(y,mo))}`;};
+  const MON3=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthLbl=m=>`${MON3[+m.slice(5,7)-1]} ${m.slice(0,4)}`;
+  function checksModel(){
+    if(MODEL)return MODEL;
+    const out={accounts:[],ambiguous:Object.keys(LAST.ambiguous||{}).filter(b=>!LAST.setLinks[b])},c=CM();
+    if(!c||!Array.isArray(c.txns)||typeof DATA_READY==='undefined'||!DATA_READY)return out;
+    const today=todayISO(),hs=typeof HISTORY_START==='string'?HISTORY_START:'',per=periodsOf(c,today),S=sortState();
+    const open=new Set(S.lines.map(l=>l.id)),sorted=new Map(S.sorted.map(x=>[x.line.id,x]));
+    const fix=STATE.stmtFix||{},SF=fix.sort||{},SP=fix.sortPayer||{};
+    const matchBy=new Map(LAST.matches.map(m=>[m.line.id,m])),addedBy=new Map(LAST.added.map(a=>[a.line.id,a]));
+    let links={},incs=[];
+    try{if(typeof incLinks==='function')links=incLinks();if(typeof incList==='function')incs=incList();}catch(e){console.error('Statements: income failed',e);}
+    const incOfLine=new Map();for(const[id,t]of Object.entries(links)){const x=(STATE.income||{})[id];if(x&&t)incOfLine.set(t.id,x);}
+    const linkedInc=new Set(Object.keys(links));
+    const book=(ref,id)=>typeof spFind==='function'?spFind(ref,id):null;
+    // Ignore decisions and payer rules apply only to lines on the accounts sortState covers (a payer
+    // rule is keyed by payer, not account, so it must never reach a card line).
+    const sortable=sortAccounts(c);
+    const ignored=l=>{if(!sortable.has(l.account))return false;const d=SF[l.id],k=payerKey(l),p=k?SP[k]:null;return(live(d)&&d.as==='ignore')||(live(p)&&p.as==='ignore');};
+    const accs=[...(c.accounts||[])].filter(a=>(a.currency||'IDR')==='IDR')
+      .sort((a,b)=>cmp((a.kind||'account')==='card'?1:0,(b.kind||'account')==='card'?1:0)||cmp(a.label||a.id,b.label||b.id));
+    for(const a of accs){
+      const card=(a.kind||'account')==='card',P=(per[a.id]||[]).filter(p=>!hs||p.end>=hs);
+      const lines=c.txns.filter(l=>l&&l.id&&l.account===a.id&&(l.currency||'IDR')==='IDR'&&l.amount&&(!hs||l.date>=hs));
+      if(!P.length&&!lines.length)continue;
+      const periods=new Map();
+      for(const p of P){const st=LAST.stmts[p.id];
+        periods.set(p.id,{id:p.id,real:true,start:p.start,end:p.end,closed:p.closed,label:dayLabel(p.end),status:st?st.status:null,diffs:st?st.diffs:0,linked:!!st,rows:[]});}
+      const periodFor=iso=>{const p=P.find(x=>x.start<=iso&&iso<=x.end);if(p)return periods.get(p.id);
+        const m=iso.slice(0,7),id=a.id+'|month:'+m;
+        if(!periods.has(id))periods.set(id,{id,real:false,start:m+'-01',end:monthEndIso(m),closed:monthEndIso(m)<today,label:monthLbl(m)+' · no statement',status:null,diffs:0,linked:false,rows:[]});
+        return periods.get(id);};
+      let bookAcc='';if(!card)try{bookAcc=(typeof meMapOf==='function'&&typeof W==='function'&&W()&&meMapOf(cashAcc(a.id)))||'';}catch(_){}
+      for(const l of lines){
+        const ty=typeOf(l),g=groupOf(ty),key=payerKey(l),name=String(l.counterparty||l.desc||'Statement line').replace(/\s+/g,' ').trim();
+        const r={kind:'line',id:l.id,key:'line:'+l.id,date:l.date,desc:name,sub:l.counterparty&&l.desc&&l.counterparty!==l.desc?String(l.desc):'',stmt:l.amount,app:null,as:'',tone:'',open:false,acts:[],line:l,flow:null};
+        const m=matchBy.get(l.id),ad=addedBy.get(l.id);
+        if(l.amount<0&&(m||chargeLine(l)))r.flow='out';
+        else if(!card&&l.amount>0&&(g==='in'||ty==='refund'))r.flow='in';
+        // Ignored only when sortState counts it as sorted that way: a line already in the app
+        // (matched, added, in the book, linked to income) is never ignored by a payer rule.
+        r.ignored=ignored(l)&&(sorted.get(l.id)||{}).how==='ignore';
+        if(m){
+          const after=m.off||m.t.splitInfo?(m.orig||0):m.amount,same=Math.round(m.orig||0)===Math.round(m.amount);
+          r.app=-after;r.as='Spending';r.sub=String(m.t.merchantClean||m.t.merchantRaw||'')+(same?'':` · alert ${m.orig?fmtIDR(m.orig):(m.t.amountStr||'no rupiah amount')}`);r.alert=m.key;
+          if(!same){r.tone='diff';r.acts=[m.off?'useStmt':'undoMatch'];r.as=m.off?'Spending · alert amount':'Spending · amount corrected';}
+        }else if(ad){
+          if(ad.excluded){r.as='Removed';r.acts=['addBack'];}
+          else{r.app=-ad.amount;r.as=ad.manual?'Spending · added by you':'Added from statement';r.acts=['remove'];}
+        }else if(open.has(l.id)){
+          r.open=true;r.tone='open';r.as=ty==='refund'?'Not in yet · refund':'Not in yet';
+          r.acts=[...(l.amount<0&&chargeLine(l)?['spend']:[]),...(l.amount>0&&g==='in'?['income']:[]),'own','ignore'];
+          r.payer=key?payerCount(l.id):0;
+        }else if(sorted.has(l.id)){
+          const x=sorted.get(l.id);r.as=x.how==='own'?'Between my accounts':'Ignored';r.acts=[x.payer?'unsortPayer':'unsortLine'];r.byPayer=x.payer;
+        }else{
+          const j=book(l.amount<0?'spend:cash:'+l.id:null,l.id),inc=incOfLine.get(l.id);
+          if(j){r.app=l.amount;r.as='Journal '+(j.number||'draft');}
+          else if(inc){r.app=Math.round(inc.amount);r.as='Income';r.income=inc.id;}
+          else if(ty==='own-transfer')r.as='Between my accounts';
+          else if(ty==='card-payment')r.as='Card payment';
+          else if(g==='invest')r.as='Investment';
+          else if(card&&chargeLine(l))r.as='';   // set below, once the period is known
+          else r.as=typeof cashMeta==='function'?cashMeta(ty).label:ty;
+        }
+        const lp=periodFor(l.date);
+        if(r.as==='')r.as=lp.linked?'Statement still open':'Not checked · no alerts linked to this card';
+        lp.rows.push(r);
+      }
+      for(const v of LAST.review.filter(x=>x.account===a.id)){
+        const p=periods.get(v.stmtId)||periodFor(txISO(v.t)||v.t.txDate.slice(0,10));
+        p.rows.push({kind:'alert',id:v.key,key:'alert:'+v.key,date:txISO(v.t),desc:String(v.t.merchantClean||v.t.merchantRaw||'—'),sub:String(v.t.bank||''),
+          stmt:null,app:v.decision==='exclude'?null:-(v.orig||0),as:v.decision==='exclude'?'Excluded':v.decision==='keep'?'Spending · kept':'Spending',
+          tone:v.decision?'':'open',open:!v.decision,acts:v.decision?['undoDecide']:['exclude','keep'],flow:v.decision==='exclude'?null:'out',amountStr:v.orig>0?'':String(v.t.amountStr||'')});
+      }
+      if(bookAcc)for(const x of incs){
+        if(linkedInc.has(x.id)||x.account!==bookAcc||!(x.amount>0)||(hs&&x.date<hs))continue;
+        periodFor(x.date).rows.push({kind:'income',id:x.id,key:'income:'+x.id,date:x.date,desc:String(x.payer||'Income'),sub:String(x.note||''),stmt:null,app:Math.round(x.amount),
+          as:'Income',tone:'',open:false,acts:['openIncome'],flow:'in'});
+      }
+      const list=[...periods.values()].sort((x,y)=>cmp(y.end,x.end)||cmp(y.id,x.id));
+      let accOpen=0;
+      for(const p of list){
+        p.rows.sort((x,y)=>cmp(x.date||'',y.date||'')||cmp(x.kind,y.kind)||cmp(x.id,y.id));
+        p.open=p.rows.filter(r=>r.open).length;accOpen+=p.open;
+        // stmt = what the statement says (the engine's charges for a linked statement, ignored lines
+        // included); ign = the ignored lines on that side; diff = stmt − app − ign.
+        const sum=(f,side,only)=>p.rows.filter(r=>r.flow===f&&(!only||r.ignored)).reduce((n,r)=>n+Math.abs(r[side]||0),0);
+        const tot=f=>{const st=sum(f,'stmt'),ap=sum(f,'app'),ig=sum(f,'stmt',true);return{stmt:st,app:ap,ign:ig,diff:st-ap-ig};};
+        p.out=tot('out');p.in=card?null:tot('in');
+      }
+      out.accounts.push({id:a.id,label:a.label||a.id,kind:a.kind||'account',open:accOpen,periods:list});
+    }
+    return MODEL=out;
+  }
+  const lineOf=id=>{const c=CM();return c&&(c.txns||[]).find(t=>t.id===id)||null;};
+  // The re-tags (overrides, payer rules) are not stmtFix entries, so Undo puts them back by hand;
+  // a reset is stored as null, never deleted, so it wins over the other device's older value.
+  const tagSnap=(map,keys)=>keys.map(k=>[map,k,(STATE[map]||{})[k]||null]);
+  function commitSort(msg,snap,tags){
+    scheduleDriveSave();refresh();renderAll();updateSheet();
+    toast(msg,{action:'Undo',onAction:()=>{for(const[map,k,v]of tags||[])(STATE[map]||(STATE[map]={}))[k]=v;restore(snap);}});
+  }
+  // as: 'spend' (money-out lines only) | 'ignore' | 'own' (= Between my accounts). One Undo for all.
+  function sortLines(ids,as){
+    if(!['spend','ignore','own'].includes(as))return 0;
+    const ls=[...new Set(ids||[])].map(lineOf).filter(l=>l&&(as!=='spend'||chargeLine(l)));if(!ls.length)return 0;
+    const snap=snapshot(ls.map(l=>['sort',l.id])),tags=as==='own'?tagSnap('cashTypeOverrides',ls.map(l=>l.id)):[];
+    for(const l of ls){put('sort',l.id,{as});if(as==='own')(STATE.cashTypeOverrides||(STATE.cashTypeOverrides={}))[l.id]='own-transfer';}
+    const n=ls.length,many=n>1;
+    commitSort(as==='spend'?(many?`${n} lines added to your spending`:'Added to your spending')
+      :as==='own'?(many?`${n} lines marked as between your accounts`:'Marked as between your accounts')
+      :(many?`${n} lines ignored`:'Line ignored'),snap,tags);
+    return n;
+  }
+  function unsortLine(id){
+    const d=((STATE.stmtFix||{}).sort||{})[id];if(!live(d))return;
+    const snap=snapshot([['sort',id]]),own=d.as==='own'&&(STATE.cashTypeOverrides||{})[id]==='own-transfer',tags=own?tagSnap('cashTypeOverrides',[id]):[];
+    put('sort',id,{deleted:true});if(own)STATE.cashTypeOverrides[id]=null;
+    commitSort('Back in Lines to sort',snap,tags);
+  }
+  // "Same for everything from this payer", from one of the payer's lines. as: 'ignore' | 'own'.
+  function sortPayer(id,as){
+    const l=lineOf(id),key=l?payerKey(l):'';if(!key||(as!=='ignore'&&as!=='own'))return;
+    const snap=snapshot([['sortPayer',key]]),tags=as==='own'?tagSnap('cashPayerRules',[key]):[];
+    put('sortPayer',key,{as});if(as==='own')(STATE.cashPayerRules||(STATE.cashPayerRules={}))[key]='own-transfer';
+    commitSort(as==='own'?'Everything from this payer is now between your accounts':'Everything from this payer is now ignored',snap,tags);
+  }
+  function unsortPayer(id){
+    const l=lineOf(id),key=l?payerKey(l):'',d=key?((STATE.stmtFix||{}).sortPayer||{})[key]:null;if(!live(d))return;
+    const snap=snapshot([['sortPayer',key]]),own=d.as==='own'&&(STATE.cashPayerRules||{})[key]==='own-transfer',tags=own?tagSnap('cashPayerRules',[key]):[];
+    put('sortPayer',key,{deleted:true});if(own)STATE.cashPayerRules[key]=null;
+    commitSort('Payer rule removed · its lines are back in Lines to sort',snap,tags);
+  }
 
   /* ── Statement calendar ── */
   // Cycle day = median day of month of past statements; a statement on a month's last day counts
@@ -502,13 +718,16 @@
   // yet gets one small "Check" chip that opens the place where it is decided.
   registerHook('txnBadges',t=>{
     const s=t&&t.stmt;if(!s||s.kind!=='review')return null;
-    return`<button type="button" class="badge warn stmt-check" style="margin-left:4px" title="Not on the statement. Open to decide" onclick="event.stopPropagation();ETStatements.openCheck()">Check</button>`;
+    return`<button type="button" class="badge warn stmt-check" style="margin-left:4px" title="Not on the statement. Open to decide" onclick="event.stopPropagation();ETStatements.openCheck('${escAttr(t.id)}')">Check</button>`;
   });
-  // Where a "Check" row is decided: today the review card under Credit cards › History.
-  function openCheck(){
+  // Where a "Check" row is decided: its row on the Checks sheet (js/checks.js), for that alert's
+  // account and statement (key = the alert's id; without one, the newest undecided alert). If that
+  // page isn't there (its script failed to load), the review list under Credit cards › History.
+  const hasChecks=()=>typeof pageByKey==='function'&&!!pageByKey('checks')&&!!window.ETChecks;
+  function openCheck(key){
     if(typeof closeAllSheets==='function')closeAllSheets();
-    CARDS_SUB='history';CCP_CARD='all';
-    if(ACTIVE_TAB==='cards')renderAll();else setTab('cards');
+    if(hasChecks()){ETChecks.focus(typeof key==='string'?key:null);return;}
+    CARDS_SUB='history';CCP_CARD='all';if(ACTIVE_TAB==='cards')renderAll();else setTab('cards');
     requestAnimationFrame(()=>{const e=document.getElementById('stmtReview');if(e)e.scrollIntoView({block:'center'});});
   }
 
@@ -526,6 +745,10 @@
 
   registerHook('cardsHistory',cards=>{
     const c=CM();if(!c||!(c.statements||[]).length)return null;
+    // Statement matching lives on the Checks page; History keeps the calendar and the links.
+    if(hasChecks())return section('',`<div class="list" style="margin:-10px 0"><button class="list-item" id="stmtToChecks" style="border-top:0" onclick="setTab('checks')">${ic('list-checks')}
+      <span class="li-body"><span class="li-title" style="display:block">Statement matching is on Checks</span><span class="li-sub" style="display:block">Lines to sort, alerts to check and each statement against your alerts</span></span>${ic('chevron-right','s16')}</button></div>`)
+      +calendarCard()+setupCard(LAST);
     const R=LAST,all=typeof CCP_CARD==='undefined'||CCP_CARD==='all',keys=new Set((cards||[]).map(x=>x.key));
     const ids=new Set();for(const b of R.banks)if(R.links[b]&&(all||keys.has(b)))ids.add(R.links[b]);
     return reviewCard(R,ids)+stmtCard(R,ids)+calendarCard()+setupCard(R);
@@ -611,7 +834,7 @@
       return row(txName(m.t),`${dayLabel(txISO(m.t))} · alert ${m.orig?fmtIDR(m.orig):(escH(m.t.amountStr||'no rupiah amount'))} · statement ${fmtIDR(m.amount)}${m.off?' · using the alert':''}`,
         money(m.off?m.orig:m.amount),m.off?b('Use statement',`ETStatements.redoMatch('${k}')`):b('Undo',`ETStatements.undoMatch('${k}')`));}).join('');
     const addRows=as.map(a=>{const k=escAttr(a.line.id);
-      return row(escH(a.line.counterparty||a.line.desc||'Statement charge'),`${dayLabel(a.line.date)} · ${escH(cashMeta(a.type).label)}${a.excluded?' · removed':' · added from the statement'}`,
+      return row(escH(a.line.counterparty||a.line.desc||'Statement charge'),`${dayLabel(a.line.date)} · ${escH(cashMeta(a.type).label)}${a.excluded?' · removed':a.manual?' · added by you':' · added from the statement'}`,
         money(a.amount),a.excluded?b('Add back',`ETStatements.restoreAdded('${k}')`):b('Remove',`ETStatements.removeAdded('${k}')`));}).join('');
     const revRows=rs.map(r=>{const k=escAttr(r.key),amt=r.orig>0?money(r.orig):escH(r.t.amountStr||'—');
       const btns=r.decision?b('Undo',`ETStatements.decide('${k}',null)`):`<span style="display:flex;gap:8px">${b('Exclude',`ETStatements.decide('${k}','exclude')`)}${b('Keep',`ETStatements.decide('${k}','keep')`)}</span>`;
