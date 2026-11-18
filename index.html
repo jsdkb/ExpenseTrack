@@ -2581,7 +2581,27 @@ function filterRowHTML(){
   const bankChips=banks.map(([k,l])=>`<button class="chip" aria-pressed="${ACTIVE_BANK===k}" onclick="setBank('${k}')">${ACTIVE_BANK===k&&k!=='all'?ic('check'):''}${l}</button>`).join('');
   const active=[...ACTIVE_CATEGORIES].map(c=>`<button class="chip removable" onclick="toggleCategory('${escAttr(c)}')" aria-label="Remove filter ${escH(c)}">${ic(catMeta(c).icon)}${escH(c)}${ic('x')}</button>`).join('')
     +(ACTIVE_MERCHANT?`<button class="chip removable" onclick="clearMerchantFilter()" aria-label="Remove merchant filter">${escH(ACTIVE_MERCHANT)}${ic('x')}</button>`:'');
-  return`<div class="filter-row" role="group" aria-label="Filters">${bankChips}${active?`<span class="sep" aria-hidden="true"></span>${active}`:''}</div>`;
+  const n=ACTIVE_CATEGORIES.size,catLabel=n===0?'Category':n===1?[...ACTIVE_CATEGORIES][0]:`${n} categories`;
+  const catBtn=`<button class="chip" aria-pressed="${n>0}" aria-haspopup="menu" onclick="openCategoryMenu(this)" aria-label="Filter by category: ${escH(n?catLabel:'none')}">${n?ic('check'):''}${escH(catLabel)}${ic('chevron-down')}</button>`;
+  return`<div class="filter-row" role="group" aria-label="Filters">${catBtn}<span class="sep" aria-hidden="true"></span>${bankChips}${active?`<span class="sep" aria-hidden="true"></span>${active}`:''}</div>`;
+}
+// Categories with spend in the current period and bank (ignoring the category filter itself, so
+// the list does not shrink once one is picked), biggest first, with a tick on the active ones.
+function openCategoryMenu(anchor){
+  const b=getRangeBounds(ACTIVE_RANGE);
+  const pool=ALL_TRANSACTIONS.filter(t=>{
+    if(!(t.amount>0))return false;
+    if(b){const d=txDateOf(t);if(d<b[0]||d>b[1])return false;}
+    if(ACTIVE_BANK!=='all'&&t.bank!==ACTIVE_BANK)return false;
+    if(ACTIVE_MERCHANT&&(t.merchantClean||t.merchantRaw||'Unknown')!==ACTIVE_MERCHANT)return false;
+    return true;
+  });
+  const rows=categoryTotals(pool);
+  for(const c of ACTIVE_CATEGORIES)if(!rows.some(r=>r[0]===c))rows.push([c,{total:0,count:0}]);
+  const items=[{label:'All categories',checked:ACTIVE_CATEGORIES.size===0,onSelect:clearCategories}];
+  if(rows.length)items.push({divider:true});
+  rows.forEach(([c,d])=>items.push({label:`${c} · ${d.count}`,icon:catMeta(c).icon,checked:ACTIVE_CATEGORIES.has(c),onSelect:()=>toggleCategory(c)}));
+  openMenu(anchor,{title:'Category',items});
 }
 function pageHead(title,desc,actions){
   return`<div class="page-head"><div><h1 class="page-title">${escH(title)}</h1>${desc?`<p class="page-desc">${desc}</p>`:''}</div>${actions?`<div class="page-actions">${actions}</div>`:''}</div>`;

@@ -749,6 +749,12 @@ sidebar, top bar, document title, phone bar. A two-part segmented control (§8.3
 - Switching view keeps the period, bank, category and merchant filters: one filter row and one
   period button serve both views, and a category or merchant picked in Insights also filters the
   transactions list.
+- The filter row starts with a **Category** button (first, so it is in view on phones, where the
+  row scrolls sideways) (chip with a chevron, owner's request
+  2026-11-18), so a category can be picked without going to Insights. It opens a menu (a sheet on
+  phones): **All categories**, then every category with spend in the period and bank, biggest
+  first, each with its count, ticked when active. Picking one adds or removes it; the button reads
+  "Category", the one name, or "N categories". Active categories still show as removable chips.
 - The page head is the same in both views: greeting line, period button, **Add**, hide amounts,
   **Sync**. On phones the top bar shows the period chip and Add in both views.
 - **Every card appears in exactly one view.** Old links to the Spending page (`setTab('spending')`,
