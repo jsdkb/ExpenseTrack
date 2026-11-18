@@ -763,7 +763,7 @@ sidebar, top bar, document title, phone bar. A two-part segmented control (§8.3
 
 | View | Cards, in order |
 |---|---|
-| Transactions | Summary panel (spent, delta, pace, trend chart) · key-figures strip · phones only: "n recurring charges to review" (opens Insights at the recurring card) · Transactions |
+| Transactions | Summary panel (spent, delta, pace, trend chart) · key-figures strip · **By category** (donut + top-6 list) · phones only: "n recurring charges to review" (opens Insights at the recurring card) · Transactions |
 | Insights | 4 KPI cards · Monthly spend + Category mix per month · Month so far · Cash flow (with a wealth snapshot) · Where it went (full list) + Split by bank · Top merchants + Top transfers (phones: one card with a Merchants / Transfers switch) · Recurring charges to review |
 
 #### Transactions view
@@ -772,6 +772,16 @@ Question: *"Where do I stand this month, and what did I buy?"* It reads top-down
 statement: one headline figure with its trend, a strip of supporting figures, then the list.
 "Where it went" (short list), "Card status" and the desktop recurring card left this view on
 2026-11-16: the first and last live in Insights, card status on Credit cards.
+
+**By category** (owner's request 2026-11-18: "a pie chart of amount per category I can click to
+see all the transactions"). One span-12 card between the strip and the list, id `txCatCard`:
+a donut per §7 (≤ 6 slices + "Other", 60% cutout, category colours, total in the centre) beside
+the top-6 ranked list (the §7 primary breakdown, so the donut is never the only one); stacked on
+phones (donut 200 px, list below). Amounts follow the period, bank and merchant filters but not
+the category filter, so the whole stays visible: when categories are picked, other slices and rows
+dim and the centre shows the picked total ("Selected"). Tapping a slice or a row toggles that
+category and scrolls to the Transactions list; "Other" opens the Category menu. The full list
+stays on Insights ("Where it went"): this card is the one deliberate overlap with Insights.
 
 **Web (lg)**
 ```

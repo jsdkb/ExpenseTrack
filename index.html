@@ -463,6 +463,12 @@
     .rank-val small { font-size: 12px; color: var(--text-3); font-weight: 500; margin-left: 6px; }
     .rank-bar { grid-column: 2 / 4; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
     .rank-bar > i { display: block; height: 100%; border-radius: 999px; }
+    /* By category on Spending › Transactions (§11.2): donut beside the top-6 list */
+    .catpie { display: grid; grid-template-columns: 240px minmax(0,1fr); gap: 32px; align-items: center; }
+    .catpie-donut { position: relative; height: 240px; }
+    .catpie-mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; text-align: center; }
+    .catpie-mid .amt { font-size: 18px; font-weight: 600; }
+    @media (max-width: 767px) { .catpie { grid-template-columns: 1fr; gap: 16px; } .catpie-donut { height: 200px; } }
     .progress { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
     .progress > i { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width 400ms var(--ease-out); }
     .progress.over > i { background: var(--bad); }
@@ -2588,15 +2594,7 @@ function filterRowHTML(){
 // Categories with spend in the current period and bank (ignoring the category filter itself, so
 // the list does not shrink once one is picked), biggest first, with a tick on the active ones.
 function openCategoryMenu(anchor){
-  const b=getRangeBounds(ACTIVE_RANGE);
-  const pool=ALL_TRANSACTIONS.filter(t=>{
-    if(!(t.amount>0))return false;
-    if(b){const d=txDateOf(t);if(d<b[0]||d>b[1])return false;}
-    if(ACTIVE_BANK!=='all'&&t.bank!==ACTIVE_BANK)return false;
-    if(ACTIVE_MERCHANT&&(t.merchantClean||t.merchantRaw||'Unknown')!==ACTIVE_MERCHANT)return false;
-    return true;
-  });
-  const rows=categoryTotals(pool);
+  const rows=categoryTotals(catPool());
   for(const c of ACTIVE_CATEGORIES)if(!rows.some(r=>r[0]===c))rows.push([c,{total:0,count:0}]);
   const items=[{label:'All categories',checked:ACTIVE_CATEGORIES.size===0,onSelect:clearCategories}];
   if(rows.length)items.push({divider:true});
@@ -3074,20 +3072,69 @@ function categoryTotals(idr){
   const by={};for(const t of idr){const c=t.category||'Others';if(!by[c])by[c]={total:0,count:0};by[c].total+=t.amount;by[c].count++;}
   return Object.entries(by).sort((a,b)=>b[1].total-a[1].total);
 }
-function rankedCategoriesHTML(idr,limit){
+function rankedCategoriesHTML(idr,limit,fn){
+  fn=fn||'toggleCategory';
   const total=sumAmt(idr);const rows=categoryTotals(idr);
   if(!rows.length)return emptyHTML('chart-pie','No spending in this period','Show all time',"setRange('all')");
   let shown=rows,rest=[];
   if(limit&&rows.length>limit+1){shown=rows.slice(0,limit);rest=rows.slice(limit);}
   const max=shown[0][1].total||1,hasF=ACTIVE_CATEGORIES.size>0;
   const row=([c,d])=>{const col=catColor(c),pct=total?d.total/total*100:0;
-    return`<button class="rank-row${hasF&&!ACTIVE_CATEGORIES.has(c)?' dim':''}" onclick="toggleCategory('${escAttr(c)}')" aria-pressed="${ACTIVE_CATEGORIES.has(c)}" aria-label="${escH(c)}: ${fmtIDR(d.total)}, ${fmtPct(pct)} of spend. Filter by this category">
+    return`<button class="rank-row${hasF&&!ACTIVE_CATEGORIES.has(c)?' dim':''}" onclick="${fn}('${escAttr(c)}')" aria-pressed="${ACTIVE_CATEGORIES.has(c)}" aria-label="${escH(c)}: ${fmtIDR(d.total)}, ${fmtPct(pct)} of spend. Filter by this category">
       ${catSquare(c,true)}<span class="rank-name">${escH(c)}</span><span class="rank-val"><span class="amt">${fmtIDRShort(d.total)}</span><small>${fmtPct(pct)}</small></span>
       <span class="rank-bar"><i style="width:${Math.max(2,d.total/max*100)}%;background:${col}"></i></span></button>`;};
   let html=shown.map(row).join('');
   if(rest.length){const rt=rest.reduce((s,[,d])=>s+d.total,0),pct=total?rt/total*100:0;
-    html+=`<div class="rank-row"><span class="cat-square sm" style="background:var(--surface-2);color:var(--text-3)" aria-hidden="true">${ic('circle-ellipsis')}</span><span class="rank-name">Other (${rest.length})</span><span class="rank-val"><span class="amt">${fmtIDRShort(rt)}</span><small>${fmtPct(pct)}</small></span><span class="rank-bar"><i style="width:${Math.max(2,rt/max*100)}%;background:var(--text-3)"></i></span></div>`;}
+    const inner=`<span class="cat-square sm" style="background:var(--surface-2);color:var(--text-3)" aria-hidden="true">${ic('circle-ellipsis')}</span><span class="rank-name">Other (${rest.length})</span><span class="rank-val"><span class="amt">${fmtIDRShort(rt)}</span><small>${fmtPct(pct)}</small></span><span class="rank-bar"><i style="width:${Math.max(2,rt/max*100)}%;background:var(--text-3)"></i></span>`;
+    // On the Transactions view "Other" opens the Category menu so its categories can be picked too.
+    html+=fn!=='toggleCategory'?`<button class="rank-row" onclick="openCategoryMenu(this)" aria-haspopup="menu" aria-label="Other: ${rest.length} more categories. Pick one">${inner}</button>`:`<div class="rank-row">${inner}</div>`;}
   return`<div class="rank-list">${html}</div>`;
+}
+// Spending in the period, bank and merchant filters, ignoring the category filter itself: the
+// Category menu and the By category card show the whole, with the picked categories marked.
+function catPool(){
+  const b=getRangeBounds(ACTIVE_RANGE);
+  return ALL_TRANSACTIONS.filter(t=>{
+    if(!(t.amount>0))return false;
+    if(b){const d=txDateOf(t);if(d<b[0]||d>b[1])return false;}
+    if(ACTIVE_BANK!=='all'&&t.bank!==ACTIVE_BANK)return false;
+    if(ACTIVE_MERCHANT&&(t.merchantClean||t.merchantRaw||'Unknown')!==ACTIVE_MERCHANT)return false;
+    return true;
+  });
+}
+// Tap a slice or row on By category: toggle it, then bring the transactions list into view.
+function pickCategory(c){
+  const adding=!ACTIVE_CATEGORIES.has(c);
+  toggleCategory(c);
+  if(adding)requestAnimationFrame(()=>{const el=$('txCard');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});});
+}
+const CATPIE_SLICES=6;
+function catPieCard(){
+  const pool=catPool(),rows=categoryTotals(pool);
+  if(!rows.length)return'';
+  const total=sumAmt(pool),sel=rows.filter(([c])=>ACTIVE_CATEGORIES.has(c)),selTotal=sel.reduce((s,[,d])=>s+d.total,0);
+  const mid=sel.length?`<span class="eyebrow">Selected</span><span class="amt">${fmtIDRShort(selTotal)}</span><span class="muted" style="font-size:12px">${fmtPct(total?selTotal/total*100:0)} of spend</span>`
+    :`<span class="eyebrow">Total</span><span class="amt">${fmtIDRShort(total)}</span>`;
+  return`<section class="card span-12" id="txCatCard" aria-label="Spending by category">
+    ${cardHead('chart-pie','By category',escH(periodLabel())+' · tap a category to see its transactions')}
+    <div class="catpie"><div class="catpie-donut"><canvas id="txCatPie" role="img" aria-label="Spending by category: ${escH(rows.slice(0,CATPIE_SLICES).map(([c,d])=>c+' '+(amountsHidden()?'hidden':fmtIDRShort(d.total))).join(', '))}"></canvas><div class="catpie-mid">${mid}</div></div>
+    ${rankedCategoriesHTML(pool,CATPIE_SLICES,'pickCategory')}</div></section>`;
+}
+function drawCatPie(){
+  const el=$('txCatPie');if(!el)return;
+  const rows=categoryTotals(catPool());
+  let shown=rows,rest=[];
+  if(rows.length>CATPIE_SLICES+1){shown=rows.slice(0,CATPIE_SLICES);rest=rows.slice(CATPIE_SLICES);}
+  const labels=shown.map(([c])=>c),vals=shown.map(([,d])=>d.total),hasF=ACTIVE_CATEGORIES.size>0;
+  const cols=shown.map(([c])=>{const col=catColor(c);return hasF&&!ACTIVE_CATEGORIES.has(c)?hexA(col,0.3):col;});
+  if(rest.length){labels.push('Other');vals.push(rest.reduce((s,[,d])=>s+d.total,0));cols.push(hexA(themeName()==='light'?'#9CA3AF':'#4B5563',hasF?0.3:1));}
+  const total=vals.reduce((s,v)=>s+v,0);
+  CHARTS.txCatPie=new Chart(el,{type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:cols,borderColor:cssVar('--surface-1'),borderWidth:2,hoverOffset:6}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'60%',...animOnce(),
+      // Deferred: picking re-renders the page, which destroys this chart; Chart.js must finish its event first.
+      onClick:(e,els)=>{if(!els.length)return;const c=labels[els[0].index];setTimeout(()=>{if(c==='Other'&&rest.length)openCategoryMenu(el);else pickCategory(c);},0);},
+      onHover:(e,els)=>{if(e.native&&e.native.target)e.native.target.style.cursor=els.length?'pointer':'default';},
+      plugins:{legend:{display:false},tooltip:{enabled:!isMobile(),displayColors:false,callbacks:{label:c=>`${moneyTip(c.parsed)} · ${fmtPct(total?c.parsed/total*100:0)}`}}}}});
 }
 function searchMatch(t,q){
   if(!q)return true;q=q.toLowerCase();
@@ -3528,6 +3575,7 @@ function renderOverview(txns){
     ${spendViewSeg()}
     ${SPEND_VIEW==='insights'?renderSpending(txns):`<div class="grid">${summary}</div>
     <div class="grid">${strip}</div>
+    <div class="grid">${catPieCard()}</div>
     <div class="grid only-sm">${recurringMini()}</div>
     <div class="grid">${transactionsCard()}</div>`}`;
 }
@@ -3544,6 +3592,7 @@ function renderOverviewCharts(){
   const s=monthSeries(ALL_TRANSACTIONS.filter(filterOthers),TREND_RANGE||0);
   drawTrendChart('ovTrend','ovTrendReadout',s.keys,s.vals);
   const tb=$('ovTrendTable');if(tb)tb.innerHTML=seriesTable(s.keys,s.vals);
+  drawCatPie();
   renderTxBody();
 }
 function renderBrandEmpty(){
