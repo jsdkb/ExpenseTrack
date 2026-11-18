@@ -55,6 +55,13 @@
 .chk-diff.bad-diff{color:var(--warn);font-weight:600}
 .chk-none{padding:16px 8px;color:var(--text-2);border-top:1px solid var(--border)}
 #chkSheetCard .bulkbar{margin:0 0 4px;border-radius:var(--radius-sm);border-bottom:0}
+.mt-item{display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);margin-bottom:12px}
+.mt-item .li-body,.mt-cand .li-body{flex:1 1 auto;min-width:0}
+.mt-item .li-title,.mt-item .li-sub,.mt-cand .li-title,.mt-cand .li-sub{display:block;overflow-wrap:anywhere}
+.mt-item .amt,.mt-cand .amt{font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mt-search{margin-bottom:8px}
+#mtList .list-item{width:100%;text-align:left}
+#mtAll{margin-top:8px}
 @media (max-width:1199px){
   .chk-th{display:none}
   .chk-tr,.chk-sheet.sel .chk-tr{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"head head" "stmt app" "acts acts";padding:12px 4px;align-items:start}
@@ -115,6 +122,9 @@
       case'unsortLine':return`<button class="btn btn-ghost btn-sm" data-act="unsort" onclick="ETStatements.unsortLine('${k}')">Undo</button>`;
       case'unsortPayer':return`<button class="btn btn-ghost btn-sm" data-act="unsort" onclick="ETStatements.unsortPayer('${k}')">Undo for this payer</button>`;
       case'openIncome':return`<button class="btn btn-ghost btn-sm" data-act="openIncome" onclick="ETChecks.openIncomeEntry('${k}')">Open in Income</button>`;
+      case'match':return`<button class="btn btn-ghost btn-sm" data-act="match" onclick="ETChecks.openMatch('${escAttr(r.kind)}','${k}')" aria-label="Match ${name}">Match…</button>`;
+      case'unmatch':return`<button class="btn btn-ghost btn-sm" data-act="unmatch" onclick="ETStatements.unpair('${k}')">Unmatch</button>`;
+      case'unmatchIncome':return`<button class="btn btn-ghost btn-sm" data-act="unmatchIncome" onclick="ETStatements.unmatchIncome('${escAttr(r.income)}')">Unmatch</button>`;
     }
     return'';
   }
@@ -191,6 +201,29 @@
   }
   const rerender=()=>{if(ACTIVE_TAB==='checks')renderAll();};
 
+  /* ── Match… sheet (round 3, UX §11.14): the item on top, the candidates from the other side
+     below, best first; search and "Show all from this account and month". ── */
+  let MT=null;
+  const diffText=x=>[x.dAmt?`${fmtIDR(Math.abs(x.dAmt))} ${x.dAmt>0?'more':'less'}`:'',
+    x.dDays?`${plural(Math.abs(x.dDays),'day')} ${x.dDays>0?'later':'earlier'}`:''].filter(Boolean).join(' · ');
+  function mtList(){
+    const C=S.matchCandidates(MT.kind,MT.id,{all:MT.all,q:MT.q});
+    if(!C)return emptyHTML('check','This is already accounted for');
+    const rows=C.list.map(x=>{const d=diffText(x);
+      return`<button class="list-item mt-cand" data-cand="${escH(x.kind+':'+x.id)}" onclick="ETChecks.matchPick('${escAttr(x.kind)}','${escAttr(x.id)}')">
+        <span class="li-body"><span class="li-title">${escH(x.desc)}</span><span class="li-sub">${day(x.date)} · ${escH(x.sub)}${d?` · <span class="mt-diff">${escH(d)}</span>`:''}</span></span>${signed(x.amount)}</button>`;}).join('');
+    const none=MT.q?'Nothing matches your search.':MT.kind==='line'?'Nothing in the app to match. Use Add to spending / Add to income instead.':'No open statement line to match this to.';
+    return(rows?`<div class="list">${rows}</div>`:`<div id="mtEmpty">${emptyHTML('search',none)}</div>`)
+      +(C.more?`<button class="btn btn-ghost btn-sm" id="mtAll" onclick="ETChecks.matchAll()">Show all from this account and month</button>`:'');
+  }
+  function mtBody(C){
+    const it=C.item;
+    return`<div class="mt-item" id="mtItem"><span class="li-body"><span class="li-title">${escH(it.desc)}</span><span class="li-sub">${day(it.date)} · ${escH(it.sub)}</span></span>${signed(it.amount)}</div>
+      <div class="field mt-search"><label class="sr-only" for="mtSearch">Search</label><input class="input" id="mtSearch" type="search" autocomplete="off" placeholder="Search" oninput="ETChecks.matchSearch(this.value)"></div>
+      <div id="mtList">${mtList()}</div>`;
+  }
+  const mtRefresh=()=>{const e=MT&&document.getElementById('mtList');if(e)e.innerHTML=mtList();};
+
   window.ETChecks={
     account(id){const a=model().accounts.find(x=>x.id===id);if(!a)return;const p=a.periods.find(p=>p.open)||a.periods.find(p=>p.real&&p.closed)||a.periods[0];SEL={acc:id,pid:p.id};SELECT=false;PICK.clear();FLASH=null;rerender();},
     period(pid){if(SEL){SEL={acc:SEL.acc,pid};SELECT=false;PICK.clear();FLASH=null;rerender();}},
@@ -226,6 +259,18 @@
         requestAnimationFrame(()=>{const e=document.querySelector(`#chkSheet [data-key="${CSS.escape(hit.r.key)}"]`);if(e)e.scrollIntoView({block:'center'});});}
     },
     current:()=>{const c=current(model());return c?{account:c.acc.id,period:c.per.id}:null;},
+    openMatch(kind,id){
+      const C=S.matchCandidates(kind,id,{});if(!C){toast('This is already accounted for');return;}
+      MT={kind,id,all:false,q:''};
+      const api=openSheet({title:C.title,body:mtBody(C),confirmDiscard:false,onClose:()=>{if(MT&&MT.api===api)MT=null;}});
+      MT.api=api;
+    },
+    matchSearch(q){if(!MT)return;MT.q=String(q||'');mtRefresh();},
+    matchAll(){if(!MT)return;MT.all=true;mtRefresh();},
+    matchPick(ck,cid){
+      if(!MT)return;const{kind,id,api}=MT;
+      if(S.matchWith(kind,id,ck,cid)){MT=null;api.close(true);}else mtRefresh();
+    },
   };
 
   registerPage({key:'checks',label:'Checks',icon:'list-checks',group:'top',order:40,render,

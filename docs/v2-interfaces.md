@@ -88,7 +88,7 @@ imported by an older app version gains the new fields only when the next (newer)
 |---|---|---|
 | books (separate appData file `books.json`, IndexedDB cache `et-books`) | F1 loader, read by A/B/D | §1 as imported. Read it with `BOOKS()`; never copy it into `STATE` or localStorage |
 | `STATE.booksMeta` | F1 | `{importedAt, from: 'file'\|'folder', generatedAt}` |
-| `STATE.stmtFix` | C | Only the owner's decisions; matches themselves are recomputed every run (§6). `{match: {[emailTxKey]: {stmtId, line, amount, off: true, at}}` (an undone fix: the alert keeps its own amount and stays paired with cash line `line`), `added: {[cashTxnId]: {stmtId, excluded: true, at}}` (a statement-only line removed from spending), `review: {[emailTxKey]: {decision: 'exclude'\|'keep', at}}`, `manual: {[statementAccountId]: {on: true, at}}` (statements the owner downloads by hand), `whenUsed: {[statementAccountId]: {on: true, at}}` (accounts that only send a statement in months they were used; merged per account like `manual`, a removal is a dated tombstone)}. "Apply again" / "undo" write a dated tombstone `{deleted: true, at}`. `emailTxKey` = the transaction `id` (the key used by catOverrides, txEdits, hiddenIds) |
+| `STATE.stmtFix` | C | Only the owner's decisions; matches themselves are recomputed every run (§6). `{match: {[emailTxKey]: {stmtId, line, amount, off: true, at}}` (an undone fix: the alert keeps its own amount and stays paired with cash line `line`), `added: {[cashTxnId]: {stmtId, excluded: true, at}}` (a statement-only line removed from spending), `review: {[emailTxKey]: {decision: 'exclude'\|'keep', at}}`, `manual: {[statementAccountId]: {on: true, at}}` (statements the owner downloads by hand), `whenUsed: {[statementAccountId]: {on: true, at}}` (accounts that only send a statement in months they were used; merged per account like `manual`, a removal is a dated tombstone)}; Checks adds `sort`, `sortPayer` (round 2) and `pair: {[cashTxnId]: {key: emailTxKey, at}}` (a line matched by hand, round 3; §4 Checks). "Apply again" / "undo" write a dated tombstone `{deleted: true, at}`. `emailTxKey` = the transaction `id` (the key used by catOverrides, txEdits, hiddenIds) |
 | `STATE.cardMap` | C | `{[emailBank]: statementAccountId \| ''}` — which statement account a bank's email alerts are checked against. Needed when a bank has several cards (or to link a bank whose name doesn't match); `''` = not linked. Unset = automatic by name |
 | `STATE.budgets` | D | `{[category]: {monthly: number, since: 'YYYY-MM', at}}` |
 | `STATE.goals` | D | `[{id, name, kind: 'networth'\|'liquid'\|'saving'\|'account', target, by: 'YYYY-MM', accounts?: [code], since: 'YYYY-MM', at}]`. `since` = the month the goal was created; set once and kept on every edit (`at` changes on every edit, so it can't date the goal). A `saving` goal counts net-worth change from the end of the month before `since`. Older goals without `since` fall back to `at`'s month |
@@ -180,7 +180,7 @@ no page itself: it extends built-in pages through hooks and computes what the Ch
 - `ETStatements.checksModel()` → `{ambiguous, accounts: [{id, label, kind, open, periods: [{id, real,
   start, end, closed, label, status, diffs, linked, open, rows, out, in}]}]}`, rebuilt on every
   render. A period is a statement period, or a calendar month (`<account>|month:YYYY-MM`) for lines
-  outside every statement. A row is `{kind: 'line' | 'alert' | 'income', id, key, date, desc, sub,
+  outside every statement. A row is `{kind: 'line' | 'alert' | 'income' | 'manual', id, key, date, desc, sub,
   stmt, app, as, tone, open, acts, flow}`: `stmt` / `app` are signed rupiah or null, `as` the plain
   label of what holds it in the app, `acts` the actions the page draws. `out` / `in` are
   `{stmt, app, diff}`; for a statement checked against alerts `out.stmt` / `out.app` equal
@@ -188,7 +188,37 @@ no page itself: it extends built-in pages through hooks and computes what the Ch
 - `openIncome(null, {date, amount, payer, account, stmtLine})` opens the Income form filled in from a
   statement line; the saved receipt keeps `stmtLine`, which `incLinks()` honours before its
   automatic rule (same account and amount within 3 days). `ledgerRemapCashRefs` moves `stmtFix.sort`
-  keys and income `stmtLine` when a line's id changes in a new statement file.
+  and `stmtFix.pair` keys, income `stmtLine` and `stmtMatch.prev.stmtLine` when a line's id changes
+  in a new statement file.
+- **Match by hand (round 3, UX §11.14 "Match…").** `STATE.stmtFix.pair` `{lineId: {key, at}}`
+  (`key` = the transaction id of an e-mail alert or of a spending entry typed in with Add
+  transaction, `manual: true`); Unmatch writes a dated `{deleted: true, at}`. It merges like every
+  `stmtFix` sub-map and `ledgerRemapCashRefs` moves its keys when a line's id changes (the value
+  needs no move). `reconcile` reads it as `o.fix.pair` **before** any automatic matching: each live
+  pair, in order of `at` (then line id), becomes an ordinary `R.matches` entry with `manual: true`
+  (`amount` = the statement's, `orig` = the entry's, `off` from `fix.match[key]` when it names
+  that line), whatever the date gap or amount difference, and neither side is matched again, added
+  (`fix.sort` `'spend'` on the line is superseded, not deleted) or reviewed. A pair is ignored, and
+  kept in the state, when its line (money out, rupiah, inside the sync period, on a known account)
+  or its transaction is gone, deleted (`o.hidden`, the hidden ids), or already used by an earlier
+  pair. A typed-in entry is matchable only this way; the transform runs a matched one as a copy
+  (`STATE.manualTxns` is never changed). Money in: the income entry gets the line as its explicit
+  `stmtLine` (`incLinks()` honours it first) plus `stmtMatch: {at, prev: {stmtLine, unlinked}}`;
+  Unmatch puts `prev` back. Undo of Matched / Unmatched restores the previous entries (with a new
+  `at`).
+  - `ETStatements.matchCandidates(kind, id, {all, q})` → `{item, list, more, title}` or null (the
+    item is gone or already accounted for). `kind` ∈ `'line' | 'alert' | 'manual' | 'income'`.
+    A candidate is `{kind, id, date, desc, sub, amount (signed), dAmt, dDays}` (candidate − item),
+    within 10 days of the item (`all`: also the rest of the item's statement period, or calendar
+    month), closest amount first, then closest date; `more` = how many `all` would add; `q`
+    filters by text and amount.
+  - `matchWith(kind, id, candKind, candId)` (what the sheet calls; refuses a pair that is not a
+    current candidate), `pairLine(lineId, key)`, `unpair(lineId)`, `matchIncome(lineId, incomeId)`,
+    `unmatchIncome(incomeId)`; each toasts with Undo.
+  - `checksModel()` rows: a hand match has `byHand: true`, its label ends " · matched by you" and
+    `acts` starts with `'unmatch'` (`'unmatchIncome'` for income); open lines, added lines, open or
+    kept alerts and unlinked income carry `'match'`; a new row kind `'manual'` (a typed-in entry
+    whose bank links to the account, not matched; never open, `flow: null`).
 - `ETStatements.openCheck(key?)` → `ETChecks.focus(key)`: opens Checks at that alert's account and
   period and marks its row (no key: the newest undecided alert). Without the Checks page it opens
   Credit cards › History, where the `cardsHistory` hook then still draws the review and statement

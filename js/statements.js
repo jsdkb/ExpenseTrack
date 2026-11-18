@@ -123,6 +123,25 @@
       if(L.link)(banksOf[L.link]||(banksOf[L.link]=[])).push(b);
     }
     const linesBy={};for(const l of cash.txns||[])(linesBy[l.account]||(linesBy[l.account]=[])).push(l);
+    // Matched by hand (Checks › Match…, fix.pair[lineId] = {key}): honoured first, whatever the date
+    // gap or amount difference, so neither side is matched again, added or reviewed. The first live
+    // pair by date of decision wins; a later one on the same transaction, or one whose line or
+    // transaction is gone (or deleted), is ignored and stays in the state. A typed-in spending
+    // entry (manual) is matchable only this way.
+    const hidden=o.hidden instanceof Set?o.hidden:new Set(o.hidden||[]);
+    const PT=new Set(),PL=new Set();
+    {
+      const pairable=t=>!!t&&!!t.id&&!hidden.has(t.id)&&(eligible(t)||(!!t.manual&&!t.stmtAdded&&t.type==='transaction'&&(gross(t)||0)>0));
+      const lineById=new Map((cash.txns||[]).filter(l=>l&&l.id).map(l=>[l.id,l])),txById=new Map((txns||[]).filter(t=>t&&t.id).map(t=>[t.id,t]));
+      const ents=Object.entries(fix.pair||{}).filter(([,v])=>live(v)&&v.key).sort((a,b)=>cmp(String(a[1].at||''),String(b[1].at||''))||cmp(a[0],b[0]));
+      for(const[lid,v]of ents){
+        const l=lineById.get(lid),t=txById.get(v.key);
+        if(!l||!pairable(t)||PT.has(t.id)||PL.has(lid)||!(l.amount<0)||(l.currency||'IDR')!=='IDR'||l.date<hs||!accById.has(l.account))continue;
+        PT.add(t.id);PL.add(lid);
+        const p=periodOf(l.account,l.date),mv=(fix.match||{})[t.id];
+        R.matches.push({key:t.id,t,line:l,stmtId:p?p.id:null,account:l.account,amount:-l.amount,orig:gross(t),off:live(mv)&&!!mv.off&&mv.line===lid,manual:true});
+      }
+    }
     for(const accId of Object.keys(banksOf).sort()){
       const acc=accById.get(accId),card=acc.kind==='card',banks=banksOf[accId],P=per[accId]||[];
       if(!P.length)continue;
@@ -135,7 +154,7 @@
       const L=(linesBy[accId]||[]).filter(l=>l.amount<0&&(l.currency||'IDR')==='IDR'&&l.date>=hs)
         .map(l=>({l,p:periodOf(accId,l.date),amt:-l.amount,d:dn(l.date)})).filter(x=>x.p);
       const Lby=new Map(L.map(x=>[x.l.id,x])),Eby=new Map(E.map(e=>[e.key,e]));
-      const usedE=new Set(),usedL=new Set();
+      const usedE=new Set(PT),usedL=new Set(PL);
       // An undone fix keeps its pair, so the line is neither re-matched nor added.
       for(const[key,v]of Object.entries(fix.match||{}).sort((a,b)=>cmp(a[0],b[0]))){
         if(!live(v)||!v.off)continue;const e=Eby.get(key),x=Lby.get(v.line);
@@ -241,11 +260,31 @@
   }
 
   let LAST=reconcile([],{}),SIG=null,SORT=null;   // SORT: the Checks page's lists, rebuilt on every render
-  const opts=()=>({cash:CM(),fix:STATE.stmtFix||{},cardMap:STATE.cardMap||{},today:todayISO(),historyStart:typeof HISTORY_START==='string'?HISTORY_START:''});
+  const hiddenSet=()=>{try{return typeof getHidden==='function'?getHidden():new Set();}catch(_){return new Set();}};
+  const manualList=()=>(STATE.manualTxns||[]).filter(t=>t&&t.id);
+  const opts=()=>({cash:CM(),fix:STATE.stmtFix||{},cardMap:STATE.cardMap||{},today:todayISO(),historyStart:typeof HISTORY_START==='string'?HISTORY_START:'',hidden:hiddenSet()});
   const sig=()=>{const c=CM();return[c?`${c.generatedAt}#${(c.txns||[]).length}#${(c.statements||[]).length}`:'',
     JSON.stringify(STATE.stmtFix||{}),JSON.stringify(STATE.cardMap||{}),JSON.stringify(STATE.cashTypeOverrides||{}),
-    JSON.stringify(STATE.cashPayerRules||{}),todayISO()].join('|');};
-  function run(list){const base=strip(list);LAST=reconcile(base,opts());const out=apply(LAST,base);SIG=sig();CAL=null;SORT=null;MODEL=null;return out;}
+    JSON.stringify(STATE.cashPayerRules||{}),todayISO(),hiddenSet().size,manualList().length].join('|');};
+  // A typed-in entry matched by hand runs through here as a copy (STATE.manualTxns itself is never
+  // changed): the copy carries the statement amount, with the owner's category, note, edit and
+  // split applied (they are stored by id). The copy leaves the list once the entry is unmatched,
+  // deleted (hidden) or gone from the typed-in entries; a deleted typed-in row also leaves it, and
+  // the cache is then saved again so it never keeps a deleted entry.
+  const COPIES=new WeakSet(),OWN_RULES=['applyCatOverrides','applyNotes','applyTxEdits','applySplits'];
+  let PURGE=false;
+  function ownRules(rows){for(const fn of OWN_RULES)if(typeof window[fn]==='function')try{window[fn](rows);}catch(e){console.error('Statements: '+fn+' failed',e);}}
+  const pairKeys=()=>new Set(Object.values((STATE.stmtFix||{}).pair||{}).filter(v=>live(v)&&v.key).map(v=>v.key));
+  function run(list){
+    const hidden=hiddenSet(),mids=new Set(manualList().map(m=>m.id)),keys=pairKeys();
+    const base=strip(list).filter(t=>{
+      if(!t||!t.manual||t.stmtAdded)return true;
+      const drop=hidden.has(t.id)||(COPIES.has(t)&&(!mids.has(t.id)||!keys.has(t.id)));
+      if(drop)PURGE=true;return!drop;});
+    const have=new Set(base.map(t=>t&&t.id));
+    if(keys.size)for(const m of manualList())if(keys.has(m.id)&&!have.has(m.id)&&!hidden.has(m.id)){const c={...m};COPIES.add(c);ownRules([c]);base.push(c);have.add(m.id);}
+    LAST=reconcile(base,opts());const out=apply(LAST,base);SIG=sig();CAL=null;SORT=null;MODEL=null;return out;
+  }
 
   registerTransform('transactions',run,unapply);
 
@@ -255,10 +294,25 @@
     const raw=run(ALL_TRANSACTIONS_RAW);
     const added=raw.filter(t=>t.stmtAdded&&!hidden.has(t.id));
     ALL_TRANSACTIONS_RAW=raw;
-    ALL_TRANSACTIONS=ALL_TRANSACTIONS.filter(t=>!t.stmtAdded).concat(added).sort(sortByDateDesc);
+    // A typed-in entry is shown once: as the transform's row when it has one (the matched copy, or a
+    // cached row), else as the stored entry itself (back after Unmatch, with the owner's rules).
+    const man=new Map(raw.filter(t=>t&&t.manual&&!t.stmtAdded).map(t=>[t.id,t])),orig=new Map(manualList().map(m=>[m.id,m])),seen=new Set(),out=[];
+    for(const t of ALL_TRANSACTIONS){
+      if(!t||t.stmtAdded)continue;
+      if(!t.manual){out.push(t);continue;}
+      if(hidden.has(t.id)||seen.has(t.id))continue;
+      let r=man.get(t.id)||null;
+      if(!r&&COPIES.has(t)){r=orig.get(t.id)||null;if(r)ownRules([r]);}
+      if(!r&&!COPIES.has(t))r=t;
+      if(r){seen.add(t.id);out.push(r);}
+    }
+    ALL_TRANSACTIONS=out.concat(added).sort(sortByDateDesc);
   }
   // Inputs can change without a reload (cash import, Drive merge), so check before each render.
-  registerHook('beforeRender',()=>{if(DATA_READY&&SIG!==sig())refresh();});
+  registerHook('beforeRender',()=>{
+    if(DATA_READY&&SIG!==sig())refresh();
+    if(DATA_READY&&PURGE){PURGE=false;if(typeof saveCache==='function')saveCache(ALL_TRANSACTIONS_RAW);}
+  });
 
   /* ── Decisions (STATE.stmtFix; dated entries, removals are dated tombstones) ── */
   const fixMap=sub=>{const f=STATE.stmtFix||(STATE.stmtFix={});return f[sub]||(f[sub]={});};
@@ -306,6 +360,8 @@
     // Checks page (js/checks.js, UX §11.14): sort a statement line nothing accounts for yet.
     sortLine(id,as){return sortLines([id],as);},sortLines,unsortLine,sortPayer,unsortPayer,
     sortCandidates:()=>sortState().lines,checkCounts,checksModel:()=>checksModel(),payerCount,
+    // Match by hand (round 3): candidates for an item, and the pair / unpair actions.
+    matchCandidates,matchWith,pairLine,unpair,matchIncome,unmatchIncome,
     openStmt,openCheck,
     // For tests and other modules (read-only).
     reconcile,strip,unapply,apply,calendar,linkFor,calendarRows:()=>calRows(),cycleDay,expectedNext,comingUp,LAG_DEFAULT,LATE_GRACE,WINDOW_PERIODS,last:()=>LAST,refresh,
@@ -384,7 +440,7 @@
     const today=todayISO(),hs=typeof HISTORY_START==='string'?HISTORY_START:'',per=periodsOf(c,today),S=sortState();
     const open=new Set(S.lines.map(l=>l.id)),sorted=new Map(S.sorted.map(x=>[x.line.id,x]));
     const fix=STATE.stmtFix||{},SF=fix.sort||{},SP=fix.sortPayer||{};
-    const matchBy=new Map(LAST.matches.map(m=>[m.line.id,m])),addedBy=new Map(LAST.added.map(a=>[a.line.id,a]));
+    const matchBy=new Map(LAST.matches.map(m=>[m.line.id,m])),addedBy=new Map(LAST.added.map(a=>[a.line.id,a])),pairedKeys=new Set(LAST.matches.map(m=>m.key));
     let links={},incs=[];
     try{if(typeof incLinks==='function')links=incLinks();if(typeof incList==='function')incs=incList();}catch(e){console.error('Statements: income failed',e);}
     const incOfLine=new Map();for(const[id,t]of Object.entries(links)){const x=(STATE.income||{})[id];if(x&&t)incOfLine.set(t.id,x);}
@@ -419,21 +475,24 @@
         r.ignored=ignored(l)&&(sorted.get(l.id)||{}).how==='ignore';
         if(m){
           const after=m.off||m.t.splitInfo?(m.orig||0):m.amount,same=Math.round(m.orig||0)===Math.round(m.amount);
-          r.app=-after;r.as='Spending';r.sub=String(m.t.merchantClean||m.t.merchantRaw||'')+(same?'':` · alert ${m.orig?fmtIDR(m.orig):(m.t.amountStr||'no rupiah amount')}`);r.alert=m.key;
+          r.app=-after;r.as='Spending';r.sub=String(m.t.merchantClean||m.t.merchantRaw||'')+(same?'':` · ${m.t.manual?'entered':'alert'} ${m.orig?fmtIDR(m.orig):(m.t.amountStr||'no rupiah amount')}`);r.alert=m.key;
           if(!same){r.tone='diff';r.acts=[m.off?'useStmt':'undoMatch'];r.as=m.off?'Spending · alert amount':'Spending · amount corrected';}
+          // Matched by hand: the label says so and Unmatch comes first.
+          if(m.manual){r.as+=' · matched by you';r.acts=['unmatch',...r.acts];r.byHand=true;}
         }else if(ad){
           if(ad.excluded){r.as='Removed';r.acts=['addBack'];}
-          else{r.app=-ad.amount;r.as=ad.manual?'Spending · added by you':'Added from statement';r.acts=['remove'];}
+          else{r.app=-ad.amount;r.as=ad.manual?'Spending · added by you':'Added from statement';r.acts=['remove',...(book('spend:cash:'+l.id,l.id)?[]:['match'])];}
         }else if(open.has(l.id)){
           r.open=true;r.tone='open';r.as=ty==='refund'?'Not in yet · refund':'Not in yet';
-          r.acts=[...(l.amount<0&&chargeLine(l)?['spend']:[]),...(l.amount>0&&g==='in'?['income']:[]),'own','ignore'];
+          r.acts=[...(l.amount<0&&chargeLine(l)?['spend']:[]),...(l.amount>0&&g==='in'?['income']:[]),...(l.amount<0&&chargeLine(l)||l.amount>0&&g==='in'?['match']:[]),'own','ignore'];
           r.payer=key?payerCount(l.id):0;
         }else if(sorted.has(l.id)){
           const x=sorted.get(l.id);r.as=x.how==='own'?'Between my accounts':'Ignored';r.acts=[x.payer?'unsortPayer':'unsortLine'];r.byPayer=x.payer;
         }else{
           const j=book(l.amount<0?'spend:cash:'+l.id:null,l.id),inc=incOfLine.get(l.id);
           if(j){r.app=l.amount;r.as='Journal '+(j.number||'draft');}
-          else if(inc){r.app=Math.round(inc.amount);r.as='Income';r.income=inc.id;}
+          else if(inc){r.app=Math.round(inc.amount);r.as='Income';r.income=inc.id;
+            if(inc.stmtMatch&&inc.stmtLine===l.id){r.as='Income · matched by you';r.acts=['unmatchIncome'];r.byHand=true;}}
           else if(ty==='own-transfer')r.as='Between my accounts';
           else if(ty==='card-payment')r.as='Card payment';
           else if(g==='invest')r.as='Investment';
@@ -448,12 +507,19 @@
         const p=periods.get(v.stmtId)||periodFor(txISO(v.t)||v.t.txDate.slice(0,10));
         p.rows.push({kind:'alert',id:v.key,key:'alert:'+v.key,date:txISO(v.t),desc:String(v.t.merchantClean||v.t.merchantRaw||'—'),sub:String(v.t.bank||''),
           stmt:null,app:v.decision==='exclude'?null:-(v.orig||0),as:v.decision==='exclude'?'Excluded':v.decision==='keep'?'Spending · kept':'Spending',
-          tone:v.decision?'':'open',open:!v.decision,acts:v.decision?['undoDecide']:['exclude','keep'],flow:v.decision==='exclude'?null:'out',amountStr:v.orig>0?'':String(v.t.amountStr||'')});
+          tone:v.decision?'':'open',open:!v.decision,acts:v.decision==='exclude'?['undoDecide']:v.decision==='keep'?['undoDecide','match']:['exclude','match','keep'],flow:v.decision==='exclude'?null:'out',amountStr:v.orig>0?'':String(v.t.amountStr||'')});
       }
       if(bookAcc)for(const x of incs){
         if(linkedInc.has(x.id)||x.account!==bookAcc||!(x.amount>0)||(hs&&x.date<hs))continue;
         periodFor(x.date).rows.push({kind:'income',id:x.id,key:'income:'+x.id,date:x.date,desc:String(x.payer||'Income'),sub:String(x.note||''),stmt:null,app:Math.round(x.amount),
-          as:'Income',tone:'',open:false,acts:['openIncome'],flow:'in'});
+          as:'Income',tone:'',open:false,acts:['match','openIncome'],flow:'in'});
+      }
+      // Spending typed in with Add transaction whose bank is linked to this account, not matched:
+      // shown so it can be matched by hand; never open and outside the foot (the engine has none).
+      for(const t of manualRows()){
+        const iso=txISO(t);if(!iso||(hs&&iso<hs)||pairedKeys.has(t.id)||linkFor(t.bank,c.accounts,STATE.cardMap||{}).link!==a.id)continue;
+        periodFor(iso).rows.push({kind:'manual',id:t.id,key:'manual:'+t.id,date:iso,desc:String(t.merchantClean||t.merchantRaw||'Spending'),sub:String(t.bank||''),
+          stmt:null,app:-Math.round(gross(t)||0),as:'Spending · entered by you',tone:'',open:false,acts:['match'],flow:null});
       }
       const list=[...periods.values()].sort((x,y)=>cmp(y.end,x.end)||cmp(y.id,x.id));
       let accOpen=0;
@@ -508,6 +574,131 @@
     const snap=snapshot([['sortPayer',key]]),own=d.as==='own'&&(STATE.cashPayerRules||{})[key]==='own-transfer',tags=own?tagSnap('cashPayerRules',[key]):[];
     put('sortPayer',key,{deleted:true});if(own)STATE.cashPayerRules[key]=null;
     commitSort('Payer rule removed · its lines are back in Lines to sort',snap,tags);
+  }
+
+  /* ── Match by hand (Checks › Match…, UX §11.14 round 3) ──
+     A statement line paired with an entry the app already has. Money out: a line ↔ an e-mail alert
+     or a typed-in spending entry, stored as STATE.stmtFix.pair[lineId] = {key: transaction id, at}
+     (reconcile honours it first). Money in: a line ↔ an income entry, stored on the entry itself
+     as its explicit stmtLine (incLinks honours it first) with stmtMatch = {at, prev: {stmtLine,
+     unlinked}} so the row can say "matched by you" and Unmatch can put the earlier link back. ── */
+  const MATCH_DAYS=10;
+  function manualRows(){
+    const h=hiddenSet(),m=new Map();
+    for(const t of[...(ALL_TRANSACTIONS||[]),...(ALL_TRANSACTIONS_RAW||[]),...manualList()])
+      if(t&&t.id&&t.manual&&!t.stmtAdded&&t.type==='transaction'&&!h.has(t.id)&&!m.has(t.id)&&(gross(t)||0)>0)m.set(t.id,t);
+    return[...m.values()];
+  }
+  const alertRows=()=>{const h=hiddenSet();return(ALL_TRANSACTIONS_RAW||[]).filter(t=>eligible(t)&&!h.has(t.id));};
+  const isCardAcc=id=>{const c=CM(),a=c&&(c.accounts||[]).find(x=>x.id===id);return!!a&&(a.kind||'account')==='card';};
+  const bookAccOf=id=>{try{return(typeof W==='function'&&W()&&typeof meMapOf==='function'&&meMapOf(cashAcc(id)))||'';}catch(_){return'';}};
+  const lineName=l=>String(l.counterparty||l.desc||'Statement line').replace(/\s+/g,' ').trim();
+  // What is open on each side right now (one pass, rebuilt per call: the sheet is small).
+  function matchState(){
+    const c=CM(),hs=typeof HISTORY_START==='string'?HISTORY_START:'',S=sortState();
+    const open=new Set(S.lines.map(l=>l.id)),added=new Map(LAST.added.map(a=>[a.line.id,a]));
+    const mLines=new Set(LAST.matches.map(m=>m.line.id)),mKeys=new Set(LAST.matches.map(m=>m.key));
+    const excl=new Set(LAST.review.filter(r=>r.decision==='exclude').map(r=>r.key));
+    const accs=new Set(((c&&c.accounts)||[]).map(a=>a.id));
+    let links={};try{if(typeof incLinks==='function')links=incLinks();}catch(_){}
+    const inBook=l=>typeof spFind==='function'&&!!spFind(l.amount<0?'spend:cash:'+l.id:null,l.id);
+    // A money-out line nothing else accounts for: open, or added (from the statement or by you; the
+    // match replaces that), or a card charge on a statement still open. Never one in a journal.
+    const freeOut=l=>!!l&&l.amount<0&&(l.currency||'IDR')==='IDR'&&!(hs&&l.date<hs)&&accs.has(l.account)&&!mLines.has(l.id)&&chargeLine(l)&&!inBook(l)
+      &&(open.has(l.id)||(added.has(l.id)&&!added.get(l.id).excluded)||(isCardAcc(l.account)&&!added.has(l.id)));
+    const freeIn=l=>!!l&&l.amount>0&&open.has(l.id)&&groupOf(typeOf(l))==='in';
+    return{c,hs,links,linkedInc:new Set(Object.keys(links)),mKeys,excl,freeOut,freeIn};
+  }
+  function itemOf(kind,id,X){
+    const c=X.c;if(!c)return null;
+    if(kind==='line'){const l=lineOf(id);if(!l||!(l.amount<0?X.freeOut(l):X.freeIn(l)))return null;
+      return{kind,id,date:l.date,desc:lineName(l),sub:accLabel(l.account),amount:l.amount,account:l.account,out:l.amount<0};}
+    if(kind==='alert'){const t=alertRows().find(x=>x.id===id),link=t&&linkFor(t.bank,c.accounts,STATE.cardMap||{}).link;
+      if(!t||!link||X.mKeys.has(id)||X.excl.has(id))return null;
+      return{kind,id,date:txISO(t),desc:String(t.merchantClean||t.merchantRaw||'—'),sub:`${t.bank} · ${accLabel(link)}`,amount:-(gross(t)||0),account:link,out:true};}
+    if(kind==='manual'){const t=manualRows().find(x=>x.id===id);if(!t||X.mKeys.has(id))return null;
+      return{kind,id,date:txISO(t),desc:String(t.merchantClean||t.merchantRaw||'Spending'),sub:`Entered by you · ${t.manualBank||t.bank||''}`,amount:-(gross(t)||0),account:null,out:true};}
+    if(kind==='income'){const x=(STATE.income||{})[id];if(!x||x.deleted||!(x.amount>0)||X.linkedInc.has(id))return null;
+      return{kind,id,date:x.date,desc:String(x.payer||'Income'),sub:'Income'+(x.note?' · '+x.note:''),amount:Math.round(x.amount),account:null,book:x.account,out:false};}
+    return null;
+  }
+  // The item's statement period (or calendar month when it has no statement or no account).
+  function rangeOf(acc,iso){
+    const c=CM(),P=acc&&c?(periodsOf(c,todayISO())[acc]||[]):[],p=P.find(x=>x.start<=iso&&iso<=x.end);
+    if(p)return{start:p.start,end:p.end};const m=String(iso).slice(0,7);return{start:m+'-01',end:monthEndIso(m)};
+  }
+  /* Candidates from the other side for one item: {item, list, more, title} or null when the item
+     cannot be matched (gone, or already accounted for). o = {all, q}: all widens the ±10 days to
+     the item's whole statement period; q filters by text and amount. Best first: closest amount,
+     then closest date. Each candidate: {kind, id, date, desc, sub, amount (signed), dAmt, dDays}. */
+  function matchCandidates(kind,id,o){
+    o=o||{};const X=matchState(),it=itemOf(kind,id,X);if(!it||!it.date)return null;const c=X.c;
+    let pool=[];
+    if(kind==='line'&&it.out){
+      for(const t of alertRows())if(!X.mKeys.has(t.id)&&!X.excl.has(t.id)&&linkFor(t.bank,c.accounts,STATE.cardMap||{}).link===it.account){const d=txISO(t);if(d)pool.push({kind:'alert',id:t.id,date:d,desc:String(t.merchantClean||t.merchantRaw||'—'),sub:String(t.bank||''),amount:-(gross(t)||0)});}
+      for(const t of manualRows())if(!X.mKeys.has(t.id)){const d=txISO(t);if(d)pool.push({kind:'manual',id:t.id,date:d,desc:String(t.merchantClean||t.merchantRaw||'Spending'),sub:`Entered by you · ${t.manualBank||t.bank||''}`,amount:-(gross(t)||0)});}
+    }else if(kind==='line'){
+      const ba=bookAccOf(it.account);
+      if(ba&&typeof incList==='function')for(const x of incList())if(x.account===ba&&x.amount>0&&!X.linkedInc.has(x.id))
+        pool.push({kind:'income',id:x.id,date:x.date,desc:String(x.payer||'Income'),sub:'Income'+(x.note?' · '+x.note:''),amount:Math.round(x.amount)});
+    }else{
+      const own=sortAccounts(c);
+      for(const l of c.txns||[]){
+        if(!l||!l.id)continue;
+        const ok=kind==='alert'?l.account===it.account&&X.freeOut(l):kind==='manual'?own.has(l.account)&&X.freeOut(l):X.freeIn(l)&&bookAccOf(l.account)===it.book;
+        if(ok)pool.push({kind:'line',id:l.id,date:l.date,desc:lineName(l),sub:accLabel(l.account),amount:l.amount});
+      }
+    }
+    const d0=dn(it.date),R=rangeOf(it.account,it.date);
+    for(const x of pool){x.dAmt=Math.round(Math.abs(x.amount)-Math.abs(it.amount));x.dDays=dn(x.date)-d0;}
+    const near=x=>Math.abs(x.dDays)<=MATCH_DAYS,inRange=x=>x.date>=R.start&&x.date<=R.end;
+    const q=String(o.q||'').trim().toLowerCase(),qd=q.replace(/[^0-9]/g,'');
+    const hit=x=>!q||`${x.desc} ${x.sub} ${dayLabel(x.date)}`.toLowerCase().includes(q)||(qd&&String(Math.abs(Math.round(x.amount))).includes(qd));
+    const ord=(a,b)=>Math.abs(a.dAmt)-Math.abs(b.dAmt)||Math.abs(a.dDays)-Math.abs(b.dDays)||cmp(a.date,b.date)||cmp(a.kind,b.kind)||cmp(String(a.id),String(b.id));
+    const shown=pool.filter(x=>(near(x)||(o.all&&inRange(x)))&&hit(x)).sort(ord);
+    const more=o.all?0:pool.filter(x=>!near(x)&&inRange(x)&&hit(x)).length;
+    return{item:it,list:shown,more,title:kind==='line'?'Match this line':'Match this entry'};
+  }
+  // Pair a money-out line with an alert or a typed-in entry. Refused when either side is already matched.
+  function pairLine(lineId,key){
+    const l=lineOf(lineId);if(!l||!(l.amount<0)||!key)return false;
+    if(LAST.matches.some(m=>m.line.id===lineId||m.key===key))return false;
+    const s=snapshot([['pair',lineId]]);put('pair',lineId,{key});commit('Matched',s);return true;
+  }
+  // Unmatch: the pair and an Undo of its amount (fix.match) get dated removals; both sides are open again.
+  function unpair(lineId){
+    const f=STATE.stmtFix||{},v=(f.pair||{})[lineId];if(!live(v))return false;
+    const mv=(f.match||{})[v.key],withMatch=live(mv)&&mv.line===lineId;
+    const s=snapshot([['pair',lineId],...(withMatch?[['match',v.key]]:[])]);
+    put('pair',lineId,{deleted:true});if(withMatch)put('match',v.key,{deleted:true});
+    commit('Unmatched · both are open again',s);return true;
+  }
+  const incCopy=x=>JSON.parse(JSON.stringify(x));
+  function incCommit(msg,id,prev){
+    scheduleDriveSave();refresh();renderAll();updateSheet();
+    toast(msg,{action:'Undo',onAction:()=>{(STATE.income||(STATE.income={}))[id]={...prev,at:stamp()};scheduleDriveSave();refresh();renderAll();updateSheet();}});
+  }
+  function matchIncome(lineId,incId){
+    const x=(STATE.income||{})[incId],l=lineOf(lineId);if(!x||x.deleted||!l||!(l.amount>0))return false;
+    let links={};try{links=incLinks();}catch(_){}
+    if(links[incId]||Object.values(links).some(t=>t&&t.id===lineId))return false;
+    const prev=incCopy(x),nx={...x,stmtLine:lineId,stmtMatch:{at:stamp(),prev:{stmtLine:x.stmtLine||null,unlinked:!!x.unlinked}},at:stamp()};
+    delete nx.unlinked;STATE.income[incId]=nx;
+    incCommit('Matched',incId,prev);return true;
+  }
+  function unmatchIncome(incId){
+    const x=(STATE.income||{})[incId];if(!x||x.deleted||!x.stmtMatch)return false;
+    const prev=incCopy(x),p=x.stmtMatch.prev||{},nx={...x,at:stamp()};
+    delete nx.stmtMatch;delete nx.stmtLine;delete nx.unlinked;
+    if(p.stmtLine)nx.stmtLine=p.stmtLine;if(p.unlinked)nx.unlinked=true;
+    STATE.income[incId]=nx;incCommit('Unmatched · both are open again',incId,prev);return true;
+  }
+  // From the Match sheet: the item and the candidate tapped, whichever side is the line.
+  function matchWith(kind,id,ck,cid){
+    const[lineId,ok,oid]=kind==='line'?[id,ck,cid]:[cid,kind,id];
+    const C=matchCandidates(kind,id,{all:true});
+    if(!C||!C.list.some(x=>x.kind===ck&&x.id===cid))return false;
+    return ok==='income'?matchIncome(lineId,oid):pairLine(lineId,oid);
   }
 
   /* ── Statement calendar ── */

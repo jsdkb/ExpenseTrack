@@ -1635,7 +1635,7 @@ Web: the drawer opens on the right; the page stays visible and usable on the lef
   half-built change set.
 - **Hide amounts (§20):** every figure in the panel blurs too.
 
-### 11.14 Checks — statement matching in one place (round 2, 2026-11-17; statement layout 2026-11-17)
+### 11.14 Checks — statement matching in one place (round 2, 2026-11-17; statement layout 2026-11-17; Match… round 3)
 
 Question: *"Is there anything on my statements I haven't accounted for?"* The owner's words for the
 layout: like a statement, with both sides in columns and the transactions in rows, so what is not
@@ -1688,14 +1688,16 @@ Checks
   | Row | On statement | In the app | Actions |
   |---|---|---|---|
   | Alert matched to the line | amount | amount · "Spending" | none; when the amounts differ: "Spending · amount corrected", highlighted, **Undo** (or **Use statement** once undone) |
-  | Charge added from the statement | amount | amount · "Added from statement" ("Spending · added by you" when the owner added it) | **Remove**; a removed one reads "Removed" with **Add back** |
+  | Matched by you (Match…, round 3) | amount | amount · "Spending · matched by you" / "Income · matched by you" | **Unmatch**; when the amounts differ the row is highlighted, reads "Spending · amount corrected · matched by you" and also has **Undo** / **Use statement** |
+  | Charge added from the statement | amount | amount · "Added from statement" ("Spending · added by you" when the owner added it) | **Remove**, **Match…**; a removed one reads "Removed" with **Add back** |
   | In a journal / linked to income | amount | amount · "Journal JV/…" or "Journal draft" / "Income" | none |
   | Moves between own accounts, card payments, investments | amount | "Between my accounts" / "Card payment" / "Investment" | none |
-  | Not in yet (a bank line nothing accounts for) | amount | "Not in yet" (warn), highlighted | **Add to spending** (only for a line the matching would count as a charge) or **Add to income** (money in), **Between my accounts**, **Ignore**, **⋯** |
+  | Not in yet (a bank line nothing accounts for) | amount | "Not in yet" (warn), highlighted | **Add to spending** (only for a line the matching would count as a charge) or **Add to income** (money in), **Match…**, **Between my accounts**, **Ignore**, **⋯** |
   | A refund paid into a bank account | +amount | "Not in yet · refund" | **Between my accounts**, **Ignore** (never Add to income: a refund is not income) |
   | Sorted by you | amount | "Ignored" / "Between my accounts" | **Undo** ("Undo for this payer" under a payer rule) |
-  | Alert not found on a closed statement | "Not on statement" (warn) | amount · "Spending", highlighted | **Exclude**, **Keep**; decided: "Excluded" / "Spending · kept" with **Undo** |
-  | Income typed in for this account, linked to no line | "Not on statement" | amount · "Income" | **Open in Income** (matching it by hand comes later) |
+  | Alert not found on a closed statement | "Not on statement" (warn) | amount · "Spending", highlighted | **Exclude**, **Match…**, **Keep**; decided: "Excluded" with **Undo**, or "Spending · kept" with **Undo** and **Match…** |
+  | Income typed in for this account, linked to no line | "Not on statement" | amount · "Income" | **Match…**, **Open in Income** |
+  | A spending entry you typed in (Add transaction), whose bank is linked to this account | "Not on statement" | amount · "Spending · entered by you" | **Match…** (not highlighted and not counted as open: a cash purchase is never on a statement) |
   | Card line, no alerts linked to that card / statement still open | amount | "Not checked · no alerts linked to this card" / "Statement still open" | none |
 
   - **Add to spending:** the line becomes an ordinary Spending row, exactly like a charge the
@@ -1714,6 +1716,48 @@ Checks
   - **Select** puts a tick box on the visible "not in yet" bank lines and shows the bulk bar
     "n selected · Select all shown · Between my accounts · Ignore selected · Cancel"; one toast,
     one Undo for the batch.
+  - **Match…** (ghost button, round 3) pairs a statement line by hand with an entry the app
+    already has, when the automatic matching could not (amount or date differ, a typed-in entry,
+    income the automatic rule missed). It opens a sheet (§8.11):
+
+    ```
+    Match this line                                       ✕
+    5 Sept · QR WARUNG TEST · Second savings ••2222   −Rp 85.000   ← the item
+    [ Search ]
+    3 Sept  Corner shop · entered by you · Rp 5.000 less · 2 days earlier   −Rp 80.000
+    12 Sept Ride app · Maybank · Rp 6.000 more · 7 days later              −Rp 91.000
+    Show all from this account and month
+    ```
+
+    - Title "Match this line" (from a statement line) or "Match this entry" (from an alert, an
+      income entry or a typed-in spending entry). On top, the item: date, description, account,
+      amount. Below, the candidates from the other side, each a tappable list row (§8.9) with date,
+      description, a quiet sub-line (bank or account, and the difference only when not zero:
+      "Rp 6.000 more · 2 days later") and the amount.
+    - Candidates: within 10 days of the item's date, closest amount first, then closest date.
+      **Show all from this account and month** (a ghost link, only when it adds rows) widens to
+      the whole statement period. The search box filters by text and amount.
+    - What is offered. A money-out line: the e-mail alerts of a bank linked to that account that
+      are not paired yet (matched, or excluded), and spending entries typed in with Add
+      transaction (any bank) not paired yet. A money-in line: income entries received into that
+      account's book account and linked to no line. An alert: the money-out lines of its linked
+      account that nothing else accounts for (not matched, not in a journal, not ignored; a line
+      added from the statement or by you is offered, the match then replaces it). A typed-in
+      entry: the same, on every bank account. An income entry: the money-in lines of the accounts
+      mapped to its book account.
+    - Empty: "Nothing in the app to match. Use Add to spending / Add to income instead." (from a
+      line) or "No open statement line to match this to." (from an entry).
+    - Tapping a candidate matches the two, closes the sheet and toasts "Matched · Undo"; Undo puts
+      back exactly what was there before (an earlier link included). The row then shows both
+      amounts, the app side taking the statement's amount exactly as for an automatic match
+      (Undo / Use statement and the foot behave the same), and the label ends "· matched by you".
+      **Unmatch** on that row returns both sides to open (toast with Undo).
+    - Never twice: a line or an entry is matched once at most; a match replaces an earlier Add to
+      spending on that line (the old decision is kept, not deleted); a matched alert is no longer
+      "Not on statement"; Spending counts the transaction once; a matched line can still not
+      become a second journal from Cash movements.
+    - On phones Match… sits with the row's main action and Ignore stays in ⋯, so a row keeps at
+      most two lines of buttons.
   - **Not in yet** filter: only the rows that need the owner, plus income with no statement line.
 - **Foot of the sheet:** "Charges" (cards) or "Money out", and for bank accounts "Money in" (only
   when there is any). Each row gives the statement's total, the app's total and the difference.
@@ -1739,7 +1783,7 @@ Checks
 - **Never twice.** A line added to spending cannot become a second journal from Cash movements
   (both rows carry the same statement line, and the book refuses the second); a line added as
   income is not offered for spending.
-- **Ask Claude** can open this page but has no tool that sorts a line (§11.13).
+- **Ask Claude** can open this page but has no tool that sorts or matches a line (§11.13).
 - **States:** loading shows the page skeleton; a render problem shows the standard error card
   (§12). If `js/checks.js` fails to load, the app works as before: the review and statement lists
   are back under Credit cards › History and the `Check` chip opens them there.
