@@ -2746,11 +2746,14 @@ function mergeManualTxns(){
 }
 
 /* ── Edit / Add / Split — same logic as before, rendered in the shared sheet shell ── */
-let _editId=null;
+let _editId=null,_editWas=null;
 function openEditModal(id){
   const tx=ALL_TRANSACTIONS.find(t=>t.id===id);
   if(!tx)return;
   _editId=id;
+  // What the form shows when it opens. Only a field the owner changes is stored as an edit, so
+  // saving unchanged never fixes a statement-corrected amount (or name) onto the row.
+  _editWas={m:String(tx.merchantClean||'').trim(),a:tx.amount?Math.round(tx.amount):0};
   const isFx=tx.bank==='OCBC'&&!!tx.amountOrig;
   openSheet({title:'Edit transaction',body:`<div class="form-grid">
       <div class="field full"><label class="label" for="editMerchant">Merchant</label><input class="input" id="editMerchant" type="text" value="${escH(tx.merchantClean||'')}"></div>
@@ -2758,19 +2761,24 @@ function openEditModal(id){
         :`<div class="help full">${ic('info','s16')} This is a ${escH(tx.currency||'foreign')} charge — its Rp amount comes from the exchange rate in Credit cards › Foreign currency.</div>`}
     </div>`,
     foot:`<button class="btn btn-secondary" onclick="closeTopSheet(true)">Cancel</button><button class="btn btn-primary" onclick="saveEditModal()">Save</button>`,
-    focus:'#editMerchant',onEnter:saveEditModal,onClose:()=>{_editId=null;}});
+    focus:'#editMerchant',onEnter:saveEditModal,onClose:()=>{_editId=null;_editWas=null;}});
 }
 function closeEditModal(){closeTopSheet(true);}
 function saveEditModal(){
   if(!_editId)return;
   const id=_editId;
   const edits=getTxEdits();
-  const m=$('editMerchant')?.value.trim();
-  const a=$('editAmount')?.value;
-  if(!edits[id])edits[id]={};
-  if(m)edits[id].merchantClean=m;
-  if(a&&parseFloat(a)>0)edits[id].amount=Math.round(parseFloat(a));
-  saveTxEdits(edits);
+  const was=_editWas||{};
+  let m=$('editMerchant')?.value.trim();
+  let a=$('editAmount')?.value;
+  if(m&&m===was.m)m='';
+  if(a&&parseFloat(a)>0&&Math.round(parseFloat(a))===was.a)a='';
+  if(m||(a&&parseFloat(a)>0)){
+    if(!edits[id])edits[id]={};
+    if(m)edits[id].merchantClean=m;
+    if(a&&parseFloat(a)>0)edits[id].amount=Math.round(parseFloat(a));
+    saveTxEdits(edits);
+  }
   const tx=ALL_TRANSACTIONS.find(t=>t.id===id)||ALL_TRANSACTIONS_RAW.find(t=>t.id===id);
   if(tx){if(m)tx.merchantClean=m;if(a&&parseFloat(a)>0)tx.amount=Math.round(parseFloat(a));saveCache(ALL_TRANSACTIONS_RAW);}
   closeTopSheet(true);
