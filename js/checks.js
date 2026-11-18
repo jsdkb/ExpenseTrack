@@ -172,7 +172,7 @@
     const answer=parts.length?`<p class="chk-answer" id="chkAnswer" role="status">${parts.join(' · ')}</p>`
       :`<p class="chk-answer" id="chkAnswer" role="status">${ic('check')}Everything matches</p><p class="summary-line">No statement line is waiting to be sorted and no alert is waiting to be checked.</p>`;
     const cur=current(M);
-    if(!cur)return head+`<div class="chk-top">${answer}</div><div class="card" id="chkEmpty">${emptyHTML('receipt','No rupiah statements in your sync period yet')}</div>`;
+    if(!cur)return head+`<div class="chk-top">${answer}${fromLine()}</div><div class="card" id="chkEmpty">${emptyHTML('receipt','No rupiah statements in your sync period yet')}</div>`;
     const{acc,per}=cur;
     const amb=M.ambiguous.length?`<p class="help" id="chkAmbiguous" style="color:var(--warn);margin-bottom:12px">${ic('triangle-alert','s16','width:14px;height:14px;vertical-align:-2px')} Choose which card your ${escH(M.ambiguous.join(', '))} alerts belong to under Credit cards › History › Statement links.</p>`:'';
     const chips=M.accounts.map(a=>`<button class="chip" data-acc="${escH(a.id)}" aria-pressed="${a.id===acc.id}" onclick="ETChecks.account('${escAttr(a.id)}')"${a.open?` aria-label="${escH(a.label)}, ${a.open} open"`:''}>${ic(a.kind==='card'?'credit-card':'landmark')}${escH(a.label)}${a.open?navCountHTML(a.open):''}</button>`).join('');
@@ -197,7 +197,25 @@
     const desc=`${day(per.start)} – ${day(per.end)}${per.real?'':' · lines with no statement yet'}${per.real&&!per.closed?' · statement still open':''} · ${plural(per.rows.length,'transaction')}`;
     const sheet=`<div class="grid" id="chkSheetCard"><section class="card span-12">${cardHead('receipt',`${escH(acc.label)} · ${escH(per.label)}`,desc,`<div class="chk-tools">${seg}${selBtn}</div>`)}
       ${bar}${hint}<div class="chk-sheet${SELECT?' sel':''}" id="chkSheet" role="table" aria-label="${escH(acc.label)} statement of ${escH(per.label)}">${th}<div role="rowgroup">${body}</div>${foot}</div></section></div>`;
-    return head+`<div class="chk-top">${answer}</div>`+amb+picker+sheet;
+    return head+`<div class="chk-top">${answer}${fromLine()}</div>`+amb+picker+sheet;
+  }
+  // "Checking from 1 Oct 2026 · Change": everything before the owner's start date counts as checked.
+  function fromLine(){
+    const f=S.checkFrom?S.checkFrom():'';
+    return`<p class="summary-line" id="chkFrom">${f?`Checking from <b>${escH(dayFull(f))}</b> · everything before counts as checked`:'Checking your whole history'}
+      <button class="btn btn-ghost btn-sm" id="chkFromBtn" onclick="ETChecks.fromSheet()">${f?'Change':'Start later'}</button></p>`;
+  }
+  const dayFull=iso=>{const[y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});};
+  function fromSheet(){
+    const f=S.checkFrom?S.checkFrom():'',now=new Date(),def=f||`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+    const s=openSheet({title:'Start checks from',body:`<p class="muted" style="margin:0 0 12px">Statement lines and alerts before this date are treated as checked: they leave the Checks page and its counts. Your spending and totals do not change.</p>
+      <div class="field"><label class="label" for="chkFromDate">First day to check</label><input class="input" type="date" id="chkFromDate" value="${escH(def)}"></div>
+      <div class="help err" id="chkFromErr" style="display:none">${ic('triangle-alert','s16')}Pick a date.</div>`,
+      foot:`${f?'<button class="btn btn-ghost" id="chkFromAll">Check everything</button>':''}<button class="btn btn-secondary" onclick="closeTopSheet(true)">Cancel</button><button class="btn btn-primary" id="chkFromSave">Save</button>`,
+      focus:'#chkFromDate',onEnter:()=>save()});
+    function save(){const v=document.getElementById('chkFromDate').value;if(!v){document.getElementById('chkFromErr').style.display='flex';return;}s.close(true);S.setCheckFrom(v);}
+    s.sheet.querySelector('#chkFromSave').onclick=save;
+    const all=s.sheet.querySelector('#chkFromAll');if(all)all.onclick=()=>{s.close(true);S.setCheckFrom('');};
   }
   const rerender=()=>{if(ACTIVE_TAB==='checks')renderAll();};
 
@@ -225,6 +243,7 @@
   const mtRefresh=()=>{const e=MT&&document.getElementById('mtList');if(e)e.innerHTML=mtList();};
 
   window.ETChecks={
+    fromSheet,
     account(id){const a=model().accounts.find(x=>x.id===id);if(!a)return;const p=a.periods.find(p=>p.open)||a.periods.find(p=>p.real&&p.closed)||a.periods[0];SEL={acc:id,pid:p.id};SELECT=false;PICK.clear();FLASH=null;rerender();},
     period(pid){if(SEL){SEL={acc:SEL.acc,pid};SELECT=false;PICK.clear();FLASH=null;rerender();}},
     filter(f){FILTER=f==='open'?'open':'all';rerender();},

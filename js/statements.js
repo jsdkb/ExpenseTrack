@@ -325,6 +325,21 @@
     if(msg)toast(msg,snap?{action:'Undo',onAction:()=>restore(snap)}:undefined);
   }
   const findMatch=key=>LAST.matches.find(m=>m.key===key);
+  /* Checks start date (owner 2026-11-18: "ignore everything until October, assume clean"). The
+     owner's own date lives in STATE.stmtFix.cfg.from = {date, at} (private, dated, merged like the
+     other fixes). It only narrows what the Checks page lists and counts (and the "Check" chip on
+     rows): matching, added lines and spending totals before it are left exactly as they are. */
+  const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
+  function checkFromSet(){const e=((STATE.stmtFix||{}).cfg||{}).from;return live(e)&&ISO_DAY.test(e.date||'')?e.date:'';}
+  function checkFrom(){const hs=typeof HISTORY_START==='string'?HISTORY_START:'',f=checkFromSet();return f>hs?f:hs;}
+  const beforeChecks=iso=>{const f=checkFromSet();return!!f&&!!iso&&iso<f;};
+  function setCheckFrom(date){
+    if(date&&!ISO_DAY.test(date))return false;
+    const s=snapshot([['cfg','from']]);
+    put('cfg','from',date?{date}:{deleted:true});
+    commit(date?`Checks start from ${dayLabel(date)} · everything before counts as checked`:'Checks cover your whole history again',s);
+    return true;
+  }
   const API={
     undoMatch(key){const m=findMatch(key);if(!m)return;const s=snapshot([['match',key]]);
       put('match',key,{stmtId:m.stmtId,line:m.line.id,amount:m.amount,off:true});commit('Back to the alert amount',s);},
@@ -359,7 +374,7 @@
     setWhenUsed(id,on){put('whenUsed',id,on?{on:true}:{deleted:true});commit(on?'Marked as only sending a statement when used':'Back to a statement every month');},
     // Checks page (js/checks.js, UX §11.14): sort a statement line nothing accounts for yet.
     sortLine(id,as){return sortLines([id],as);},sortLines,unsortLine,sortPayer,unsortPayer,
-    sortCandidates:()=>sortState().lines,checkCounts,checksModel:()=>checksModel(),payerCount,
+    sortCandidates:()=>sortState().lines,checkCounts,checksModel:()=>checksModel(),payerCount,checkFrom:checkFromSet,setCheckFrom,
     // Match by hand (round 3): candidates for an item, and the pair / unpair actions.
     matchCandidates,matchWith,pairLine,unpair,matchIncome,unmatchIncome,
     openStmt,openCheck,
@@ -390,7 +405,7 @@
     if(SORT)return SORT;
     const out={lines:[],sorted:[]},c=CM();
     if(!c||!Array.isArray(c.txns)||typeof DATA_READY==='undefined'||!DATA_READY)return out;
-    const hs=typeof HISTORY_START==='string'?HISTORY_START:'',fix=STATE.stmtFix||{},S=fix.sort||{},SP=fix.sortPayer||{};
+    const hs=checkFrom(),fix=STATE.stmtFix||{},S=fix.sort||{},SP=fix.sortPayer||{};
     const own=sortAccounts(c);
     const taken=new Set();for(const m of LAST.matches)taken.add(m.line.id);for(const a of LAST.added)taken.add(a.line.id);
     let inc=new Set();
@@ -416,7 +431,7 @@
     out.lines.sort(order);out.sorted.sort((a,b)=>order(a.line,b.line));
     return SORT=out;
   }
-  function checkCounts(){const lines=sortState().lines.length,alerts=LAST.review.filter(r=>!r.decision).length;return{lines,alerts,open:lines+alerts};}
+  function checkCounts(){const lines=sortState().lines.length,alerts=LAST.review.filter(r=>!r.decision&&!beforeChecks(txISO(r.t))).length;return{lines,alerts,open:lines+alerts};}
   // How many statement lines share this line's payer (for "all n from this payer").
   function payerCount(id){const l=lineOf(id),k=l?payerKey(l):'',c=CM();return k&&c?(c.txns||[]).filter(t=>payerKey(t)===k).length:0;}
 
@@ -437,7 +452,7 @@
     if(MODEL)return MODEL;
     const out={accounts:[],ambiguous:Object.keys(LAST.ambiguous||{}).filter(b=>!LAST.setLinks[b])},c=CM();
     if(!c||!Array.isArray(c.txns)||typeof DATA_READY==='undefined'||!DATA_READY)return out;
-    const today=todayISO(),hs=typeof HISTORY_START==='string'?HISTORY_START:'',per=periodsOf(c,today),S=sortState();
+    const today=todayISO(),hs=checkFrom(),per=periodsOf(c,today),S=sortState();
     const open=new Set(S.lines.map(l=>l.id)),sorted=new Map(S.sorted.map(x=>[x.line.id,x]));
     const fix=STATE.stmtFix||{},SF=fix.sort||{},SP=fix.sortPayer||{};
     const matchBy=new Map(LAST.matches.map(m=>[m.line.id,m])),addedBy=new Map(LAST.added.map(a=>[a.line.id,a])),pairedKeys=new Set(LAST.matches.map(m=>m.key));
@@ -503,7 +518,7 @@
         if(r.as==='')r.as=lp.linked?'Statement still open':'Not checked · no alerts linked to this card';
         lp.rows.push(r);
       }
-      for(const v of LAST.review.filter(x=>x.account===a.id)){
+      for(const v of LAST.review.filter(x=>x.account===a.id&&!beforeChecks(txISO(x.t)))){
         const p=periods.get(v.stmtId)||periodFor(txISO(v.t)||v.t.txDate.slice(0,10));
         p.rows.push({kind:'alert',id:v.key,key:'alert:'+v.key,date:txISO(v.t),desc:String(v.t.merchantClean||v.t.merchantRaw||'—'),sub:String(v.t.bank||''),
           stmt:null,app:v.decision==='exclude'?null:-(v.orig||0),as:v.decision==='exclude'?'Excluded':v.decision==='keep'?'Spending · kept':'Spending',
@@ -595,7 +610,7 @@
   const lineName=l=>String(l.counterparty||l.desc||'Statement line').replace(/\s+/g,' ').trim();
   // What is open on each side right now (one pass, rebuilt per call: the sheet is small).
   function matchState(){
-    const c=CM(),hs=typeof HISTORY_START==='string'?HISTORY_START:'',S=sortState();
+    const c=CM(),hs=checkFrom(),S=sortState();
     const open=new Set(S.lines.map(l=>l.id)),added=new Map(LAST.added.map(a=>[a.line.id,a]));
     const mLines=new Set(LAST.matches.map(m=>m.line.id)),mKeys=new Set(LAST.matches.map(m=>m.key));
     const excl=new Set(LAST.review.filter(r=>r.decision==='exclude').map(r=>r.key));
@@ -908,7 +923,7 @@
   // excluded or undone row is silent; an alert missing from a closed statement and not decided
   // yet gets one small "Check" chip that opens the place where it is decided.
   registerHook('txnBadges',t=>{
-    const s=t&&t.stmt;if(!s||s.kind!=='review')return null;
+    const s=t&&t.stmt;if(!s||s.kind!=='review'||beforeChecks(txISO(t)))return null;
     return`<button type="button" class="badge warn stmt-check" style="margin-left:4px" title="Not on the statement. Open to decide" onclick="event.stopPropagation();ETStatements.openCheck('${escAttr(t.id)}')">Check</button>`;
   });
   // Where a "Check" row is decided: its row on the Checks sheet (js/checks.js), for that alert's

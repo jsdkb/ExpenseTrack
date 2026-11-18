@@ -1683,6 +1683,13 @@ Checks
 - **The answer line** opens the page (§1): "9 lines to sort · 2 alerts to check", only the parts
   above 0; "Everything matches" with a `--good` check icon when both are 0. It counts exactly what
   the sheets mark as open, over every account and period.
+- **Start date** (owner 2026-11-18: "ignore everything until October, assume clean"): under the
+  answer, one line "Checking from **1 Oct 2026** · everything before counts as checked" with
+  **Change**, or "Checking your whole history" with **Start later**. The button opens a sheet with
+  one date field (Save, and **Check everything** to clear it). Lines, alerts, income and periods
+  ending before the date leave the sheets, the counts and the "Check" chip on spending rows.
+  Matching and spending are not touched: statement additions and corrected amounts before the
+  date stay as they are. Stored in the Drive file as `stmtFix.cfg.from` (dated, merged); Undo.
 - **No statement file yet:** one card with the empty state "Checks needs your bank and card
   statements" and a button to Cash movements, where the file is connected.
 - **Picker.** One filter chip (§8.4) per rupiah account with statements or lines in the sync

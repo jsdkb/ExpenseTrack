@@ -177,6 +177,12 @@ no page itself: it extends built-in pages through hooks and computes what the Ch
   `checkCounts()` → `{lines, alerts, open}`; `sortLine(id, as)`, `sortLines(ids, as)` (one Undo;
   `'spend'` only for a line `reconcile` would count as a charge), `unsortLine(id)`,
   `sortPayer(lineId, as)`, `unsortPayer(lineId)`, `payerCount(lineId)`.
+- **Checks start date (2026-11-18).** `STATE.stmtFix.cfg.from` `{date: 'YYYY-MM-DD', at}` (a
+  tombstone clears it; merged like every `stmtFix` entry). `ETStatements.checkFrom()` → the date or
+  `''`; `setCheckFrom(date | '')` (one Undo; refuses anything but `YYYY-MM-DD`). The later of it and
+  `HISTORY_START` bounds `sortState`, `checksModel`, `matchState` and `checkCounts`, and the
+  `txnBadges` "Check" chip is dropped before it. `reconcile` ignores it: matching, statement
+  additions and spending totals are the same with or without a start date.
 - `ETStatements.checksModel()` → `{ambiguous, accounts: [{id, label, kind, open, periods: [{id, real,
   start, end, closed, label, status, diffs, linked, open, rows, out, in}]}]}`, rebuilt on every
   render. A period is a statement period, or a calendar month (`<account>|month:YYYY-MM`) for lines
